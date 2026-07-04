@@ -1,8 +1,8 @@
 import { defineConfig } from "vite";
 
-/** Repo aparte en GitHub Pages: https://ceoclinicos.github.io/ClinicosDoc/ */
+/** Producción: https://clinicosdoc.com — GitHub Pages */
 export default defineConfig({
-  base: "/ClinicosDoc/",
+  base: "/",
   build: {
     target: "es2022",
     cssCodeSplit: true,

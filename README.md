@@ -38,7 +38,9 @@ Tras el primer `push`:
 2. **Build and deployment** → Source: **GitHub Actions**
 3. El workflow `.github/workflows/deploy-web.yml` publica automáticamente en cada push a `main`
 
-URL: **https://ceoclinicos.github.io/ClinicosDoc/**
+URL: **https://clinicosdoc.com** (también https://www.clinicosdoc.com)
+
+URL anterior del proyecto en GitHub Pages: https://ceoclinicos.github.io/ClinicosDoc/
 
 ## Probar en local
 
@@ -48,7 +50,7 @@ npm install
 npm run dev
 ```
 
-Abre http://localhost:5173/ClinicosDoc/
+Abre http://localhost:5173/
 
 ## App Android
 
