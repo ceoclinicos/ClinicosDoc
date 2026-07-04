@@ -1,0 +1,353 @@
+package com.ceoclinicos.clinicosdoc.ui.screens
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Label
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import android.widget.Toast
+import com.ceoclinicos.clinicosdoc.data.DoctorStorage
+import com.ceoclinicos.clinicosdoc.data.HeaderStorage
+import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
+import com.ceoclinicos.clinicosdoc.data.TemplateStorage
+import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
+import com.ceoclinicos.clinicosdoc.model.HeaderType
+import com.ceoclinicos.clinicosdoc.model.PhysicalExamDefaults
+import com.ceoclinicos.clinicosdoc.model.PhysicalExamSystem
+import com.ceoclinicos.clinicosdoc.model.SectionCatalog
+import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
+import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
+import com.ceoclinicos.clinicosdoc.ui.components.PremiumTextField
+import com.ceoclinicos.clinicosdoc.ui.theme.Navy
+import com.ceoclinicos.clinicosdoc.ui.theme.Teal
+import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
+    val context = LocalContext.current
+    var template by remember { mutableStateOf<DocumentTemplate?>(null) }
+    var name by remember { mutableStateOf("") }
+    var sections by remember { mutableStateOf<List<String>>(emptyList()) }
+    var isDefault by remember { mutableStateOf(false) }
+    var enabledExamIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var examCatalog by remember { mutableStateOf<List<PhysicalExamSystem>>(emptyList()) }
+    var showDelete by remember { mutableStateOf(false) }
+
+    LaunchedEffect(templateId) {
+        examCatalog = PhysicalExamCatalogStorage.loadAll(context)
+        template = TemplateStorage.loadAll(context).firstOrNull { it.id == templateId }
+        template?.let {
+            name = it.name
+            sections = it.sections
+            isDefault = it.isDefault
+            enabledExamIds = it.enabledPhysicalExamSystemIds.ifEmpty {
+                PhysicalExamDefaults.defaultEnabledIds
+            }
+        }
+    }
+
+    if (template == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = Teal)
+        }
+        return
+    }
+
+    val available = SectionCatalog.all.filterNot { sections.contains(it) }
+
+    AppScaffold(
+        title = if (isNew) "Nueva plantilla" else "Editar plantilla",
+        onBack = onBack,
+        actions = {
+            if (!isNew) IconButton(onClick = { showDelete = true }) {
+                Icon(Icons.Default.Delete, contentDescription = "Eliminar")
+            }
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+        ) {
+            PremiumTextField("Nombre de la plantilla", name, { name = it }, prefixIcon = Icons.Outlined.Label)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("Tipo: ${template!!.documentType.label}")
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Usar como predeterminada")
+                    Text("Se seleccionará al redactar este tipo de documento")
+                }
+                Switch(checked = isDefault, onCheckedChange = { isDefault = it })
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+            Text("Secciones activas (orden)")
+            sections.forEachIndexed { index, section ->
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    ListItem(
+                        headlineContent = { Text(section) },
+                        trailingContent = {
+                            Row {
+                                IconButton(onClick = {
+                                    if (index > 0) {
+                                        val list = sections.toMutableList()
+                                        list.add(index - 1, list.removeAt(index))
+                                        sections = list
+                                    }
+                                }, enabled = index > 0) { Icon(Icons.Default.ArrowUpward, contentDescription = null) }
+                                IconButton(onClick = {
+                                    if (index < sections.lastIndex) {
+                                        val list = sections.toMutableList()
+                                        list.add(index + 1, list.removeAt(index))
+                                        sections = list
+                                    }
+                                }, enabled = index < sections.lastIndex) { Icon(Icons.Default.ArrowDownward, contentDescription = null) }
+                                IconButton(onClick = { sections = sections.filterNot { it == section } }) {
+                                    Icon(Icons.Default.Close, contentDescription = null)
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+            if (available.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(20.dp))
+                Text("Agregar sección")
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    available.take(3).forEach { section ->
+                        FilterChip(selected = false, onClick = { sections = sections + section }, label = { Text(section) })
+                    }
+                }
+            }
+            if (template!!.usesPhysicalExamCatalog()) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Text("Sistemas de examen físico (IA)", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Activa los bloques que quieres en el examen físico generado.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                )
+                examCatalog.forEach { system ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(system.name, style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                system.defaultText.take(80) + if (system.defaultText.length > 80) "…" else "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                            )
+                        }
+                        Switch(
+                            checked = system.id in enabledExamIds,
+                            onCheckedChange = { checked ->
+                                enabledExamIds = if (checked) {
+                                    enabledExamIds + system.id
+                                } else {
+                                    enabledExamIds.filterNot { it == system.id }
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(28.dp))
+            PremiumPrimaryButton(
+                label = "Guardar plantilla",
+                onClick = {
+                    if (name.isBlank() || sections.isEmpty()) return@PremiumPrimaryButton
+                    TemplateStorage.upsert(
+                        context,
+                        template!!.copy(
+                            name = name.trim(),
+                            sections = sections,
+                            isDefault = isDefault,
+                            enabledPhysicalExamSystemIds = enabledExamIds,
+                        ),
+                    )
+                    Toast.makeText(context, "Plantilla guardada", Toast.LENGTH_SHORT).show()
+                    onBack()
+                },
+            )
+        }
+    }
+
+    if (showDelete) {
+        AlertDialog(
+            onDismissRequest = { showDelete = false },
+            title = { Text("Eliminar plantilla") },
+            text = { Text("¿Seguro que deseas eliminar esta plantilla?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    TemplateStorage.delete(context, templateId)
+                    showDelete = false
+                    onBack()
+                }) { Text("Eliminar") }
+            },
+            dismissButton = { TextButton(onClick = { showDelete = false }) { Text("Cancelar") } },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HeadersScreen(onBack: () -> Unit, onEditHeader: (String, Boolean) -> Unit) {
+    val context = LocalContext.current
+    var headers by remember { mutableStateOf(HeaderStorage.loadAll(context)) }
+    var loading by remember { mutableStateOf(true) }
+    var showAddSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    fun reload() {
+        headers = HeaderStorage.loadAll(context)
+        loading = false
+    }
+
+    LaunchedEffect(Unit) { reload() }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) reload()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    AppScaffold(
+        title = "Encabezados",
+        onBack = onBack,
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showAddSheet = true },
+                containerColor = Navy,
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, tint = Color.White)
+            }
+        },
+    ) { padding ->
+        if (loading) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Teal)
+            }
+        } else {
+            LazyColumn(modifier = Modifier.padding(padding).padding(16.dp)) {
+                items(headers, key = { it.id }) { header ->
+                    Card(onClick = { onEditHeader(header.id, false) }, modifier = Modifier.padding(bottom = 10.dp)) {
+                        ListItem(
+                            headlineContent = { Text(header.name) },
+                            supportingContent = {
+                                Text(
+                                    "${header.headerType.label} · ${header.displayTitle}" +
+                                        if (header.isDefault) " · Predeterminado" else "",
+                                )
+                            },
+                            trailingContent = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAddSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showAddSheet = false },
+            sheetState = sheetState,
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Text("Nuevo encabezado", style = MaterialTheme.typography.headlineSmall)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Elige el tipo de encabezado para tus documentos", style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(20.dp))
+                Card(
+                    onClick = {
+                        val doctor = DoctorStorage.loadProfile(context)
+                        val header = if (doctor != null) {
+                            HeaderStorage.createFromDoctor(doctor)
+                        } else {
+                            HeaderStorage.createClinic().copy(
+                                headerType = HeaderType.MEDICO,
+                                name = "Encabezado médico",
+                            )
+                        }
+                        HeaderStorage.upsert(context, header)
+                        showAddSheet = false
+                        onEditHeader(header.id, true)
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                ) {
+                    ListItem(
+                        headlineContent = { Text("Encabezado de médico") },
+                        supportingContent = { Text("Nombre, especialidad y datos del profesional") },
+                    )
+                }
+                Card(
+                    onClick = {
+                        val header = HeaderStorage.createClinic()
+                        HeaderStorage.upsert(context, header)
+                        showAddSheet = false
+                        onEditHeader(header.id, true)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    ListItem(
+                        headlineContent = { Text("Encabezado de clínica") },
+                        supportingContent = { Text("Nombre, logo y datos de la institución") },
+                    )
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+}

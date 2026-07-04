@@ -1,0 +1,4 @@
+# Copia este archivo a ai_keys.properties y completa tus claves.
+# ai_keys.properties está en .gitignore y NO debe subirse a GitHub.
+GEMINI_API_KEY=
+DEEPSEEK_API_KEY=

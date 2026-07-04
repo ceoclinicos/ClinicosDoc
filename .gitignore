@@ -1,0 +1,23 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+/web/node_modules
+/web/dist
+
+# Secretos — no subir a GitHub
+app/src/main/assets/config/ai_keys.properties
+*.keystore
+.env
+web/.env

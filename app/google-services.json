@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "211175272499",
+    "project_id": "clinicos-aed47",
+    "storage_bucket": "clinicos-aed47.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:211175272499:android:d6919c922a12e17263f346",
+        "android_client_info": {
+          "package_name": "com.ceoclinicos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCqYo-LQ2l-ETTRiNYx5U4tbnFVIEscbYw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:211175272499:android:efe851d281a5e1b763f346",
+        "android_client_info": {
+          "package_name": "com.ceoclinicos.clinicosdoc"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCqYo-LQ2l-ETTRiNYx5U4tbnFVIEscbYw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

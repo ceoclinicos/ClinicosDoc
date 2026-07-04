@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Login actual por cédula (sin Firebase Auth): restringir en consola según tu despliegue.
+    // Ajusta estas reglas cuando migres a Firebase Authentication.
+    match /clinicosdoc_user/{userId}/{document=**} {
+      allow read, write: if true;
+    }
+    match /clinicosdoc_user/{userId} {
+      allow read, write: if true;
+    }
+  }
+}
