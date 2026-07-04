@@ -37,6 +37,13 @@ jobs:
         working-directory: web
         run: npm run build
 
+      - name: Prepare GitHub Pages artifact
+        working-directory: web
+        run: |
+          cp dist/index.html dist/404.html
+          ls -la dist/
+          ls -la dist/assets/
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
