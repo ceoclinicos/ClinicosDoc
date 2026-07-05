@@ -19,7 +19,7 @@ export function shareSolicitud(s: {
 }
 
 export function shareSite(): void {
-  const url = window.location.href.split("#")[0] + "#/";
+  const url = window.location.href.split("#")[0] + "#/ayudame";
   const text = "Muro de ayuda para zonas afectadas en Venezuela — Clínicos Doc";
   if (navigator.share) {
     navigator.share({ title: "Clínicos Doc — Ayúdame", text, url }).catch(() => {});

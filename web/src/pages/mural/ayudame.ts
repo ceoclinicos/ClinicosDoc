@@ -1,4 +1,4 @@
-import { registerRoute, navigate } from "../../app/router";
+import { registerRoute } from "../../app/router";
 import { ZONAS_AFECTADAS } from "../../registro/models";
 import { createSolicitud, formatFecha, listSolicitudes } from "../../registro/store";
 import { getPatientSession } from "../../registro/session";
@@ -65,7 +65,7 @@ function renderFeed(root: HTMLElement, filtroZona: string): void {
 }
 
 registerRoute({
-  path: "/",
+  path: "/ayudame",
   title: "Ayúdame",
   nav: true,
   navLabel: "Ayúdame",
@@ -143,20 +143,11 @@ registerRoute({
 });
 
 registerRoute({
-  path: "/ayudame",
-  title: "Ayúdame",
-  render: () => {
-    navigate("/");
-    return page("", "");
-  },
-});
-
-registerRoute({
   path: "/solicitud/:id",
   title: "Solicitud",
   render: () => {
     const id = window.location.hash.replace(/^#\/solicitud\//, "").split("?")[0];
-    const el = page("Solicitud de ayuda", `<div id="sol-one"></div><p><a href="#/">← Volver al muro</a></p>`);
+    const el = page("Solicitud de ayuda", `<div id="sol-one"></div><p><a href="#/ayudame">← Volver al muro</a></p>`);
     listSolicitudes().then((items) => {
       const s = items.find((i) => i.id === id);
       const box = el.querySelector("#sol-one") as HTMLElement;

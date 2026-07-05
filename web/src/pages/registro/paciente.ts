@@ -89,7 +89,7 @@ function bindPacientePage(el: HTMLElement): void {
             pin: String(fd.get("pin")),
           });
           setPatientSession({ cedula: p.cedula, nombre: p.nombre });
-          navigate("/");
+          navigate("/ayudame");
         } catch (err) {
           alert(err instanceof Error ? err.message : "Error al registrar");
         }
@@ -149,7 +149,7 @@ registerRoute({
       session
         ? `
         <p class="lead">Sus atenciones médicas registradas en el sistema.</p>
-        <p><a href="#/">← Ir al muro Ayúdame</a></p>
+        <p><a href="#/ayudame">← Ir al muro Ayúdame</a></p>
         <div id="lista-atenciones"></div>
       `
         : `

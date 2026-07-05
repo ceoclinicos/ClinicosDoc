@@ -24,9 +24,9 @@ function consultorioBlock(): string {
 
 registerRoute({
   path: "/",
-  title: "Home",
+  title: "Inicio",
   nav: true,
-  navLabel: "Home",
+  navLabel: "Inicio",
   render: () => {
     const el = page(
       "Registro médico",
