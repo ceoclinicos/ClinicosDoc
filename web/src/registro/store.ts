@@ -52,7 +52,7 @@ export async function registerPaciente(input: {
   sexo: string;
   telefono: string;
   correo: string;
-  pin: string;
+  pin?: string;
 }): Promise<PacienteRegistro> {
   const cedula = normalizeCedula(input.cedula);
   const existing = await getPaciente(cedula);
@@ -67,7 +67,7 @@ export async function registerPaciente(input: {
     sexo: input.sexo.trim(),
     telefono: input.telefono.trim(),
     correo: input.correo.trim(),
-    pinHash: await hashPin(cedula, input.pin),
+    pinHash: input.pin ? await hashPin(cedula, input.pin) : "",
     createdAt: now,
     updatedAt: now,
   };
@@ -99,6 +99,12 @@ export async function registerProfesional(input: {
   };
   await setDoc(professionalRef(cedula), data as DocumentData);
   return data;
+}
+
+export async function consultarPaciente(cedula: string): Promise<PacienteRegistro> {
+  const p = await getPaciente(cedula);
+  if (!p) throw new Error("No hay registro con esa cédula");
+  return p;
 }
 
 export async function loginPaciente(cedula: string, pin: string): Promise<PacienteRegistro> {

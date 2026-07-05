@@ -20,7 +20,7 @@ registerRoute({
         <h2>Profesionales de salud</h2>
         <p>Pueden registrarse, buscar pacientes por cédula y registrar atenciones. Las herramientas de consultorio (informes con IA) requieren inicio de sesión médica.</p>
         <h2>Datos del paciente</h2>
-        <p>Cédula, nombre, edad, fecha de nacimiento, sexo, teléfono, correo y PIN privado para acceder a su historial.</p>
+        <p>Cédula, nombre, edad, fecha de nacimiento, sexo, teléfono y correo. Para consultar sus atenciones solo necesita su cédula.</p>
       </div>
       <p class="muted">Proyecto comunitario · <a href="https://clinicosdoc.com">clinicosdoc.com</a></p>
       `,

@@ -33,27 +33,7 @@ a {
 .shell {
   min-height: 100dvh;
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
-}
-
-.site-banner {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 0.75rem 1rem 0.25rem;
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
-}
-
-.site-banner-flag {
-  display: block;
-  width: auto;
-  max-width: min(160px, 45vw);
-  height: auto;
-  max-height: 72px;
-  object-fit: contain;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(11, 31, 51, 0.1);
+  grid-template-rows: auto 1fr auto;
 }
 
 .topbar {
@@ -68,9 +48,33 @@ a {
   z-index: 10;
 }
 
+.brand-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+
 .brand {
   font-weight: 700;
   color: var(--teal);
+}
+
+.brand-flag {
+  display: block;
+  width: auto;
+  height: 28px;
+  max-height: 28px;
+  object-fit: contain;
+  border-radius: 2px;
+  box-shadow: 0 1px 4px rgba(11, 31, 51, 0.12);
+}
+
+@media (min-width: 768px) {
+  .brand-flag {
+    height: 32px;
+    max-height: 32px;
+  }
 }
 
 .topnav {
@@ -259,6 +263,39 @@ a {
   border-radius: 12px;
 }
 
+.input-select {
+  font: inherit;
+  width: 100%;
+  padding: 0.75rem 2.5rem 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background-color: var(--card);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235c6b7a' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  appearance: none;
+  cursor: pointer;
+  color: var(--text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.input-select:hover {
+  border-color: var(--teal-light);
+}
+
+.input-select:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+}
+
+.input-select:disabled {
+  background-color: var(--surface);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
 .list-item-highlight {
   border-color: var(--teal);
   box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.15);
@@ -294,6 +331,17 @@ a {
   padding: 0.75rem;
   border: 1px solid var(--border);
   border-radius: 12px;
+}
+
+.form select,
+.form .input-select {
+  padding-right: 2.5rem;
+  background-color: var(--card);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235c6b7a' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  appearance: none;
+  cursor: pointer;
 }
 
 .empty-state {
@@ -473,6 +521,41 @@ fieldset.card-panel legend {
 }
 
 /* Muro Ayúdame */
+.mural-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.filter-field {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: min(100%, 280px);
+}
+
+.filter-field-icon {
+  font-size: 1.35rem;
+  line-height: 1;
+  padding-bottom: 0.65rem;
+}
+
+.filter-label-wrap {
+  display: grid;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.filter-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
 .mural-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -483,10 +566,45 @@ fieldset.card-panel legend {
 
 .mural-compose {
   margin-bottom: 1.5rem;
-  padding: 1rem;
+  padding: 1.25rem;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.compose-header {
+  margin-bottom: 1rem;
+}
+
+.compose-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  color: var(--navy);
+}
+
+.compose-locked {
+  display: grid;
+  gap: 1rem;
+  opacity: 0.55;
+  pointer-events: none;
+  margin-bottom: 1rem;
+}
+
+.compose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.compose-guest-panel {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.grid-full {
+  grid-column: 1 / -1;
 }
 
 .mural-feed {

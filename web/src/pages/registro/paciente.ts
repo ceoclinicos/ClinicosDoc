@@ -1,5 +1,5 @@
 import { registerRoute, navigate } from "../../app/router";
-import { formatFecha, listAtenciones, loginPaciente, registerPaciente } from "../../registro/store";
+import { formatFecha, listAtenciones, consultarPaciente, registerPaciente } from "../../registro/store";
 import {
   clearPatientSession,
   getPatientSession,
@@ -28,8 +28,8 @@ function bindPacientePage(el: HTMLElement): void {
           ? `
           ${tabs("consultar")}
           <form class="form" id="pac-login">
-            <label>Cédula<input name="cedula" required /></label>
-            <label>PIN<input name="pin" type="password" inputmode="numeric" required /></label>
+            <label>Cédula<input name="cedula" required placeholder="Ej. V-12345678" /></label>
+            <p class="muted">Ingrese su cédula para ver sus atenciones registradas.</p>
             <button type="submit" class="btn btn-primary">Ver mis registros</button>
           </form>
         `
@@ -49,8 +49,6 @@ function bindPacientePage(el: HTMLElement): void {
             </label>
             <label>Teléfono<input name="telefono" type="tel" required placeholder="0412…" /></label>
             <label>Correo<input name="correo" type="email" required /></label>
-            <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required /></label>
-            <p class="muted">Use este PIN para consultar sus atenciones y publicar en el muro.</p>
             <button type="submit" class="btn btn-primary">Registrarme</button>
           </form>
         `;
@@ -66,7 +64,7 @@ function bindPacientePage(el: HTMLElement): void {
         e.preventDefault();
         const fd = new FormData(e.target as HTMLFormElement);
         try {
-          const p = await loginPaciente(String(fd.get("cedula")), String(fd.get("pin")));
+          const p = await consultarPaciente(String(fd.get("cedula")));
           setPatientSession({ cedula: p.cedula, nombre: p.nombre });
           navigate("/paciente");
         } catch (err) {
@@ -86,7 +84,6 @@ function bindPacientePage(el: HTMLElement): void {
             sexo: String(fd.get("sexo")),
             telefono: String(fd.get("telefono")),
             correo: String(fd.get("correo")),
-            pin: String(fd.get("pin")),
           });
           setPatientSession({ cedula: p.cedula, nombre: p.nombre });
           navigate("/ayudame");
@@ -156,8 +153,8 @@ registerRoute({
         <p class="lead">Consulte si tiene atenciones registradas o créese una ficha.</p>
         ${tabs("consultar")}
         <form class="form" id="pac-login">
-          <label>Cédula<input name="cedula" required /></label>
-          <label>PIN<input name="pin" type="password" inputmode="numeric" required /></label>
+          <label>Cédula<input name="cedula" required placeholder="Ej. V-12345678" /></label>
+          <p class="muted">Ingrese su cédula para ver sus atenciones registradas.</p>
           <button type="submit" class="btn btn-primary">Ver mis registros</button>
         </form>
       `,
