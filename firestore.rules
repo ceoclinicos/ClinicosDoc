@@ -1,14 +1,99 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Login actual por cédula (sin Firebase Auth): restringir en consola según tu despliegue.
-    // Ajusta estas reglas cuando migres a Firebase Authentication.
+
+    match /users/{userId} {
+      allow read, write: if true;
+
+      match /friends/{friendId} {
+        allow read, write: if true;
+      }
+
+      match /active_duels/{opponentId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /duel_challenges/{challengeId} {
+      allow read, write: if true;
+    }
+
+    match /quiz_results/{resultId} {
+      allow read, write: if true;
+    }
+
+    match /rankings/{rankingId} {
+      allow read, write: if true;
+    }
+
+    match /test/{testId} {
+      allow read, write: if true;
+    }
+
+    match /token_codes/{tokenId} {
+      allow read: if true;
+      allow delete: if true;
+      allow create, update: if false;
+    }
+
+    match /shared_pill_codes/{codeId} {
+      allow read: if true;
+      allow create: if codeId.matches('^[0-9]{8}$')
+        && request.resource.data.code == codeId
+        && request.resource.data.keys().hasAll([
+          'code','creatorUserId','reward','source','redeemed','createdAt'
+        ])
+        && request.resource.data.creatorUserId is string
+        && request.resource.data.reward is int
+        && request.resource.data.reward >= 1
+        && request.resource.data.reward <= 99999
+        && request.resource.data.source is string
+        && request.resource.data.redeemed == false;
+      allow update: if resource.data.redeemed == false
+        && request.resource.data.redeemed == true
+        && request.resource.data.reward == resource.data.reward
+        && request.resource.data.code == resource.data.code
+        && request.resource.data.creatorUserId == resource.data.creatorUserId
+        && request.resource.data.source == resource.data.source
+        && request.resource.data.redeemedBy is string
+        && request.resource.data.keys().hasAll([
+          'code','creatorUserId','reward','source','redeemed',
+          'redeemedBy','redeemedAt','createdAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /olimpiadas/{editionId} {
+      allow read: if true;
+      match /inscritos/{userId} {
+        allow read, write: if true;
+      }
+    }
+
+    match /olimpiadas_config/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /olimpiadas_sesiones/{sessionId} {
+      allow read: if true;
+      match /jugadores/{jugadorId} {
+        allow read, write: if true;
+        match /examenes/{examId} {
+          allow read, write: if true;
+        }
+      }
+    }
+
+    // ── Clínicos Doc (consultorio + muro humanitario) ──
+    // Login por cédula/PIN sin Firebase Auth — restringir cuando migres a Auth.
     match /clinicosdoc_user/{userId}/{document=**} {
       allow read, write: if true;
     }
-    match /clinicosdoc_user/{userId} {
+    match /clinicosdoc_user/{docId} {
       allow read, write: if true;
     }
+
     // Pacientes globales consultorio (app Android)
     match /clinicosdoc_patients/{patientKey} {
       allow read, write: if true;
@@ -16,6 +101,7 @@ service cloud.firestore {
         allow read, write: if true;
       }
     }
+
     // Registro médico compartido (web)
     match /pacientes/{cedula} {
       allow read, write: if true;
@@ -26,6 +112,8 @@ service cloud.firestore {
     match /profesionales/{cedula} {
       allow read, write: if true;
     }
+
+    // Muro Ayúdame — solicitudes públicas
     match /solicitudes/{solicitudId} {
       allow read, write: if true;
     }
