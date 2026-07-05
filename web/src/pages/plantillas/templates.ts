@@ -4,6 +4,7 @@ import { page } from "../helpers";
 registerRoute({
   path: "/plantillas/encabezados",
   title: "Encabezados",
+  medicoOnly: true,
   render: () =>
     page(
       "Encabezados",
@@ -14,6 +15,7 @@ registerRoute({
 registerRoute({
   path: "/plantillas/documentos",
   title: "Plantillas de documentos",
+  medicoOnly: true,
   render: () =>
     page(
       "Informes y historias",

@@ -13,6 +13,7 @@ function loadCatalog(): PhysicalExamSystem[] {
 registerRoute({
   path: "/plantillas/examen-fisico",
   title: "Catálogo examen físico",
+  medicoOnly: true,
   render: () => {
     const systems = loadCatalog();
     const el = page(

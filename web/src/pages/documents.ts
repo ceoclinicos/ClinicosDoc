@@ -9,6 +9,7 @@ registerRoute({
   title: "Informes",
   nav: true,
   navLabel: "Informe",
+  medicoOnly: true,
   render: () => {
     const docs = loadJson<ClinicalDocument[]>("documents", []).sort(
       (a, b) => b.createdAt.localeCompare(a.createdAt),

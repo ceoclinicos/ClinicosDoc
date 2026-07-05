@@ -15,6 +15,7 @@ import type {
   PacienteRegistro,
   ProfesionalRegistro,
   ProfesionalSession,
+  SolicitudAyuda,
 } from "./models";
 import { RegistroPaths } from "./models";
 import { hashPin } from "./session";
@@ -48,7 +49,9 @@ export async function registerPaciente(input: {
   nombre: string;
   edad: number;
   fechaNacimiento: string;
-  sexo?: string;
+  sexo: string;
+  telefono: string;
+  correo: string;
   pin: string;
 }): Promise<PacienteRegistro> {
   const cedula = normalizeCedula(input.cedula);
@@ -61,7 +64,9 @@ export async function registerPaciente(input: {
     nombre: input.nombre.trim(),
     edad: input.edad,
     fechaNacimiento: input.fechaNacimiento,
-    sexo: input.sexo?.trim() || undefined,
+    sexo: input.sexo.trim(),
+    telefono: input.telefono.trim(),
+    correo: input.correo.trim(),
     pinHash: await hashPin(cedula, input.pin),
     createdAt: now,
     updatedAt: now,
@@ -136,7 +141,9 @@ export async function upsertPacienteMinimo(input: {
     nombre: input.nombre.trim(),
     edad: input.edad,
     fechaNacimiento: input.fechaNacimiento,
-    sexo: input.sexo?.trim() || undefined,
+    sexo: input.sexo?.trim() || "",
+    telefono: "",
+    correo: "",
     pinHash: "",
     createdAt: now,
     updatedAt: now,
@@ -197,4 +204,50 @@ export function formatFecha(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function solicitudesRef() {
+  return collection(getDb(), RegistroPaths.SOLICITUDES);
+}
+
+export async function createSolicitud(input: {
+  patientCedula: string;
+  patientNombre: string;
+  zona: string;
+  necesidad: string;
+}): Promise<SolicitudAyuda> {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const data: SolicitudAyuda = {
+    id,
+    patientCedula: normalizeCedula(input.patientCedula),
+    patientNombre: input.patientNombre.trim(),
+    zona: input.zona.trim(),
+    necesidad: input.necesidad.trim(),
+    createdAt: now,
+  };
+  await setDoc(doc(solicitudesRef(), id), data as DocumentData);
+  return data;
+}
+
+export async function listSolicitudes(limit = 100): Promise<SolicitudAyuda[]> {
+  const q = query(solicitudesRef(), orderBy("createdAt", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as SolicitudAyuda).slice(0, limit);
+}
+
+export async function countRegistrados(): Promise<{ pacientes: number; profesionales: number; solicitudes: number }> {
+  const [p, pr, s] = await Promise.all([
+    getDocs(collection(getDb(), RegistroPaths.PACIENTES)),
+    getDocs(collection(getDb(), RegistroPaths.PROFESIONALES)),
+    getDocs(solicitudesRef()),
+  ]);
+  return { pacientes: p.size, profesionales: pr.size, solicitudes: s.size };
+}
+
+export async function listPacientesRegistrados(): Promise<PacienteRegistro[]> {
+  const snap = await getDocs(collection(getDb(), RegistroPaths.PACIENTES));
+  return snap.docs
+    .map((d) => d.data() as PacienteRegistro)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

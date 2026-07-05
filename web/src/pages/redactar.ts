@@ -13,6 +13,7 @@ registerRoute({
   title: "Redactar",
   nav: true,
   navLabel: "Redactar",
+  medicoOnly: true,
   render: () => {
     const el = page("Redactar informe", `<div id="redactar-root"></div>`);
     mountRedactar(el.querySelector("#redactar-root") as HTMLElement);

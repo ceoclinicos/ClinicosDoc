@@ -7,6 +7,7 @@ import { bindNavButtons, emptyState, page } from "./helpers";
 registerRoute({
   path: "/borradores",
   title: "Borradores",
+  medicoOnly: true,
   render: () => {
     const drafts = loadJson<ClinicalDraft[]>("drafts", []).sort((a, b) =>
       b.updatedAt.localeCompare(a.updatedAt),

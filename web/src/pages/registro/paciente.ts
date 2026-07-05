@@ -40,8 +40,17 @@ function bindPacientePage(el: HTMLElement): void {
             <label>Cédula<input name="cedula" required /></label>
             <label>Edad<input name="edad" type="number" min="0" max="120" required /></label>
             <label>Fecha de nacimiento<input name="fechaNacimiento" type="date" required /></label>
+            <label>Sexo
+              <select name="sexo" required>
+                <option value="">Seleccione…</option>
+                <option value="Femenino">Femenino</option>
+                <option value="Masculino">Masculino</option>
+              </select>
+            </label>
+            <label>Teléfono<input name="telefono" type="tel" required placeholder="0412…" /></label>
+            <label>Correo<input name="correo" type="email" required /></label>
             <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required /></label>
-            <p class="muted">Use este PIN para consultar sus atenciones después.</p>
+            <p class="muted">Use este PIN para consultar sus atenciones y publicar en el muro.</p>
             <button type="submit" class="btn btn-primary">Registrarme</button>
           </form>
         `;
@@ -74,10 +83,13 @@ function bindPacientePage(el: HTMLElement): void {
             nombre: String(fd.get("nombre")),
             edad: Number(fd.get("edad")),
             fechaNacimiento: String(fd.get("fechaNacimiento")),
+            sexo: String(fd.get("sexo")),
+            telefono: String(fd.get("telefono")),
+            correo: String(fd.get("correo")),
             pin: String(fd.get("pin")),
           });
           setPatientSession({ cedula: p.cedula, nombre: p.nombre });
-          navigate("/paciente");
+          navigate("/");
         } catch (err) {
           alert(err instanceof Error ? err.message : "Error al registrar");
         }
@@ -129,8 +141,7 @@ function bindPacientePage(el: HTMLElement): void {
 registerRoute({
   path: "/paciente",
   title: "Paciente",
-  nav: true,
-  navLabel: "Paciente",
+  nav: false,
   render: () => {
     const session = getPatientSession();
     const el = page(
@@ -138,6 +149,7 @@ registerRoute({
       session
         ? `
         <p class="lead">Sus atenciones médicas registradas en el sistema.</p>
+        <p><a href="#/">← Ir al muro Ayúdame</a></p>
         <div id="lista-atenciones"></div>
       `
         : `

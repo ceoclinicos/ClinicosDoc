@@ -26,5 +26,8 @@ service cloud.firestore {
     match /profesionales/{cedula} {
       allow read, write: if true;
     }
+    match /solicitudes/{solicitudId} {
+      allow read, write: if true;
+    }
   }
 }

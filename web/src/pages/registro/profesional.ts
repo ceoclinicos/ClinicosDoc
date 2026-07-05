@@ -211,8 +211,7 @@ function bindProfesionalPage(el: HTMLElement): void {
 registerRoute({
   path: "/profesional",
   title: "Profesional",
-  nav: true,
-  navLabel: "Profesional",
+  nav: false,
   render: () => {
     const session = getProfessionalSession();
     const el = page(

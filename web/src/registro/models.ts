@@ -3,17 +3,42 @@ export const RegistroPaths = {
   PACIENTES: "pacientes",
   PROFESIONALES: "profesionales",
   ATENCIONES: "atenciones",
+  SOLICITUDES: "solicitudes",
 } as const;
+
+/** Zonas afectadas — costa y Caracas */
+export const ZONAS_AFECTADAS = [
+  "Caracas",
+  "Caraballeda",
+  "La Guaira",
+  "Catia La Mar",
+  "Tanaguarena",
+  "Morón",
+  "Tucacas",
+] as const;
+
+export type ZonaAfectada = (typeof ZONAS_AFECTADAS)[number];
 
 export interface PacienteRegistro {
   cedula: string;
   nombre: string;
   edad: number;
   fechaNacimiento: string;
-  sexo?: string;
+  sexo: string;
+  telefono: string;
+  correo: string;
   pinHash: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SolicitudAyuda {
+  id: string;
+  patientCedula: string;
+  patientNombre: string;
+  zona: string;
+  necesidad: string;
+  createdAt: string;
 }
 
 export interface ProfesionalRegistro {

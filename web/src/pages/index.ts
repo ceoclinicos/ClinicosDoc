@@ -1,4 +1,4 @@
-import "./home";
+import "./mural";
 import "./registro";
 import "./patients";
 import "./documents";

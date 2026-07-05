@@ -1,5 +1,26 @@
-import { registerRoute } from "../app/router";
+import { registerRoute, isMedicoLoggedIn } from "../app/router";
+import { getProfessionalSession } from "../registro/session";
 import { bindNavButtons, page } from "./helpers";
+
+function consultorioBlock(): string {
+  if (!isMedicoLoggedIn()) return "";
+
+  const prof = getProfessionalSession();
+  const saludo = prof ? `<p class="muted">Sesión: Dr(a). ${prof.nombre.split(" ")[0]} · <a href="#/profesional">Ir al panel</a></p>` : "";
+
+  return `
+    <details class="consultorio-details" open>
+      <summary>Herramientas de consultorio (Clínicos Doc)</summary>
+      ${saludo}
+      <div class="grid-2" style="margin-top:0.75rem">
+        <button type="button" class="tile" data-nav="/redactar">Redactar informe</button>
+        <button type="button" class="tile" data-nav="/pacientes">Pacientes</button>
+        <button type="button" class="tile" data-nav="/informes">Informes</button>
+        <button type="button" class="tile" data-nav="/plantillas">Plantillas</button>
+      </div>
+    </details>
+  `;
+}
 
 registerRoute({
   path: "/",
@@ -19,15 +40,7 @@ registerRoute({
         <span class="hero-title">Soy paciente</span>
         <span class="hero-sub">Ver mis atenciones registradas</span>
       </button>
-      <details class="consultorio-details">
-        <summary>Herramientas de consultorio (Clínicos Doc)</summary>
-        <div class="grid-2" style="margin-top:0.75rem">
-          <button type="button" class="tile" data-nav="/redactar">Redactar informe</button>
-          <button type="button" class="tile" data-nav="/pacientes">Pacientes</button>
-          <button type="button" class="tile" data-nav="/informes">Informes</button>
-          <button type="button" class="tile" data-nav="/plantillas">Plantillas</button>
-        </div>
-      </details>
+      ${consultorioBlock()}
       `,
     );
     bindNavButtons(el);

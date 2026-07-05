@@ -4,6 +4,7 @@ import { bindNavButtons, page } from "../helpers";
 registerRoute({
   path: "/plantillas",
   title: "Plantillas",
+  medicoOnly: true,
   render: () => {
     const el = page(
       "Plantillas",

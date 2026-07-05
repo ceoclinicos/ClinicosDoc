@@ -30,6 +30,7 @@ registerRoute({
   title: "Pacientes",
   nav: true,
   navLabel: "Paciente",
+  medicoOnly: true,
   render: () => {
     const patients = loadPatients();
     const el = page(
@@ -97,6 +98,7 @@ registerRoute({
 registerRoute({
   path: "/pacientes/nuevo",
   title: "Nuevo paciente",
+  medicoOnly: true,
   render: () => {
     const el = page(
       "Nuevo paciente",
