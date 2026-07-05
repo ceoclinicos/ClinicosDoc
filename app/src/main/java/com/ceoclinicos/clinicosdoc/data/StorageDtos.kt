@@ -39,6 +39,9 @@ internal data class ClinicalDocumentDto(
     val membreteEdad: String? = null,
     val membreteSexo: String? = null,
     val membreteFecha: String? = null,
+    val doctorId: String? = null,
+    val doctorNombre: String? = null,
+    val patientFirestoreKey: String? = null,
 )
 
 internal data class DocumentHeaderDto(

@@ -39,6 +39,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -94,6 +95,7 @@ import com.ceoclinicos.clinicosdoc.ui.theme.DividerColor
 import com.ceoclinicos.clinicosdoc.ui.theme.Navy
 import com.ceoclinicos.clinicosdoc.ui.theme.NavyLight
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
+import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
 import com.ceoclinicos.clinicosdoc.util.PermissionHelper
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -150,6 +152,8 @@ fun RedactarFlowScreen(
     var selectedTemplateId by rememberSaveable { mutableStateOf(templateId) }
     var showTemplatePicker by remember { mutableStateOf(false) }
     var availableTemplates by remember { mutableStateOf<List<DocumentTemplate>>(emptyList()) }
+    var cedulaSearch by rememberSaveable { mutableStateOf("") }
+    var patientSearchMessage by remember { mutableStateOf<String?>(null) }
     var currentDraftId by rememberSaveable { mutableStateOf(draftId) }
     var draftLoaded by rememberSaveable { mutableStateOf(false) }
 
@@ -320,10 +324,57 @@ fun RedactarFlowScreen(
                 Text("Paciente", style = MaterialTheme.typography.headlineMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("¿Para qué paciente es este ${documentType.label.lowercase()}?", style = MaterialTheme.typography.bodyMedium)
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = cedulaSearch,
+                        onValueChange = {
+                            cedulaSearch = it
+                            patientSearchMessage = null
+                        },
+                        modifier = Modifier.weight(1f),
+                        label = { Text("Cédula") },
+                        placeholder = { Text("Buscar paciente por C.I.") },
+                        singleLine = true,
+                    )
+                    Spacer(modifier = Modifier.padding(horizontal = 4.dp))
+                    OutlinedButton(
+                        onClick = {
+                            val found = PatientStorage.findByCedula(context, cedulaSearch)
+                            if (found != null) {
+                                selectedPatient = found
+                                selectedPatientId = found.id
+                                patientSearchMessage = "Seleccionado: ${found.nombre}"
+                                step = RedactarStep.DICTADO
+                            } else {
+                                patientSearchMessage = "No se encontró paciente con esa cédula"
+                            }
+                        },
+                    ) {
+                        Icon(Icons.Outlined.Search, contentDescription = null)
+                        Text("Buscar", modifier = Modifier.padding(start = 4.dp))
+                    }
+                }
+                patientSearchMessage?.let {
+                    Text(
+                        it,
+                        color = if (it.startsWith("Seleccionado")) Teal else Color.Red,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                val filteredPatients = remember(patients, cedulaSearch) {
+                    val query = CedulaNormalizer.normalize(cedulaSearch)
+                    if (query.isBlank()) patients
+                    else patients.filter { CedulaNormalizer.normalize(it.cedula).contains(query) }
+                }
                 if (patients.isNotEmpty()) {
                     LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                        items(patients, key = { it.id }) { patient ->
+                        items(filteredPatients, key = { it.id }) { patient ->
                             PatientPickCard(patient) {
                                 selectedPatient = patient
                                 selectedPatientId = patient.id

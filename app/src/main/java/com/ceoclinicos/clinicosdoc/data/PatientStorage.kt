@@ -2,6 +2,7 @@ package com.ceoclinicos.clinicosdoc.data
 
 import android.content.Context
 import com.ceoclinicos.clinicosdoc.model.Patient
+import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.time.Instant
@@ -36,6 +37,14 @@ object PatientStorage {
         saveAllLocal(context, all)
         SyncCoordinator.afterPatientSaved(context, patient)
         return patient
+    }
+
+    fun findByCedula(context: Context, cedula: String): Patient? {
+        val normalized = CedulaNormalizer.normalize(cedula)
+        if (normalized.isBlank()) return null
+        return loadAll(context).firstOrNull {
+            CedulaNormalizer.normalize(it.cedula) == normalized
+        }
     }
 
     private fun Patient.toDto() = PatientDto(

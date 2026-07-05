@@ -17,8 +17,14 @@ object FirestorePaths {
     const val SUB_HEADERS = "headers"
     const val SUB_PHYSICAL_EXAM = "physical_exam_systems"
 
+    /**
+     * Registro global de pacientes (compartido entre médicos).
+     * Documento = `{cedula}_{nombre}` ej. `23536843_jhonnoriega`
+     * Subcolección `documents` = informes de todos los médicos para ese paciente.
+     */
+    const val GLOBAL_PATIENTS = "${PREFIX}patients"
+
     // Colecciones planas legadas (no usar en sync nuevo):
-    const val PATIENTS = "${PREFIX}patients"
     const val DOCUMENTS = "${PREFIX}documents"
     const val APPOINTMENTS = "${PREFIX}appointments"
     const val TEMPLATES = "${PREFIX}templates"

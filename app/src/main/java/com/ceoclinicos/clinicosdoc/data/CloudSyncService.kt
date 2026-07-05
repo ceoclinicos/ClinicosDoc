@@ -17,6 +17,7 @@ import com.ceoclinicos.clinicosdoc.service.DoctorAuthService
 import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.ceoclinicos.clinicosdoc.util.PatientFirestoreId
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.tasks.await
@@ -82,18 +83,68 @@ object CloudSyncService {
     suspend fun pushPatient(context: Context, userId: String, patient: Patient) {
         if (!DoctorAuthService.isConfigured(context)) return
         patientsRef(userId).document(patient.id).set(patient.toDto().toMap()).await()
+        pushGlobalPatient(userId, patient)
+    }
+
+    private suspend fun pushGlobalPatient(userId: String, patient: Patient) {
+        val key = PatientFirestoreId.from(patient)
+        val now = Instant.now().toString()
+        val payload = patient.toDto().toMap().toMutableMap().apply {
+            put("firestoreKey", key)
+            put("updatedAt", now)
+            put("lastUpdatedByDoctorId", userId)
+        }
+        FirebaseFirestore.getInstance()
+            .collection(FirestorePaths.GLOBAL_PATIENTS)
+            .document(key)
+            .set(payload, SetOptions.merge())
+            .await()
     }
 
     suspend fun pushDocument(context: Context, userId: String, document: ClinicalDocument) {
         if (!DoctorAuthService.isConfigured(context)) return
+        val profile = DoctorStorage.loadProfile(context)
+        val doctorNombre = profile?.nombre.orEmpty()
         documentsRef(userId).document(document.id)
-            .set(document.toSyncDto().toMap())
+            .set(document.toSyncDto(doctorId = userId, doctorNombre = doctorNombre).toMap())
+            .await()
+        pushGlobalDocument(userId, doctorNombre, document)
+    }
+
+    private suspend fun pushGlobalDocument(userId: String, doctorNombre: String, document: ClinicalDocument) {
+        val patientKey = PatientFirestoreId.from(document.patientCedula, document.patientNombre)
+        val dto = document.toSyncDto(
+            doctorId = userId,
+            doctorNombre = doctorNombre,
+            patientFirestoreKey = patientKey,
+        )
+        globalPatientDocumentsRef(patientKey)
+            .document(document.id)
+            .set(dto.toMap(), SetOptions.merge())
             .await()
     }
 
     suspend fun deleteDocument(context: Context, userId: String, documentId: String) {
         if (!DoctorAuthService.isConfigured(context)) return
+        val local = DocumentStorage.loadAll(context).firstOrNull { it.id == documentId }
         documentsRef(userId).document(documentId).delete().await()
+        local?.let {
+            val key = PatientFirestoreId.from(it.patientCedula, it.patientNombre)
+            globalPatientDocumentsRef(key).document(documentId).delete().await()
+        }
+    }
+
+    /** Informes de un paciente escritos por todos los médicos. */
+    suspend fun fetchGlobalPatientDocuments(patientKey: String): List<ClinicalDocument> =
+        globalPatientDocumentsRef(patientKey).get().await().documents.mapNotNull { it.toClinicalDocument() }
+
+    suspend fun fetchGlobalPatient(patientKey: String): Patient? {
+        val snap = FirebaseFirestore.getInstance()
+            .collection(FirestorePaths.GLOBAL_PATIENTS)
+            .document(patientKey)
+            .get()
+            .await()
+        return snap.toPatient()
     }
 
     suspend fun pushTemplate(context: Context, userId: String, template: DocumentTemplate) {
@@ -176,6 +227,12 @@ object CloudSyncService {
 
     private suspend fun fetchPhysicalExamSystems(userId: String): List<PhysicalExamSystem> =
         physicalExamRef(userId).get().await().documents.mapNotNull { it.toPhysicalExamSystem() }
+
+    private fun globalPatientDocumentsRef(patientKey: String): CollectionReference =
+        FirebaseFirestore.getInstance()
+            .collection(FirestorePaths.GLOBAL_PATIENTS)
+            .document(patientKey)
+            .collection(FirestorePaths.SUB_DOCUMENTS)
 
     private fun patientsRef(userId: String): CollectionReference =
         userSubcollection(userId, FirestorePaths.SUB_PATIENTS)
@@ -308,7 +365,11 @@ object CloudSyncService {
         sexo = sexo,
     )
 
-    private fun ClinicalDocument.toSyncDto() = ClinicalDocumentDto(
+    private fun ClinicalDocument.toSyncDto(
+        doctorId: String? = null,
+        doctorNombre: String? = null,
+        patientFirestoreKey: String? = null,
+    ) = ClinicalDocumentDto(
         id = id,
         patientId = patientId,
         patientNombre = patientNombre,
@@ -325,6 +386,9 @@ object CloudSyncService {
         membreteEdad = membrete?.edad,
         membreteSexo = membrete?.sexo,
         membreteFecha = membrete?.fecha,
+        doctorId = doctorId,
+        doctorNombre = doctorNombre,
+        patientFirestoreKey = patientFirestoreKey,
     )
 
     private fun DocumentHeader.toSyncDto() = DocumentHeaderDto(

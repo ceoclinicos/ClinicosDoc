@@ -43,7 +43,7 @@ import com.ceoclinicos.clinicosdoc.util.PatientUtils
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.format.DateTimeFormatter
-import java.util.UUID
+import com.ceoclinicos.clinicosdoc.util.PatientFirestoreId
 
 @Composable
 fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
@@ -174,7 +174,7 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
                         val birth = fechaNacimiento!!
                         val age = edad.toIntOrNull() ?: PatientUtils.calcAge(birth)
                         val patient = Patient(
-                            id = UUID.randomUUID().toString(),
+                            id = PatientFirestoreId.from(cedula.trim(), nombre.trim()),
                             nombre = nombre.trim(),
                             cedula = cedula.trim(),
                             edad = age,
