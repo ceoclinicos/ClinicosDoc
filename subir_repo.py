@@ -86,7 +86,7 @@ def main() -> None:
 
     bloqueados = archivos_bloqueados_en_stage(cwd)
     if bloqueados:
-        print("\n⚠ Se detectaron archivos sensibles en el stage. Abortando:")
+        print("\n[!] Se detectaron archivos sensibles en el stage. Abortando:")
         for f in bloqueados:
             print(f"  - {f}")
         run(["git", "reset", "HEAD"], cwd=cwd)
@@ -111,7 +111,7 @@ def main() -> None:
     run(["git", "push", "-u", "origin", branch], cwd=cwd)
 
     print("\n" + "=" * 50)
-    print("  ✓ Subido a GitHub")
+    print("  OK - Subido a GitHub")
     print(f"  Commit: {mensaje}")
     print("  GitHub Actions desplegará la web en 1–3 min.")
     print("  https://clinicosdoc.com")

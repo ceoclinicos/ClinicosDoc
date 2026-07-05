@@ -3,6 +3,9 @@ import { getNavRoutes, matchRoute, navigate, onRouteChange } from "./router";
 export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => void): void {
   root.innerHTML = `
     <div class="shell">
+      <div class="site-banner" aria-hidden="true">
+        <img src="/img/bandera_venezuela.png" alt="Bandera de Venezuela" class="site-banner-flag" width="120" height="80" />
+      </div>
       <header class="topbar">
         <a href="#/" class="brand">Clínicos Doc</a>
         <nav class="topnav" id="topnav"></nav>

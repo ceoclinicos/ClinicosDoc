@@ -35,6 +35,9 @@ jobs:
 
       - name: Build
         working-directory: web
+        env:
+          VITE_AI_PROXY_URL: ${{ secrets.VITE_AI_PROXY_URL }}
+          VITE_AI_PROVIDER: ${{ secrets.VITE_AI_PROVIDER }}
         run: npm run build
 
       - name: Prepare GitHub Pages artifact

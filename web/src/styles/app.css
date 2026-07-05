@@ -33,7 +33,27 @@ a {
 .shell {
   min-height: 100dvh;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
+}
+
+.site-banner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.75rem 1rem 0.25rem;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.site-banner-flag {
+  display: block;
+  width: auto;
+  max-width: min(160px, 45vw);
+  height: auto;
+  max-height: 72px;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(11, 31, 51, 0.1);
 }
 
 .topbar {
@@ -384,4 +404,70 @@ dialog {
 .btn-block {
   width: 100%;
   margin-top: 1rem;
+}
+
+.dictado-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.mic-btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.75rem 1.25rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(135deg, var(--teal), var(--navy-light));
+  color: white;
+}
+
+.mic-btn.mic-active {
+  background: linear-gradient(135deg, #dc2626, #991b1b);
+  animation: pulse-mic 1.2s infinite;
+}
+
+@keyframes pulse-mic {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+.doc-preview {
+  display: grid;
+  gap: 1rem;
+}
+
+.doc-section h3 {
+  margin: 0 0 0.35rem;
+  color: var(--teal);
+  font-size: 1rem;
+}
+
+.doc-pre {
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin: 0;
+  padding: 1rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+fieldset.card-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+
+fieldset.card-panel legend {
+  padding: 0 0.35rem;
 }
