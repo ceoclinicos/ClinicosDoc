@@ -607,6 +607,50 @@ fieldset.card-panel legend {
   grid-column: 1 / -1;
 }
 
+.geo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.geo-status {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.geo-block {
+  margin-bottom: 0.75rem;
+}
+
+.geo-panel {
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.geo-coords {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.geo-map-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.geo-map-embed {
+  width: 100%;
+  height: 220px;
+  border: 0;
+  border-radius: 10px;
+}
+
 .mural-feed {
   display: flex;
   flex-direction: column;

@@ -38,6 +38,8 @@ export interface SolicitudAyuda {
   patientNombre: string;
   zona: string;
   necesidad: string;
+  lat?: number;
+  lng?: number;
   createdAt: string;
 }
 

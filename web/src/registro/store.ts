@@ -221,6 +221,8 @@ export async function createSolicitud(input: {
   patientNombre: string;
   zona: string;
   necesidad: string;
+  lat?: number;
+  lng?: number;
 }): Promise<SolicitudAyuda> {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -232,6 +234,10 @@ export async function createSolicitud(input: {
     necesidad: input.necesidad.trim(),
     createdAt: now,
   };
+  if (input.lat != null && input.lng != null) {
+    data.lat = input.lat;
+    data.lng = input.lng;
+  }
   await setDoc(doc(solicitudesRef(), id), data as DocumentData);
   return data;
 }

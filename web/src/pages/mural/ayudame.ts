@@ -10,6 +10,13 @@ import {
 import { getPatientSession, setPatientSession } from "../../registro/session";
 import type { SolicitudAyuda } from "../../registro/models";
 import { shareLinks, shareSite, shareSolicitud } from "../../services/share";
+import {
+  formatCoords,
+  getCurrentPosition,
+  googleMapsUrl,
+  openStreetMapEmbedUrl,
+  openStreetMapUrl,
+} from "../../services/geolocation";
 import { bindNavButtons, page } from "../helpers";
 
 function escapeHtml(s: string): string {
@@ -22,6 +29,31 @@ function zonaOptions(selected = ""): string {
   ).join("");
 }
 
+function geoBlock(s: SolicitudAyuda): string {
+  if (s.lat == null || s.lng == null) return "";
+  const lat = s.lat;
+  const lng = s.lng;
+  return `
+    <div class="geo-block">
+      <button type="button" class="btn btn-ghost btn-sm btn-geo-view" data-geo-id="${s.id}">📍 Ver ubicación GPS</button>
+      <div class="geo-panel" id="geo-panel-${s.id}" hidden>
+        <p class="geo-coords"><strong>Coordenadas:</strong> ${formatCoords(lat, lng)}</p>
+        <div class="geo-map-links">
+          <a class="share-btn" href="${openStreetMapUrl(lat, lng)}" target="_blank" rel="noopener">OpenStreetMap</a>
+          <a class="share-btn" href="${googleMapsUrl(lat, lng)}" target="_blank" rel="noopener">Google Maps</a>
+        </div>
+        <iframe
+          class="geo-map-embed"
+          title="Mapa de ubicación"
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+          src="${openStreetMapEmbedUrl(lat, lng)}"
+        ></iframe>
+      </div>
+    </div>
+  `;
+}
+
 function solicitudCard(s: SolicitudAyuda): string {
   return `
     <article class="mural-card" id="solicitud-${s.id}">
@@ -30,12 +62,28 @@ function solicitudCard(s: SolicitudAyuda): string {
         <span class="mural-zona">📍 ${escapeHtml(s.zona)}</span>
       </header>
       <p class="mural-body">${escapeHtml(s.necesidad)}</p>
+      ${geoBlock(s)}
       <footer class="mural-footer">
         <time class="muted">${formatFecha(s.createdAt)}</time>
         ${shareLinks(s)}
       </footer>
     </article>
   `;
+}
+
+function bindGeoViewButtons(root: HTMLElement): void {
+  root.querySelectorAll(".btn-geo-view").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-geo-id");
+      if (!id) return;
+      const panel = root.querySelector(`#geo-panel-${id}`) as HTMLElement | null;
+      if (!panel) return;
+      const open = panel.hidden;
+      root.querySelectorAll(".geo-panel").forEach((p) => ((p as HTMLElement).hidden = true));
+      panel.hidden = !open;
+      btn.textContent = open ? "Ocultar ubicación" : "📍 Ver ubicación GPS";
+    });
+  });
 }
 
 function bindShareButtons(root: HTMLElement): void {
@@ -64,6 +112,7 @@ function renderFeed(root: HTMLElement, filtroZona: string): void {
       }
       feed.innerHTML = filtered.map(solicitudCard).join("");
       bindShareButtons(feed);
+      bindGeoViewButtons(feed);
     })
     .catch((err) => {
       feed.innerHTML = `<p class="status-badge status-error">${escapeHtml(err instanceof Error ? err.message : "Error")}</p>`;
@@ -123,6 +172,13 @@ function composeLoggedIn(nombre: string): string {
       <label>Necesidad / situación
         <textarea name="necesidad" rows="4" required placeholder="Describa qué necesita o qué padece…"></textarea>
       </label>
+      <div class="geo-row">
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-geo">📍 Usar mi ubicación actual</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-geo-clear" hidden>Quitar ubicación</button>
+        <input type="hidden" name="lat" id="geo-lat" />
+        <input type="hidden" name="lng" id="geo-lng" />
+        <p class="muted geo-status" id="geo-status">Opcional: adjunte coordenadas GPS para ubicarle con más precisión.</p>
+      </div>
       <button type="submit" class="btn btn-primary btn-block">Publicar solicitud</button>
     </form>
   `;
@@ -155,25 +211,72 @@ function composeGuest(): string {
   `;
 }
 
+function clearGeoFields(root: HTMLElement): void {
+  const lat = root.querySelector("#geo-lat") as HTMLInputElement | null;
+  const lng = root.querySelector("#geo-lng") as HTMLInputElement | null;
+  const status = root.querySelector("#geo-status") as HTMLElement | null;
+  const clearBtn = root.querySelector("#btn-geo-clear") as HTMLButtonElement | null;
+  if (lat) lat.value = "";
+  if (lng) lng.value = "";
+  if (status) status.textContent = "Opcional: adjunte coordenadas GPS para ubicarle con más precisión.";
+  if (clearBtn) clearBtn.hidden = true;
+}
+
+function bindGeoCapture(root: HTMLElement): void {
+  const btn = root.querySelector("#btn-geo") as HTMLButtonElement | null;
+  const clearBtn = root.querySelector("#btn-geo-clear") as HTMLButtonElement | null;
+  const lat = root.querySelector("#geo-lat") as HTMLInputElement | null;
+  const lng = root.querySelector("#geo-lng") as HTMLInputElement | null;
+  const status = root.querySelector("#geo-status") as HTMLElement | null;
+  if (!btn || !lat || !lng || !status) return;
+
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    status.textContent = "Obteniendo ubicación…";
+    try {
+      const pos = await getCurrentPosition();
+      lat.value = String(pos.lat);
+      lng.value = String(pos.lng);
+      const acc = pos.accuracy ? ` (±${Math.round(pos.accuracy)} m)` : "";
+      status.textContent = `Ubicación capturada: ${formatCoords(pos.lat, pos.lng)}${acc}`;
+      if (clearBtn) clearBtn.hidden = false;
+    } catch (err) {
+      status.textContent = err instanceof Error ? err.message : "No se pudo obtener ubicación";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  clearBtn?.addEventListener("click", () => clearGeoFields(root));
+}
+
 function renderComposeArea(root: HTMLElement, getFiltro: () => string): void {
   const slot = root.querySelector("#mural-compose-slot") as HTMLElement;
   const session = getPatientSession();
   slot.innerHTML = session ? composeLoggedIn(session.nombre) : composeGuest();
 
   if (session) {
+    bindGeoCapture(slot);
     slot.querySelector("#form-solicitud")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const s = getPatientSession();
       if (!s) return;
       const fd = new FormData(e.target as HTMLFormElement);
+      const latRaw = String(fd.get("lat"));
+      const lngRaw = String(fd.get("lng"));
+      const lat = latRaw ? Number(latRaw) : undefined;
+      const lng = lngRaw ? Number(lngRaw) : undefined;
       try {
         await createSolicitud({
           patientCedula: s.cedula,
           patientNombre: s.nombre,
           zona: String(fd.get("zona")),
           necesidad: String(fd.get("necesidad")),
+          lat: lat != null && !Number.isNaN(lat) ? lat : undefined,
+          lng: lng != null && !Number.isNaN(lng) ? lng : undefined,
         });
         (e.target as HTMLFormElement).reset();
+        clearGeoFields(slot);
         renderFeed(root, getFiltro());
       } catch (err) {
         alert(err instanceof Error ? err.message : "No se pudo publicar");
@@ -322,6 +425,7 @@ registerRoute({
       }
       box.innerHTML = solicitudCard(s);
       bindShareButtons(box);
+      bindGeoViewButtons(box);
     });
     return el;
   },
