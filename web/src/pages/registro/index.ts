@@ -1,0 +1,2 @@
+import "./profesional";
+import "./paciente";

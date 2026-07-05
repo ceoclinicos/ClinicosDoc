@@ -9,5 +9,22 @@ service cloud.firestore {
     match /clinicosdoc_user/{userId} {
       allow read, write: if true;
     }
+    // Pacientes globales consultorio (app Android)
+    match /clinicosdoc_patients/{patientKey} {
+      allow read, write: if true;
+      match /documents/{docId} {
+        allow read, write: if true;
+      }
+    }
+    // Registro médico compartido (web)
+    match /pacientes/{cedula} {
+      allow read, write: if true;
+      match /atenciones/{atencionId} {
+        allow read, write: if true;
+      }
+    }
+    match /profesionales/{cedula} {
+      allow read, write: if true;
+    }
   }
 }

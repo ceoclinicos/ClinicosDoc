@@ -1,6 +1,8 @@
 /** Rutas Firestore — mismo esquema que la app Android. */
 export const FirestorePaths = {
   USERS: "clinicosdoc_user",
+  /** Pacientes globales: doc = `{cedula}_{nombre}` */
+  GLOBAL_PATIENTS: "clinicosdoc_patients",
   SUB_PATIENTS: "patients",
   SUB_DOCUMENTS: "documents",
   SUB_APPOINTMENTS: "appointments",

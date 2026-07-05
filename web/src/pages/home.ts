@@ -8,19 +8,26 @@ registerRoute({
   navLabel: "Home",
   render: () => {
     const el = page(
-      "Buenos días, Doctor",
+      "Registro médico",
       `
-      <p class="lead">Gestiona historias clínicas e informes con dictado e IA — versión web ligera.</p>
-      <button type="button" class="hero-card" data-nav="/redactar">
-        <span class="hero-title">Redactar</span>
-        <span class="hero-sub">Historia clínica, informe o reposo</span>
+      <p class="lead">Centralice atenciones y consulte si una persona ya fue atendida — por cédula.</p>
+      <button type="button" class="hero-card" data-nav="/profesional">
+        <span class="hero-title">Soy profesional de salud</span>
+        <span class="hero-sub">Buscar paciente · Registrar atención</span>
       </button>
-      <div class="grid-2">
-        <button type="button" class="tile" data-nav="/pacientes">Nuevo paciente</button>
-        <button type="button" class="tile" data-nav="/informes">Ver informes</button>
-        <button type="button" class="tile" data-nav="/borradores">Borradores</button>
-        <button type="button" class="tile" data-nav="/plantillas">Plantillas</button>
-      </div>
+      <button type="button" class="hero-card hero-card-alt" data-nav="/paciente">
+        <span class="hero-title">Soy paciente</span>
+        <span class="hero-sub">Ver mis atenciones registradas</span>
+      </button>
+      <details class="consultorio-details">
+        <summary>Herramientas de consultorio (Clínicos Doc)</summary>
+        <div class="grid-2" style="margin-top:0.75rem">
+          <button type="button" class="tile" data-nav="/redactar">Redactar informe</button>
+          <button type="button" class="tile" data-nav="/pacientes">Pacientes</button>
+          <button type="button" class="tile" data-nav="/informes">Informes</button>
+          <button type="button" class="tile" data-nav="/plantillas">Plantillas</button>
+        </div>
+      </details>
       `,
     );
     bindNavButtons(el);

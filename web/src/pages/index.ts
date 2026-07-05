@@ -1,4 +1,5 @@
 import "./home";
+import "./registro";
 import "./patients";
 import "./documents";
 import "./drafts";
