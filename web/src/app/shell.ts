@@ -1,4 +1,26 @@
 import { getNavRoutes, matchRoute, navigate, onRouteChange } from "./router";
+import { isUserLoggedIn, logoutAllSessions } from "../registro/session";
+
+function navHtml(): string {
+  const items = getNavRoutes();
+  const links = items
+    .map(
+      (r) =>
+        `<a href="#${r.path}" class="nav-link" data-path="${r.path}">${r.navLabel ?? r.title}</a>`,
+    )
+    .join("");
+  const logout = isUserLoggedIn()
+    ? `<button type="button" class="nav-link nav-link-logout" id="btn-nav-logout">Cerrar sesión</button>`
+    : "";
+  return links + logout;
+}
+
+function bindLogout(root: HTMLElement): void {
+  root.querySelector("#btn-nav-logout")?.addEventListener("click", () => {
+    logoutAllSessions();
+    navigate("/");
+  });
+}
 
 export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => void): void {
   root.innerHTML = `
@@ -20,18 +42,13 @@ export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => v
   const bottomnav = root.querySelector("#bottomnav") as HTMLElement;
 
   function renderNav(): void {
-    const items = getNavRoutes();
-    const links = items
-      .map(
-        (r) =>
-          `<a href="#${r.path}" class="nav-link" data-path="${r.path}">${r.navLabel ?? r.title}</a>`,
-      )
-      .join("");
-    topnav.innerHTML = links;
-    bottomnav.innerHTML = links;
+    topnav.innerHTML = navHtml();
+    bottomnav.innerHTML = navHtml();
+    bindLogout(topnav);
+    bindLogout(bottomnav);
 
     const current = matchRoute(window.location.hash)?.path ?? "/";
-    root.querySelectorAll(".nav-link").forEach((a) => {
+    root.querySelectorAll(".nav-link[data-path]").forEach((a) => {
       a.classList.toggle("active", a.getAttribute("data-path") === current);
     });
   }
@@ -44,6 +61,7 @@ export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => v
   }
 
   onRouteChange(render);
+  window.addEventListener("sessionchange", render);
   render();
 }
 

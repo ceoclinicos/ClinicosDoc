@@ -117,5 +117,9 @@ service cloud.firestore {
     match /solicitudes/{solicitudId} {
       allow read, write: if true;
     }
+
+    match /pin_reset_tokens/{tokenId} {
+      allow read, write: if false;
+    }
   }
 }

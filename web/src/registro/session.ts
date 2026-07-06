@@ -57,16 +57,34 @@ function remove(key: string): void {
   sessionStorage.removeItem(key);
 }
 
+function notifySessionChange(): void {
+  window.dispatchEvent(new Event("sessionchange"));
+}
+
+export function isUserLoggedIn(): boolean {
+  return getProfessionalSession() !== null || getPatientSession() !== null;
+}
+
+/** Cierra sesión de paciente y/o profesional en este dispositivo */
+export function logoutAllSessions(): void {
+  remove(PROF_KEY);
+  remove(PAC_KEY);
+  clearAtencionCedula();
+  notifySessionChange();
+}
+
 export function getProfessionalSession(): ProfesionalSession | null {
   return restore<ProfesionalSession>(PROF_KEY);
 }
 
 export function setProfessionalSession(session: ProfesionalSession): void {
   persist(PROF_KEY, session);
+  notifySessionChange();
 }
 
 export function clearProfessionalSession(): void {
   remove(PROF_KEY);
+  notifySessionChange();
 }
 
 export function getPatientSession(): PacienteSession | null {
@@ -75,10 +93,12 @@ export function getPatientSession(): PacienteSession | null {
 
 export function setPatientSession(session: PacienteSession): void {
   persist(PAC_KEY, session);
+  notifySessionChange();
 }
 
 export function clearPatientSession(): void {
   remove(PAC_KEY);
+  notifySessionChange();
 }
 
 export function setAtencionCedula(cedula: string): void {

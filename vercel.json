@@ -1,4 +1,8 @@
 {
   "version": 2,
-  "routes": [{ "src": "/api/chat", "dest": "/api/chat.js" }]
+  "routes": [
+    { "src": "/api/chat", "dest": "/api/chat.js" },
+    { "src": "/api/pin-reset-request", "dest": "/api/pin-reset-request.js" },
+    { "src": "/api/pin-reset-confirm", "dest": "/api/pin-reset-confirm.js" }
+  ]
 }

@@ -105,6 +105,19 @@ a {
   color: var(--teal);
 }
 
+.nav-link-logout {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.nav-link-logout:hover {
+  background: rgba(185, 28, 28, 0.08);
+  color: #b91c1c;
+}
+
 .main {
   padding: 1rem;
   max-width: 720px;

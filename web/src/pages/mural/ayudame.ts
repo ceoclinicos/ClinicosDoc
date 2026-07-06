@@ -174,6 +174,7 @@ function ingresoCedulaForm(): string {
     <form class="form" id="form-ingreso-cedula">
       <label>Cédula<input name="cedula" required placeholder="V-12345678" /></label>
       <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+      <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN</a></p>
       <div class="compose-actions">
         <button type="button" class="btn btn-ghost" id="btn-cancelar-ingreso">Cancelar</button>
         <button type="submit" class="btn btn-primary">Ingresar</button>

@@ -30,6 +30,7 @@ function bindPacientePage(el: HTMLElement): void {
           <form class="form" id="pac-login">
             <label>Cédula<input name="cedula" required placeholder="Ej. V-12345678" /></label>
             <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+            <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN</a></p>
             <button type="submit" class="btn btn-primary">Ver mis registros</button>
           </form>
         `
@@ -157,6 +158,7 @@ registerRoute({
         <form class="form" id="pac-login">
           <label>Cédula<input name="cedula" required placeholder="Ej. V-12345678" /></label>
           <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+          <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN</a></p>
           <button type="submit" class="btn btn-primary">Ver mis registros</button>
         </form>
       `,
