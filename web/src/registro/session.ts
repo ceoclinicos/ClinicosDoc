@@ -4,6 +4,14 @@ const PROF_KEY = "registro_profesional";
 const PAC_KEY = "registro_paciente";
 const ATENCION_CEDULA_KEY = "registro_atencion_cedula";
 
+/** Dispositivo recordado 96 h desde el último inicio de sesión */
+export const SESSION_TTL_MS = 96 * 60 * 60 * 1000;
+
+interface PersistedSession<T> {
+  data: T;
+  expiresAt: number;
+}
+
 export async function hashPin(cedula: string, pin: string): Promise<string> {
   const data = new TextEncoder().encode(`${cedula.trim().toUpperCase()}:${pin}`);
   const buf = await crypto.subtle.digest("SHA-256", data);
@@ -12,40 +20,65 @@ export async function hashPin(cedula: string, pin: string): Promise<string> {
     .join("");
 }
 
-export function getProfessionalSession(): ProfesionalSession | null {
-  const raw = sessionStorage.getItem(PROF_KEY);
-  if (!raw) return null;
+function persist<T>(key: string, data: T): void {
+  const payload: PersistedSession<T> = {
+    data,
+    expiresAt: Date.now() + SESSION_TTL_MS,
+  };
   try {
-    return JSON.parse(raw) as ProfesionalSession;
+    localStorage.setItem(key, JSON.stringify(payload));
   } catch {
+    /* almacenamiento lleno o bloqueado */
+  }
+}
+
+function restore<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const payload = JSON.parse(raw) as PersistedSession<T>;
+    if (!payload?.data || typeof payload.expiresAt !== "number") {
+      localStorage.removeItem(key);
+      return null;
+    }
+    if (Date.now() > payload.expiresAt) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return payload.data;
+  } catch {
+    localStorage.removeItem(key);
     return null;
   }
+}
+
+function remove(key: string): void {
+  localStorage.removeItem(key);
+  sessionStorage.removeItem(key);
+}
+
+export function getProfessionalSession(): ProfesionalSession | null {
+  return restore<ProfesionalSession>(PROF_KEY);
 }
 
 export function setProfessionalSession(session: ProfesionalSession): void {
-  sessionStorage.setItem(PROF_KEY, JSON.stringify(session));
+  persist(PROF_KEY, session);
 }
 
 export function clearProfessionalSession(): void {
-  sessionStorage.removeItem(PROF_KEY);
+  remove(PROF_KEY);
 }
 
 export function getPatientSession(): PacienteSession | null {
-  const raw = sessionStorage.getItem(PAC_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as PacienteSession;
-  } catch {
-    return null;
-  }
+  return restore<PacienteSession>(PAC_KEY);
 }
 
 export function setPatientSession(session: PacienteSession): void {
-  sessionStorage.setItem(PAC_KEY, JSON.stringify(session));
+  persist(PAC_KEY, session);
 }
 
 export function clearPatientSession(): void {
-  sessionStorage.removeItem(PAC_KEY);
+  remove(PAC_KEY);
 }
 
 export function setAtencionCedula(cedula: string): void {

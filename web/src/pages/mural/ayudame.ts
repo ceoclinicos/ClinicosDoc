@@ -1,15 +1,15 @@
 import { registerRoute } from "../../app/router";
 import { ZONAS_AFECTADAS } from "../../registro/models";
 import {
-  consultarPaciente,
   createSolicitud,
   formatFecha,
   listSolicitudes,
+  loginPaciente,
   registerPaciente,
 } from "../../registro/store";
 import { getPatientSession, setPatientSession } from "../../registro/session";
 import type { SolicitudAyuda } from "../../registro/models";
-import { shareLinks, shareSite, shareSolicitud } from "../../services/share";
+import { shareActions, bindShareActions } from "../../services/share";
 import {
   formatCoords,
   getCurrentPosition,
@@ -29,43 +29,41 @@ function zonaOptions(selected = ""): string {
   ).join("");
 }
 
-function geoBlock(s: SolicitudAyuda): string {
+const SVG_PIN =
+  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>';
+
+function geoPanel(s: SolicitudAyuda): string {
   if (s.lat == null || s.lng == null) return "";
   const lat = s.lat;
   const lng = s.lng;
   return `
-    <div class="geo-block">
-      <button type="button" class="btn btn-ghost btn-sm btn-geo-view" data-geo-id="${s.id}">📍 Ver ubicación GPS</button>
       <div class="geo-panel" id="geo-panel-${s.id}" hidden>
-        <p class="geo-coords"><strong>Coordenadas:</strong> ${formatCoords(lat, lng)}</p>
+        <p class="geo-coords">${formatCoords(lat, lng)}</p>
         <div class="geo-map-links">
-          <a class="share-btn" href="${openStreetMapUrl(lat, lng)}" target="_blank" rel="noopener">OpenStreetMap</a>
-          <a class="share-btn" href="${googleMapsUrl(lat, lng)}" target="_blank" rel="noopener">Google Maps</a>
+          <a class="icon-btn" href="${openStreetMapUrl(lat, lng)}" target="_blank" rel="noopener" aria-label="OpenStreetMap">${SVG_PIN}</a>
+          <a class="icon-btn" href="${googleMapsUrl(lat, lng)}" target="_blank" rel="noopener" aria-label="Google Maps">G</a>
         </div>
-        <iframe
-          class="geo-map-embed"
-          title="Mapa de ubicación"
-          loading="lazy"
-          referrerpolicy="no-referrer-when-downgrade"
-          src="${openStreetMapEmbedUrl(lat, lng)}"
-        ></iframe>
+        <iframe class="geo-map-embed" title="Mapa" loading="lazy" src="${openStreetMapEmbedUrl(lat, lng)}"></iframe>
       </div>
-    </div>
   `;
 }
 
 function solicitudCard(s: SolicitudAyuda): string {
+  const hasGeo = s.lat != null && s.lng != null;
   return `
     <article class="mural-card" id="solicitud-${s.id}">
       <header class="mural-card-header">
         <strong>${escapeHtml(s.patientNombre)}</strong>
-        <span class="mural-zona">📍 ${escapeHtml(s.zona)}</span>
+        <span class="mural-zona">${escapeHtml(s.zona)}</span>
       </header>
       <p class="mural-body">${escapeHtml(s.necesidad)}</p>
-      ${geoBlock(s)}
+      ${geoPanel(s)}
       <footer class="mural-footer">
-        <time class="muted">${formatFecha(s.createdAt)}</time>
-        ${shareLinks(s)}
+        <time class="mural-time">${formatFecha(s.createdAt)}</time>
+        <div class="mural-actions">
+          ${hasGeo ? `<button type="button" class="icon-btn btn-geo-view" data-geo-id="${s.id}" aria-label="Ver ubicación">${SVG_PIN}</button>` : ""}
+          ${shareActions(s)}
+        </div>
       </footer>
     </article>
   `;
@@ -81,23 +79,13 @@ function bindGeoViewButtons(root: HTMLElement): void {
       const open = panel.hidden;
       root.querySelectorAll(".geo-panel").forEach((p) => ((p as HTMLElement).hidden = true));
       panel.hidden = !open;
-      btn.textContent = open ? "Ocultar ubicación" : "📍 Ver ubicación GPS";
+      btn.classList.toggle("icon-btn-active", !panel.hidden);
     });
   });
 }
 
 function bindShareButtons(root: HTMLElement): void {
-  root.querySelectorAll("[data-share-id]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-share-id");
-      const card = root.querySelector(`#solicitud-${id}`);
-      if (!id || !card) return;
-      const nombre = card.querySelector("strong")?.textContent ?? "";
-      const zona = card.querySelector(".mural-zona")?.textContent?.replace("📍 ", "") ?? "";
-      const necesidad = card.querySelector(".mural-body")?.textContent ?? "";
-      shareSolicitud({ id, patientNombre: nombre, zona, necesidad });
-    });
-  });
+  bindShareActions(root);
 }
 
 function renderFeed(root: HTMLElement, filtroZona: string): void {
@@ -136,6 +124,7 @@ function registroRapidoForm(): string {
         </label>
         <label>Teléfono<input name="telefono" type="tel" required placeholder="0412…" /></label>
         <label class="grid-full">Correo<input name="correo" type="email" required /></label>
+        <label class="grid-full">PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
       </div>
       <p class="muted">Sus datos se guardan en la base de datos al registrarse.</p>
       <div class="compose-actions">
@@ -150,7 +139,7 @@ function ingresoCedulaForm(): string {
   return `
     <form class="form" id="form-ingreso-cedula">
       <label>Cédula<input name="cedula" required placeholder="V-12345678" /></label>
-      <p class="muted">Si ya se registró antes, ingrese solo su cédula.</p>
+      <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
       <div class="compose-actions">
         <button type="button" class="btn btn-ghost" id="btn-cancelar-ingreso">Cancelar</button>
         <button type="submit" class="btn btn-primary">Ingresar</button>
@@ -329,6 +318,7 @@ function bindRegistroRapido(
         sexo: String(fd.get("sexo")),
         telefono: String(fd.get("telefono")),
         correo: String(fd.get("correo")),
+        pin: String(fd.get("pin")),
       });
       setPatientSession({ cedula: p.cedula, nombre: p.nombre });
       renderComposeArea(root, getFiltro);
@@ -355,7 +345,7 @@ function bindIngresoCedula(
     e.preventDefault();
     const fd = new FormData(e.target as HTMLFormElement);
     try {
-      const p = await consultarPaciente(String(fd.get("cedula")));
+      const p = await loginPaciente(String(fd.get("cedula")), String(fd.get("pin")));
       setPatientSession({ cedula: p.cedula, nombre: p.nombre });
       renderComposeArea(root, getFiltro);
     } catch (err) {
@@ -385,7 +375,6 @@ registerRoute({
             </select>
           </label>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" id="btn-share-site">Compartir muro</button>
       </div>
       <div id="mural-compose-slot"></div>
       <div id="mural-feed" class="mural-feed"></div>
@@ -402,8 +391,6 @@ registerRoute({
     renderComposeArea(el, getFiltro);
     renderFeed(el, getFiltro());
     filtro?.addEventListener("change", () => renderFeed(el, getFiltro()));
-
-    el.querySelector("#btn-share-site")?.addEventListener("click", () => shareSite());
 
     bindNavButtons(el);
     return el;

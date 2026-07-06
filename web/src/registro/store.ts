@@ -20,6 +20,14 @@ import type {
 import { RegistroPaths } from "./models";
 import { hashPin } from "./session";
 
+function assertPin4(pin: string): void {
+  if (!/^\d{4}$/.test(pin)) throw new Error("El PIN debe tener exactamente 4 dígitos");
+}
+
+function normalizeMpps(mpps: string): string {
+  return mpps.trim().toUpperCase();
+}
+
 function patientRef(cedula: string) {
   return doc(getDb(), RegistroPaths.PACIENTES, normalizeCedula(cedula));
 }
@@ -52,9 +60,10 @@ export async function registerPaciente(input: {
   sexo: string;
   telefono: string;
   correo: string;
-  pin?: string;
+  pin: string;
 }): Promise<PacienteRegistro> {
   const cedula = normalizeCedula(input.cedula);
+  assertPin4(input.pin);
   const existing = await getPaciente(cedula);
   if (existing) throw new Error("Ya existe un paciente con esa cédula");
 
@@ -67,7 +76,7 @@ export async function registerPaciente(input: {
     sexo: input.sexo.trim(),
     telefono: input.telefono.trim(),
     correo: input.correo.trim(),
-    pinHash: input.pin ? await hashPin(cedula, input.pin) : "",
+    pinHash: await hashPin(cedula, input.pin),
     createdAt: now,
     updatedAt: now,
   };
@@ -84,6 +93,7 @@ export async function registerProfesional(input: {
   pin: string;
 }): Promise<ProfesionalRegistro> {
   const cedula = normalizeCedula(input.cedula);
+  assertPin4(input.pin);
   const existing = await getProfesional(cedula);
   if (existing) throw new Error("Ya existe un profesional con esa cédula");
 
@@ -110,15 +120,23 @@ export async function consultarPaciente(cedula: string): Promise<PacienteRegistr
 export async function loginPaciente(cedula: string, pin: string): Promise<PacienteRegistro> {
   const p = await getPaciente(cedula);
   if (!p) throw new Error("No hay registro con esa cédula");
+  if (!p.pinHash) throw new Error("Debe completar su registro con PIN de 4 dígitos");
+  assertPin4(pin);
   const pinHash = await hashPin(cedula, pin);
   if (p.pinHash !== pinHash) throw new Error("PIN incorrecto");
   return p;
 }
 
-export async function loginProfesional(cedula: string, pin: string): Promise<ProfesionalSession> {
+export async function loginProfesional(
+  cedula: string,
+  pin: string,
+  mpps: string,
+): Promise<ProfesionalSession> {
   const p = await getProfesional(cedula);
   if (!p) throw new Error("No hay profesional registrado con esa cédula");
   if (!p.activo) throw new Error("Cuenta pendiente de activación");
+  assertPin4(pin);
+  if (normalizeMpps(p.mpps) !== normalizeMpps(mpps)) throw new Error("Código MPPS incorrecto");
   const pinHash = await hashPin(cedula, pin);
   if (p.pinHash !== pinHash) throw new Error("PIN incorrecto");
   return {

@@ -620,35 +620,31 @@ fieldset.card-panel legend {
   font-size: 0.85rem;
 }
 
-.geo-block {
-  margin-bottom: 0.75rem;
-}
-
 .geo-panel {
-  margin-top: 0.75rem;
-  padding: 0.85rem;
+  margin: 0.35rem 0 0.5rem;
+  padding: 0.65rem;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .geo-coords {
-  margin: 0 0 0.5rem;
-  font-size: 0.9rem;
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
 }
 
 .geo-map-links {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-bottom: 0.75rem;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
 }
 
 .geo-map-embed {
   width: 100%;
-  height: 220px;
+  height: 160px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 .mural-feed {
@@ -658,7 +654,7 @@ fieldset.card-panel legend {
 }
 
 .mural-card {
-  padding: 1rem 1.1rem;
+  padding: 0.85rem 1rem;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -668,53 +664,97 @@ fieldset.card-panel legend {
 .mural-card-header {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.5rem 1rem;
-  margin-bottom: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.mural-card-header strong {
+  font-size: 0.95rem;
 }
 
 .mural-zona {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   color: var(--teal);
+  font-weight: 600;
 }
 
 .mural-body {
-  margin: 0 0 0.75rem;
-  line-height: 1.5;
+  margin: 0 0 0.5rem;
+  line-height: 1.45;
   white-space: pre-wrap;
+  font-size: 0.92rem;
 }
 
 .mural-footer {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  font-size: 0.85rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--border);
 }
 
-.share-row {
+.mural-time {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.mural-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
 }
 
-.share-btn {
-  display: inline-block;
-  padding: 0.25rem 0.6rem;
-  font-size: 0.8rem;
-  border-radius: 999px;
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  text-decoration: none;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-secondary);
   cursor: pointer;
+  text-decoration: none;
   font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
-.share-btn:hover {
+.icon-btn:hover,
+.icon-btn-active {
   border-color: var(--teal);
   color: var(--teal);
+  background: rgba(13, 148, 136, 0.06);
+}
+
+.share-wrap {
+  position: relative;
+}
+
+.share-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.3rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+
+.share-popover .icon-btn {
+  width: 28px;
+  height: 28px;
 }
 
 .mural-links {

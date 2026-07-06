@@ -33,8 +33,8 @@ function loginForm(): string {
     ${tabs("login")}
     <form class="form" id="prof-login">
       <label>Cédula<input name="cedula" required autocomplete="username" /></label>
-      <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required /></label>
-      <p class="muted">PIN que elegiste al registrarte.</p>
+      <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required autocomplete="current-password" /></label>
+      <label>Código MPPS<input name="mpps" required autocomplete="off" /></label>
       <button type="submit" class="btn btn-primary">Ingresar</button>
     </form>
   `;
@@ -55,7 +55,7 @@ function registerForm(): string {
       </label>
       <label id="esp-wrap" hidden>Especialidad<input name="especialidad" placeholder="Ej. Traumatología" /></label>
       <label>Código MPPS<input name="mpps" required /></label>
-      <label>PIN (4 dígitos, para volver a entrar)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" required /></label>
+      <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
       <button type="submit" class="btn btn-primary">Registrar profesional</button>
     </form>
   `;
@@ -119,7 +119,11 @@ function bindProfesionalPage(el: HTMLElement): void {
         e.preventDefault();
         const fd = new FormData(e.target as HTMLFormElement);
         try {
-          const s = await loginProfesional(String(fd.get("cedula")), String(fd.get("pin")));
+          const s = await loginProfesional(
+            String(fd.get("cedula")),
+            String(fd.get("pin")),
+            String(fd.get("mpps")),
+          );
           setProfessionalSession(s);
           navigate("/profesional");
         } catch (err) {
@@ -140,7 +144,11 @@ function bindProfesionalPage(el: HTMLElement): void {
             mpps: String(fd.get("mpps")),
             pin: String(fd.get("pin")),
           });
-          const s = await loginProfesional(String(fd.get("cedula")), String(fd.get("pin")));
+          const s = await loginProfesional(
+            String(fd.get("cedula")),
+            String(fd.get("pin")),
+            String(fd.get("mpps")),
+          );
           setProfessionalSession(s);
           navigate("/profesional");
         } catch (err) {
