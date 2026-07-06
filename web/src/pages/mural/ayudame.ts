@@ -9,7 +9,7 @@ import {
 } from "../../registro/store";
 import { getPatientSession, setPatientSession } from "../../registro/session";
 import type { SolicitudAyuda } from "../../registro/models";
-import { shareButton, shareMenu, bindShareActions } from "../../services/share";
+import { shareButton, bindShareActions } from "../../services/share";
 import {
   formatCoords,
   getCurrentPosition,
@@ -66,7 +66,6 @@ function solicitudCard(s: SolicitudAyuda): string {
             ${shareButton(s)}
           </div>
         </div>
-        ${shareMenu(s)}
       </footer>
     </article>
   `;

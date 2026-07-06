@@ -771,39 +771,8 @@ fieldset.card-panel legend {
   background: rgba(13, 148, 136, 0.06);
 }
 
-.share-menu {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  width: 100%;
-  padding-top: 0.5rem;
-  margin-top: 0.35rem;
-  border-top: 1px dashed var(--border);
-}
-
-.share-menu[hidden] {
-  display: none !important;
-}
-
-.share-menu-item {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.3rem 0.65rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
-  text-decoration: none;
-  cursor: pointer;
-  font-family: inherit;
-  line-height: 1.2;
-}
-
-.share-menu-item:hover {
-  border-color: var(--teal);
-  color: var(--teal);
+.icon-btn-share {
+  color: var(--text-secondary);
 }
 
 .mural-links {
@@ -839,41 +808,25 @@ fieldset.card-panel legend {
 }
 
 .apoyo-box {
-  margin: 0.5rem 0 1rem;
-  padding: 1rem 1.1rem;
+  margin: 0.75rem 0 0;
+  padding: 0.85rem 1rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
 }
 
-.apoyo-datos {
-  margin: 0 0 1rem;
-  display: grid;
-  gap: 0.5rem;
-}
-
-.apoyo-datos div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.75rem;
-}
-
-.apoyo-datos dt {
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  min-width: 4.5rem;
-}
-
-.apoyo-datos dd {
-  margin: 0;
-  font-weight: 600;
-  color: var(--navy);
-}
-
-.apoyo-usdt {
-  margin: 0;
+.apoyo-titulo {
+  margin: 0 0 0.25rem;
   font-size: 0.9rem;
+}
+
+.apoyo-line {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+}
+
+.apoyo-line:last-child {
+  margin-bottom: 0;
 }
 
 .acerca-footer {

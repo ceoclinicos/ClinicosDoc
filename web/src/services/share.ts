@@ -1,4 +1,4 @@
-/** Compartir solicitud en redes sociales */
+/** Compartir solicitud — diálogo nativo del dispositivo (Web Share API) */
 export function shareSolicitud(s: {
   patientNombre: string;
   zona: string;
@@ -14,54 +14,27 @@ export function shareSolicitud(s: {
     return;
   }
 
-  const enc = encodeURIComponent(text);
-  window.open(`https://wa.me/?text=${enc}`, "_blank", "noopener,noreferrer");
+  const fallback = `${text}`;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(fallback).then(() => {
+      alert("Texto copiado. Péguelo donde quiera compartir.");
+    });
+    return;
+  }
+
+  window.open(`https://wa.me/?text=${encodeURIComponent(fallback)}`, "_blank", "noopener,noreferrer");
 }
 
-function sharePayload(s: { patientNombre: string; zona: string; necesidad: string; id: string }) {
-  const url = `${window.location.origin}${window.location.pathname}#/solicitud/${s.id}`;
-  const short = s.necesidad.length > 120 ? `${s.necesidad.slice(0, 120)}…` : s.necesidad;
-  const text = `${s.patientNombre} en ${s.zona} necesita ayuda: ${short} ${url}`;
-  return { url, text, enc: encodeURIComponent(text) };
-}
-
+/** Icono «compartir» estándar (tres nodos conectados) */
 const SVG_SHARE =
-  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>';
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/></svg>';
 
 export function shareButton(s: { id: string }): string {
   return `
-    <button type="button" class="icon-btn" data-share-toggle="${s.id}" aria-label="Compartir solicitud" aria-expanded="false">
+    <button type="button" class="icon-btn icon-btn-share" data-share-id="${s.id}" aria-label="Compartir">
       ${SVG_SHARE}
     </button>
   `;
-}
-
-export function shareMenu(s: {
-  patientNombre: string;
-  zona: string;
-  necesidad: string;
-  id: string;
-}): string {
-  const { enc } = sharePayload(s);
-  const hasNative = typeof navigator !== "undefined" && !!navigator.share;
-  return `
-    <div class="share-menu" id="share-menu-${s.id}" hidden role="menu" aria-label="Opciones para compartir">
-      ${hasNative ? `<button type="button" class="share-menu-item" role="menuitem" data-share-native="${s.id}">Compartir…</button>` : ""}
-      <a class="share-menu-item" role="menuitem" href="https://wa.me/?text=${enc}" target="_blank" rel="noopener" data-share-close>WhatsApp</a>
-      <a class="share-menu-item" role="menuitem" href="https://twitter.com/intent/tweet?text=${enc}" target="_blank" rel="noopener" data-share-close>X</a>
-      <a class="share-menu-item" role="menuitem" href="https://www.threads.net/intent/post?text=${enc}" target="_blank" rel="noopener" data-share-close>Threads</a>
-    </div>
-  `;
-}
-
-function closeAllShareMenus(root: HTMLElement): void {
-  root.querySelectorAll(".share-menu").forEach((m) => {
-    (m as HTMLElement).hidden = true;
-  });
-  root.querySelectorAll("[data-share-toggle]").forEach((btn) => {
-    btn.setAttribute("aria-expanded", "false");
-    btn.classList.remove("icon-btn-active");
-  });
 }
 
 function getCardShareData(card: Element, id: string) {
@@ -74,40 +47,13 @@ function getCardShareData(card: Element, id: string) {
 }
 
 export function bindShareActions(root: HTMLElement): void {
-  root.querySelectorAll("[data-share-native]").forEach((btn) => {
+  root.querySelectorAll("[data-share-id]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const id = btn.getAttribute("data-share-native");
+      const id = btn.getAttribute("data-share-id");
       const card = root.querySelector(`#solicitud-${id}`);
       if (!id || !card) return;
       shareSolicitud(getCardShareData(card, id));
-      closeAllShareMenus(root);
     });
   });
-
-  root.querySelectorAll("[data-share-toggle]").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const id = btn.getAttribute("data-share-toggle");
-      if (!id) return;
-      const menu = root.querySelector(`#share-menu-${id}`) as HTMLElement | null;
-      if (!menu) return;
-      const willOpen = menu.hidden;
-      closeAllShareMenus(root);
-      if (willOpen) {
-        menu.hidden = false;
-        btn.setAttribute("aria-expanded", "true");
-        btn.classList.add("icon-btn-active");
-      }
-    });
-  });
-
-  root.querySelectorAll("[data-share-close]").forEach((el) => {
-    el.addEventListener("click", () => closeAllShareMenus(root));
-  });
-
-  if (!root.dataset.shareBound) {
-    root.dataset.shareBound = "1";
-    document.addEventListener("click", () => closeAllShareMenus(root));
-  }
 }
