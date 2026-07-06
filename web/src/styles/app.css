@@ -716,16 +716,26 @@ fieldset.card-panel legend {
 
 .mural-footer {
   display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-top: 0.5rem;
+  margin-top: 0.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.mural-footer-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding-top: 0.35rem;
-  border-top: 1px solid var(--border);
+  width: 100%;
+  min-height: 30px;
 }
 
 .mural-time {
   font-size: 0.75rem;
   color: var(--text-secondary);
+  line-height: 1.2;
 }
 
 .mural-actions {
@@ -761,27 +771,39 @@ fieldset.card-panel legend {
   background: rgba(13, 148, 136, 0.06);
 }
 
-.share-wrap {
-  position: relative;
-}
-
-.share-popover {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 4px);
+.share-menu {
   display: flex;
-  gap: 0.25rem;
-  padding: 0.3rem;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
-  z-index: 20;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  width: 100%;
+  padding-top: 0.5rem;
+  margin-top: 0.35rem;
+  border-top: 1px dashed var(--border);
 }
 
-.share-popover .icon-btn {
-  width: 28px;
-  height: 28px;
+.share-menu[hidden] {
+  display: none !important;
+}
+
+.share-menu-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.2;
+}
+
+.share-menu-item:hover {
+  border-color: var(--teal);
+  color: var(--teal);
 }
 
 .mural-links {

@@ -9,7 +9,7 @@ import {
 } from "../../registro/store";
 import { getPatientSession, setPatientSession } from "../../registro/session";
 import type { SolicitudAyuda } from "../../registro/models";
-import { shareActions, bindShareActions } from "../../services/share";
+import { shareButton, shareMenu, bindShareActions } from "../../services/share";
 import {
   formatCoords,
   getCurrentPosition,
@@ -59,11 +59,14 @@ function solicitudCard(s: SolicitudAyuda): string {
       <p class="mural-body">${escapeHtml(s.necesidad)}</p>
       ${geoPanel(s)}
       <footer class="mural-footer">
-        <time class="mural-time">${formatFecha(s.createdAt)}</time>
-        <div class="mural-actions">
-          ${hasGeo ? `<button type="button" class="icon-btn btn-geo-view" data-geo-id="${s.id}" aria-label="Ver ubicación">${SVG_PIN}</button>` : ""}
-          ${shareActions(s)}
+        <div class="mural-footer-row">
+          <time class="mural-time">${formatFecha(s.createdAt)}</time>
+          <div class="mural-actions">
+            ${hasGeo ? `<button type="button" class="icon-btn btn-geo-view" data-geo-id="${s.id}" aria-label="Ver ubicación">${SVG_PIN}</button>` : ""}
+            ${shareButton(s)}
+          </div>
         </div>
+        ${shareMenu(s)}
       </footer>
     </article>
   `;
