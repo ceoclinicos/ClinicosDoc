@@ -107,6 +107,38 @@ function renderFeed(root: HTMLElement, filtroZona: string): void {
     });
 }
 
+const MAX_PALABRAS = 400;
+
+function contarPalabras(texto: string): number {
+  const t = texto.trim();
+  return t ? t.split(/\s+/).length : 0;
+}
+
+function recortarPalabras(texto: string, max: number): string {
+  const partes = texto.trim().split(/\s+/);
+  if (partes.length <= max || !texto.trim()) return texto;
+  return partes.slice(0, max).join(" ");
+}
+
+function bindLimitePalabras(root: HTMLElement): void {
+  const ta = root.querySelector<HTMLTextAreaElement>('textarea[name="necesidad"]');
+  const counter = root.querySelector("#word-counter");
+  if (!ta || !counter) return;
+
+  const actualizar = (): void => {
+    const n = contarPalabras(ta.value);
+    if (n > MAX_PALABRAS) {
+      ta.value = recortarPalabras(ta.value, MAX_PALABRAS);
+    }
+    const actual = contarPalabras(ta.value);
+    counter.textContent = `${actual} / ${MAX_PALABRAS} palabras`;
+    counter.classList.toggle("word-counter-limit", actual >= MAX_PALABRAS);
+  };
+
+  ta.addEventListener("input", actualizar);
+  actualizar();
+}
+
 function registroRapidoForm(): string {
   return `
     <form class="form" id="form-registro-rapido">
@@ -151,24 +183,31 @@ function ingresoCedulaForm(): string {
 function composeLoggedIn(nombre: string): string {
   return `
     <form class="form mural-compose" id="form-solicitud">
-      <div class="compose-header">
-        <h2 class="compose-title">Publicar solicitud</h2>
-        <p class="muted">Como <strong>${escapeHtml(nombre)}</strong> · <a href="#/paciente">Mi cuenta</a></p>
-      </div>
-      <label>Zona donde se encuentra
+      <h2 class="compose-title">Solicitar ayuda</h2>
+      <p class="muted compose-user">Como <strong>${escapeHtml(nombre)}</strong> · <a href="#/paciente">Mi cuenta</a></p>
+      <label class="compose-field">
+        <span class="compose-label">Zona donde se encuentra</span>
         <select name="zona" class="input-select" required>${zonaOptions()}</select>
       </label>
-      <label>Necesidad / situación
-        <textarea name="necesidad" rows="4" required placeholder="Describa qué necesita o qué padece…"></textarea>
-      </label>
+      <div class="compose-field">
+        <span class="compose-label">Necesidad / situación</span>
+        <textarea
+          class="compose-textarea"
+          name="necesidad"
+          rows="8"
+          required
+          placeholder="Describa con detalle qué necesita o qué padece…"
+        ></textarea>
+        <span class="word-counter" id="word-counter">0 / ${MAX_PALABRAS} palabras</span>
+      </div>
       <div class="geo-row">
         <button type="button" class="btn btn-ghost btn-sm" id="btn-geo">📍 Usar mi ubicación actual</button>
         <button type="button" class="btn btn-ghost btn-sm" id="btn-geo-clear" hidden>Quitar ubicación</button>
         <input type="hidden" name="lat" id="geo-lat" />
         <input type="hidden" name="lng" id="geo-lng" />
-        <p class="muted geo-status" id="geo-status">Opcional: adjunte coordenadas GPS para ubicarle con más precisión.</p>
+        <p class="muted geo-status" id="geo-status">Opcional: adjunte coordenadas GPS.</p>
       </div>
-      <button type="submit" class="btn btn-primary btn-block">Publicar solicitud</button>
+      <button type="submit" class="btn btn-primary btn-block">Publicar</button>
     </form>
   `;
 }
@@ -176,24 +215,11 @@ function composeLoggedIn(nombre: string): string {
 function composeGuest(): string {
   return `
     <div class="mural-compose mural-compose-guest" id="compose-guest">
-      <div class="compose-header">
-        <h2 class="compose-title">Solicitar ayuda</h2>
-        <p class="muted">Regístrese para publicar en el muro. El feed es público para todos.</p>
-      </div>
-      <div class="compose-locked">
-        <label>Zona donde se encuentra
-          <select class="input-select" disabled aria-disabled="true">
-            <option>Seleccione su zona…</option>
-            ${zonaOptions()}
-          </select>
-        </label>
-        <label>Necesidad / situación
-          <textarea rows="4" disabled placeholder="Describa qué necesita o qué padece…" aria-disabled="true"></textarea>
-        </label>
-      </div>
+      <h2 class="compose-title">Solicitar ayuda</h2>
+      <p class="compose-guest-msg">Regístrese para publicar en el muro.</p>
       <div class="compose-actions" id="compose-guest-actions">
-        <button type="button" class="btn btn-primary" id="btn-registro-rapido">Registro rápido</button>
-        <button type="button" class="btn btn-ghost" id="btn-ya-registrado">Ya estoy registrado</button>
+        <button type="button" class="btn btn-primary" id="btn-registrar">Registrar</button>
+        <button type="button" class="btn btn-ghost" id="btn-iniciar-sesion">Iniciar sesión</button>
       </div>
       <div id="compose-guest-panel" class="compose-guest-panel" hidden></div>
     </div>
@@ -207,7 +233,7 @@ function clearGeoFields(root: HTMLElement): void {
   const clearBtn = root.querySelector("#btn-geo-clear") as HTMLButtonElement | null;
   if (lat) lat.value = "";
   if (lng) lng.value = "";
-  if (status) status.textContent = "Opcional: adjunte coordenadas GPS para ubicarle con más precisión.";
+  if (status) status.textContent = "Opcional: adjunte coordenadas GPS.";
   if (clearBtn) clearBtn.hidden = true;
 }
 
@@ -246,11 +272,21 @@ function renderComposeArea(root: HTMLElement, getFiltro: () => string): void {
 
   if (session) {
     bindGeoCapture(slot);
+    bindLimitePalabras(slot);
     slot.querySelector("#form-solicitud")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const s = getPatientSession();
       if (!s) return;
       const fd = new FormData(e.target as HTMLFormElement);
+      const necesidad = String(fd.get("necesidad")).trim();
+      if (!necesidad) {
+        alert("Describa su necesidad o situación.");
+        return;
+      }
+      if (contarPalabras(necesidad) > MAX_PALABRAS) {
+        alert(`Máximo ${MAX_PALABRAS} palabras.`);
+        return;
+      }
       const latRaw = String(fd.get("lat"));
       const lngRaw = String(fd.get("lng"));
       const lat = latRaw ? Number(latRaw) : undefined;
@@ -260,7 +296,7 @@ function renderComposeArea(root: HTMLElement, getFiltro: () => string): void {
           patientCedula: s.cedula,
           patientNombre: s.nombre,
           zona: String(fd.get("zona")),
-          necesidad: String(fd.get("necesidad")),
+          necesidad,
           lat: lat != null && !Number.isNaN(lat) ? lat : undefined,
           lng: lng != null && !Number.isNaN(lng) ? lng : undefined,
         });
@@ -277,14 +313,14 @@ function renderComposeArea(root: HTMLElement, getFiltro: () => string): void {
   const panel = slot.querySelector("#compose-guest-panel") as HTMLElement;
   const actions = slot.querySelector("#compose-guest-actions") as HTMLElement;
 
-  slot.querySelector("#btn-registro-rapido")?.addEventListener("click", () => {
+  slot.querySelector("#btn-registrar")?.addEventListener("click", () => {
     panel.hidden = false;
     panel.innerHTML = registroRapidoForm();
     actions.hidden = true;
     bindRegistroRapido(root, panel, actions, getFiltro);
   });
 
-  slot.querySelector("#btn-ya-registrado")?.addEventListener("click", () => {
+  slot.querySelector("#btn-iniciar-sesion")?.addEventListener("click", () => {
     panel.hidden = false;
     panel.innerHTML = ingresoCedulaForm();
     actions.hidden = true;

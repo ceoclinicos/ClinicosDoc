@@ -573,22 +573,49 @@ fieldset.card-panel legend {
   box-shadow: var(--shadow);
 }
 
-.compose-header {
-  margin-bottom: 1rem;
-}
-
 .compose-title {
-  margin: 0 0 0.25rem;
+  margin: 0 0 0.75rem;
   font-size: 1.1rem;
   color: var(--navy);
 }
 
-.compose-locked {
+.compose-user {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+}
+
+.compose-guest-msg {
+  margin: 0 0 1rem;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.compose-field {
   display: grid;
-  gap: 1rem;
-  opacity: 0.55;
-  pointer-events: none;
+  gap: 0.4rem;
   margin-bottom: 1rem;
+}
+
+.compose-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.compose-textarea {
+  min-height: 10rem;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.word-counter {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.word-counter-limit {
+  color: var(--teal);
+  font-weight: 600;
 }
 
 .compose-actions {
@@ -760,6 +787,76 @@ fieldset.card-panel legend {
 .mural-links {
   margin-top: 2rem;
   text-align: center;
+}
+
+/* Acerca de */
+.acerca-prose h2 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1.05rem;
+  color: var(--navy);
+}
+
+.acerca-prose h2:first-child {
+  margin-top: 0;
+}
+
+.acerca-prose h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.acerca-prose p {
+  margin: 0 0 0.85rem;
+  line-height: 1.55;
+}
+
+.acerca-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  line-height: 1.6;
+}
+
+.apoyo-box {
+  margin: 0.5rem 0 1rem;
+  padding: 1rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.apoyo-datos {
+  margin: 0 0 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.apoyo-datos div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+}
+
+.apoyo-datos dt {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  min-width: 4.5rem;
+}
+
+.apoyo-datos dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.apoyo-usdt {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.acerca-footer {
+  text-align: center;
+  margin-top: 1.5rem;
 }
 
 .tile-full {
