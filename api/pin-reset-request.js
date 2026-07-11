@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const { getAdmin } = require("./_lib/firebase");
-const { normalizeCedula } = require("./_lib/pin");
+const { cedulaLookupKeys } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { sendPinResetEmail } = require("./_lib/resend");
 const { parseBody } = require("./_lib/body");
@@ -16,14 +16,23 @@ module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Solo POST" });
 
   const body = parseBody(req);
-  const cedula = normalizeCedula(body.cedula || "");
-  if (!cedula) return res.status(400).json({ error: "Cédula requerida" });
+  const inputCedula = String(body.cedula || "").trim();
+  if (!inputCedula) return res.status(400).json({ error: "Cédula requerida" });
 
   try {
     const db = getAdmin().firestore();
-    const snap = await db.collection("pacientes").doc(cedula).get();
+    let snap = null;
+    let cedula = "";
+    for (const key of cedulaLookupKeys(inputCedula)) {
+      const s = await db.collection("pacientes").doc(key).get();
+      if (s.exists) {
+        snap = s;
+        cedula = String(s.data().cedula || key);
+        break;
+      }
+    }
 
-    if (!snap.exists) return res.status(200).json(OK_MSG);
+    if (!snap) return res.status(200).json(OK_MSG);
 
     const p = snap.data();
     const email = String(p.correo || "").trim();

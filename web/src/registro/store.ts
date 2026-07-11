@@ -8,7 +8,7 @@ import {
   setDoc,
   type DocumentData,
 } from "firebase/firestore";
-import { normalizeCedula } from "../services/cedula";
+import { normalizeCedula, cedulaLookupKeys } from "../services/cedula";
 import { getDb } from "./firebase";
 import type {
   AtencionRegistro,
@@ -41,15 +41,19 @@ function atencionesRef(cedula: string) {
 }
 
 export async function getPaciente(cedula: string): Promise<PacienteRegistro | null> {
-  const snap = await getDoc(patientRef(cedula));
-  if (!snap.exists()) return null;
-  return snap.data() as PacienteRegistro;
+  for (const key of cedulaLookupKeys(cedula)) {
+    const snap = await getDoc(doc(getDb(), RegistroPaths.PACIENTES, key));
+    if (snap.exists()) return snap.data() as PacienteRegistro;
+  }
+  return null;
 }
 
 export async function getProfesional(cedula: string): Promise<ProfesionalRegistro | null> {
-  const snap = await getDoc(professionalRef(cedula));
-  if (!snap.exists()) return null;
-  return snap.data() as ProfesionalRegistro;
+  for (const key of cedulaLookupKeys(cedula)) {
+    const snap = await getDoc(doc(getDb(), RegistroPaths.PROFESIONALES, key));
+    if (snap.exists()) return snap.data() as ProfesionalRegistro;
+  }
+  return null;
 }
 
 export async function registerPaciente(input: {
@@ -122,7 +126,7 @@ export async function loginPaciente(cedula: string, pin: string): Promise<Pacien
   if (!p) throw new Error("No hay registro con esa cédula");
   if (!p.pinHash) throw new Error("Debe completar su registro con PIN de 4 dígitos");
   assertPin4(pin);
-  const pinHash = await hashPin(cedula, pin);
+  const pinHash = await hashPin(p.cedula, pin);
   if (p.pinHash !== pinHash) throw new Error("PIN incorrecto");
   return p;
 }
@@ -137,7 +141,7 @@ export async function loginProfesional(
   if (!p.activo) throw new Error("Cuenta pendiente de activación");
   assertPin4(pin);
   if (normalizeMpps(p.mpps) !== normalizeMpps(mpps)) throw new Error("Código MPPS incorrecto");
-  const pinHash = await hashPin(cedula, pin);
+  const pinHash = await hashPin(p.cedula, pin);
   if (p.pinHash !== pinHash) throw new Error("PIN incorrecto");
   return {
     cedula: p.cedula,

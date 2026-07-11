@@ -12,7 +12,7 @@ registerRoute({
       `
       <p class="lead">Ingrese su cédula. Si está registrado, enviaremos un enlace a su correo.</p>
       <form class="form" id="form-olvide-pin">
-        <label>Cédula<input name="cedula" required placeholder="V-12345678" /></label>
+        <label>Cédula<input name="cedula" required placeholder="Ej. 23536843" inputmode="numeric" /></label>
         <button type="submit" class="btn btn-primary">Enviar enlace</button>
       </form>
       <p class="muted"><a href="#/paciente">← Volver al portal paciente</a></p>
