@@ -1,5 +1,6 @@
 import { registerRoute } from "../../app/router";
 import { requestPinReset } from "../../services/pin-reset";
+import { showErrorDialog } from "../../ui/error-dialog";
 import { page } from "../helpers";
 
 registerRoute({
@@ -31,7 +32,13 @@ registerRoute({
         msg.innerHTML = `<p class="status-badge status-ok">${text}</p>`;
         (e.target as HTMLFormElement).reset();
       } catch (err) {
-        msg.innerHTML = `<p class="status-badge status-error">${err instanceof Error ? err.message : "Error"}</p>`;
+        const text = err instanceof Error ? err.message : "Error";
+        msg.innerHTML = `<p class="status-badge status-error">${text}</p>
+          <p><button type="button" class="btn btn-ghost btn-sm" id="btn-ver-error">Ver detalle del error</button></p>`;
+        msg.querySelector("#btn-ver-error")?.addEventListener("click", () => {
+          showErrorDialog(text, err);
+        });
+        showErrorDialog("No se pudo enviar el correo", err);
       } finally {
         btn.disabled = false;
       }

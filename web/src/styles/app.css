@@ -379,6 +379,25 @@ dialog {
   margin-top: 0.5rem;
 }
 
+.error-dialog-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0.75rem 0 0.35rem;
+}
+
+.error-dialog-detail {
+  width: 100%;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.8rem;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+  background: var(--surface);
+  color: var(--text);
+}
+
 .hero-card-alt {
   background: linear-gradient(135deg, var(--teal), #0f766e);
   margin-top: 0;

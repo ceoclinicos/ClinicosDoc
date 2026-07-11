@@ -25,9 +25,22 @@ async function sendPinResetEmail(to, nombre, link) {
     }),
   });
 
+  const text = await res.text();
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Resend error: ${err}`);
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text);
+      detail = parsed.message || parsed.error || JSON.stringify(parsed);
+    } catch {
+      /* usar texto crudo */
+    }
+    const hint =
+      res.status === 403 && from.includes("clinicosdoc.com")
+        ? " Verifique el dominio clinicosdoc.com en resend.com/domains (DKIM, SPF, MX)."
+        : res.status === 403 && from.includes("resend.dev")
+          ? " Con onboarding@resend.dev solo puede enviar a su propio correo de Resend."
+          : "";
+    throw new Error(`Resend HTTP ${res.status}: ${detail}${hint}`);
   }
 }
 

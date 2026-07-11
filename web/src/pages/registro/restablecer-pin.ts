@@ -1,5 +1,6 @@
 import { registerRoute, navigate } from "../../app/router";
 import { confirmPinReset } from "../../services/pin-reset";
+import { showErrorDialog } from "../../ui/error-dialog";
 import { page } from "../helpers";
 
 registerRoute({
@@ -41,7 +42,13 @@ registerRoute({
           msg.innerHTML = `<p class="status-badge status-ok">${text}</p>`;
           setTimeout(() => navigate("/paciente"), 2000);
         } catch (err) {
-          msg.innerHTML = `<p class="status-badge status-error">${err instanceof Error ? err.message : "Error"}</p>`;
+          const text = err instanceof Error ? err.message : "Error";
+          msg.innerHTML = `<p class="status-badge status-error">${text}</p>
+            <p><button type="button" class="btn btn-ghost btn-sm" id="btn-ver-error-reset">Ver detalle del error</button></p>`;
+          msg.querySelector("#btn-ver-error-reset")?.addEventListener("click", () => {
+            showErrorDialog(text, err);
+          });
+          showErrorDialog("No se pudo restablecer el PIN", err);
         }
       });
     }

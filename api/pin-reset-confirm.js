@@ -1,14 +1,17 @@
 const { getAdmin } = require("./_lib/firebase");
 const { hashPin, assertPin4 } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
+const { parseBody } = require("./_lib/body");
+const { apiError } = require("./_lib/errors");
 
 module.exports = async function handler(req, res) {
   applyCors(res);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Solo POST" });
 
-  const token = String(req.body?.token || "").trim();
-  const pin = String(req.body?.pin || "");
+  const body = parseBody(req);
+  const token = String(body.token || "").trim();
+  const pin = String(body.pin || "");
 
   if (!token) return res.status(400).json({ error: "Token requerido" });
 
@@ -41,6 +44,12 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ message: "PIN actualizado. Ya puede iniciar sesión." });
   } catch (err) {
     console.error("pin-reset-confirm", err);
-    return res.status(500).json({ error: "No se pudo actualizar el PIN" });
+    return apiError(
+      res,
+      500,
+      "No se pudo actualizar el PIN",
+      err?.message || String(err),
+      "PIN_CONFIRM_FAILED",
+    );
   }
 };

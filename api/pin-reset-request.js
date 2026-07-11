@@ -3,6 +3,8 @@ const { getAdmin } = require("./_lib/firebase");
 const { normalizeCedula } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { sendPinResetEmail } = require("./_lib/resend");
+const { parseBody } = require("./_lib/body");
+const { apiError } = require("./_lib/errors");
 
 const OK_MSG = {
   message: "Si hay un correo registrado, recibirá un enlace en unos minutos.",
@@ -13,7 +15,8 @@ module.exports = async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Solo POST" });
 
-  const cedula = normalizeCedula(req.body?.cedula || "");
+  const body = parseBody(req);
+  const cedula = normalizeCedula(body.cedula || "");
   if (!cedula) return res.status(400).json({ error: "Cédula requerida" });
 
   try {
@@ -46,6 +49,17 @@ module.exports = async function handler(req, res) {
     return res.status(200).json(OK_MSG);
   } catch (err) {
     console.error("pin-reset-request", err);
-    return res.status(500).json({ error: "No se pudo procesar la solicitud" });
+    const detail = err?.message || String(err);
+    let code = "PIN_RESET_FAILED";
+    if (detail.includes("FIREBASE_SERVICE_ACCOUNT")) code = "FIREBASE_CONFIG";
+    else if (detail.includes("RESEND_API_KEY")) code = "RESEND_CONFIG";
+    else if (detail.includes("Resend HTTP")) code = "RESEND_SEND";
+    return apiError(
+      res,
+      500,
+      "No se pudo enviar el correo de recuperación",
+      detail,
+      code,
+    );
   }
 };
