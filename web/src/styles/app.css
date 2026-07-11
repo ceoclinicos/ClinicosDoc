@@ -861,6 +861,12 @@ fieldset.card-panel legend {
   margin-bottom: 0;
 }
 
+.apoyo-crypto {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+
 .acerca-footer {
   text-align: center;
   margin-top: 1.5rem;
