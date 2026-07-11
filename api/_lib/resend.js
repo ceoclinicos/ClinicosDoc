@@ -3,7 +3,14 @@ async function sendPinResetEmail(to, nombre, link) {
   if (!key) throw new Error("RESEND_API_KEY no configurada en Vercel");
 
   const from =
-    process.env.RESEND_FROM || "Clínicos Doc <onboarding@resend.dev>";
+    process.env.RESEND_FROM || "Clínicos Doc <noreply@clinicosdoc.com>";
+
+  if (from.includes("resend.dev")) {
+    throw new Error(
+      "RESEND_FROM no puede ser onboarding@resend.dev en producción. " +
+        "Use: Clínicos Doc <noreply@clinicosdoc.com> (dominio verificado en resend.com/domains).",
+    );
+  }
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -35,11 +42,10 @@ async function sendPinResetEmail(to, nombre, link) {
       /* usar texto crudo */
     }
     const hint =
-      res.status === 403 && from.includes("clinicosdoc.com")
-        ? " Verifique el dominio clinicosdoc.com en resend.com/domains (DKIM, SPF, MX)."
-        : res.status === 403 && from.includes("resend.dev")
-          ? " Con onboarding@resend.dev solo puede enviar a su propio correo de Resend."
-          : "";
+      res.status === 403
+        ? " En resend.com/domains verifique que clinicosdoc.com esté en verde. " +
+          "En Vercel agregue RESEND_FROM = Clínicos Doc <noreply@clinicosdoc.com>"
+        : "";
     throw new Error(`Resend HTTP ${res.status}: ${detail}${hint}`);
   }
 }
