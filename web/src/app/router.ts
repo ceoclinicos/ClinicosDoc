@@ -35,7 +35,8 @@ export function canAccessRoute(route: Route): boolean {
 }
 
 export function matchRoute(hash: string): Route | undefined {
-  const path = hash.replace(/^#/, "") || "/";
+  // Quitar ?query del hash (#/restablecer-pin?token=...) para poder casar la ruta
+  const path = (hash.replace(/^#/, "").split("?")[0] || "/") || "/";
   const exact = routes.find((r) => r.path === path);
   if (exact) return exact;
   const dynamic = routes.find((r) => {

@@ -7,7 +7,9 @@ registerRoute({
   path: "/restablecer-pin",
   title: "Nuevo PIN",
   render: () => {
-    const token = new URLSearchParams(window.location.hash.split("?")[1] || "").get("token") || "";
+    const hash = window.location.hash || "";
+    const query = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+    const token = new URLSearchParams(query).get("token")?.trim() || "";
 
     const el = page(
       "Crear PIN nuevo",
