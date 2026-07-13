@@ -9,6 +9,7 @@ import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.Patient
 import com.ceoclinicos.clinicosdoc.model.ReportSessionConfig
 import com.ceoclinicos.clinicosdoc.model.SectionCatalog
+import com.ceoclinicos.clinicosdoc.model.SectionDefaults
 import com.ceoclinicos.clinicosdoc.util.DocumentSection
 import com.ceoclinicos.clinicosdoc.util.cleanSectionBody
 import com.ceoclinicos.clinicosdoc.util.normalizeSectionTitle
@@ -46,8 +47,8 @@ object DocumentAiService {
             Organiza el contenido en párrafos fluidos y coherentes.
             No inventes hallazgos clínicos patológicos que contradigan el dictado.
             En INFORME MÉDICO: si no hay examen físico dictado, usa la plantilla base normal; completa con la plantilla los sistemas no mencionados.
-            En HISTORIA CLÍNICA: respeta el orden de secciones de la plantilla; redacta con tecnicismo universitario venezolano (estilo de referencia, no copiar formato manuscrito); antecedentes negativos con "Niega..."; datos no mencionados con "No referido".
-            En otros documentos, si falta información indica "No referido" o "Pendiente".
+            En HISTORIA CLÍNICA: respeta el orden de secciones de la plantilla; redacta con tecnicismo universitario venezolano (estilo de referencia, no copiar formato manuscrito).
+            Si una sección activa no tiene datos en el dictado, usa el TEXTO PREDETERMINADO de esa sección (no inventes patología nueva).
             Usa terminología médica apropiada para Venezuela/Latinoamérica.
         """.trimIndent()
 
@@ -84,7 +85,9 @@ object DocumentAiService {
                     appendLine("Las imágenes/modelos de historia clínica universitaria son REFERENCIA DE TECNICISMO Y REDACCIÓN, no para copiar numeración romana, extensión párrafo a párrafo ni subsecciones literales.")
                     appendLine("Adapta la profundidad al dictado: si el médico fue breve, redacta breve; si fue detallado, amplía con lenguaje semiológico apropiado.")
                     appendLine()
-                    val sectionsList = template.sections.joinToString("\n") { "- $it" }
+                    val effectiveSections = effectiveTemplate.normalizedSections()
+                        .filterNot { it.equals(SectionCatalog.DATOS_PACIENTE, ignoreCase = true) }
+                    val sectionsList = effectiveSections.joinToString("\n") { "- $it" }
                     appendLine("Secciones de la plantilla (orden obligatorio):")
                     appendLine(sectionsList)
                     appendLine()
@@ -98,7 +101,7 @@ object DocumentAiService {
                     appendLine("- Examen físico: lo que EXPLORA el médico; semiología por regiones. Plantilla base solo si no hay dictado de exploración.")
                     appendLine("- Diagnóstico: lista numerada al final; términos clínicos o CIE según el dictado.")
                     appendLine()
-                    appendLine("Si una sección de la plantilla no tiene datos en el dictado, escribe \"No referido\" o completa con negativas pertinentes (\"Niega...\") según el tipo de sección.")
+                    appendLine(SectionDefaults.promptBlock(effectiveSections))
                     appendLine("Omite de la respuesta las secciones que la plantilla no liste.")
                     if (physicalExamBlock.isNotBlank()) {
                         appendLine()
@@ -133,10 +136,10 @@ object DocumentAiService {
                     appendLine("═══ BLOQUE 3 — Examen físico ═══")
                     appendLine("- Primera línea EXACTA de la sección: [[SECTION:Examen físico]]")
                     appendLine("- NO uses asteriscos **. El contenido va en las líneas siguientes.")
-                    appendLine("- Línea 1 de contenido (signos vitales):")
-                    appendLine("  TA: [valor] mmHg | FR: [valor] rpm | FC: [valor] lpm | SaTO2: [valor]%")
-                    appendLine("- Signos vitales NO dictados = 0 (ej. TA: 0 mmHg | FR: 0 rpm | FC: 82 lpm | SaTO2: 0%).")
-                    appendLine("- Signos vitales dictados conservan el valor exacto.")
+                    appendLine("- Línea 1 de contenido (signos vitales), SOLO si hay valores dictados:")
+                    appendLine("  Ejemplo: TA: 120/80 mmHg | FC: 82 lpm")
+                    appendLine("- Signos NO dictados u con valor 0: OMITIRLOS (no escribas 0 ni ---).")
+                    appendLine("- Si no hay ningún signo vital dictado, empieza directo con el resto del examen físico.")
                     appendLine("- Usa PLANTILLA BASE de examen físico (abajo). SIEMPRE debe existir esta sección.")
                     appendLine("- NUNCA escribas \"Examen físico\" dentro del párrafo inicial ni como texto suelto en el cuerpo.")
                     appendLine("- Si el dictado dice \"examen físico\", crea SIEMPRE [[SECTION:Examen físico]] y el contenido va DEBAJO, nunca en la misma línea.")
@@ -158,10 +161,13 @@ object DocumentAiService {
                     appendLine("- No repitas el párrafo inicial dentro del examen físico.")
                 }
                 DocumentType.REPOSO -> {
-                    val sectionsList = template.sections.joinToString("\n") { "- $it" }
+                    val effectiveSections = effectiveTemplate.normalizedSections()
+                        .filterNot { it.equals(SectionCatalog.DATOS_PACIENTE, ignoreCase = true) }
+                    val sectionsList = effectiveSections.joinToString("\n") { "- $it" }
                     appendLine("Secciones en orden:")
                     appendLine(sectionsList)
                     appendLine("Cada sección con **título:** y contenido.")
+                    appendLine(SectionDefaults.promptBlock(effectiveSections))
                 }
             }
 
@@ -255,9 +261,9 @@ object DocumentAiService {
                 }
                 isPhysicalExam -> {
                     appendLine("Tipo: EXAMEN FÍSICO.")
-                    appendLine("- Primera línea: signos vitales:")
-                    appendLine("  TA: [valor] mmHg | FR: [valor] rpm | FC: [valor] lpm | SaTO2: [valor]%")
-                    appendLine("- Signos vitales NO dictados = 0. Dictados conservan el valor exacto.")
+                    appendLine("- Primera línea: signos vitales SOLO si hay valores dictados.")
+                    appendLine("- Ejemplo: TA: 120/80 mmHg | FC: 82 lpm")
+                    appendLine("- Signos NO dictados o en 0: OMITIRLOS (no escribas 0).")
                     appendLine("- Luego una línea por sistema activo del catálogo.")
                     if (physicalExamBlock.isNotBlank()) {
                         appendLine()

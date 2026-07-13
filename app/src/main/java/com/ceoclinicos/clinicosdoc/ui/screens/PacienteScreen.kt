@@ -34,17 +34,20 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.ceoclinicos.clinicosdoc.data.CloudSyncService
 import com.ceoclinicos.clinicosdoc.data.PatientStorage
 import com.ceoclinicos.clinicosdoc.model.Patient
 import com.ceoclinicos.clinicosdoc.ui.theme.Navy
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
+import kotlinx.coroutines.launch
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -54,6 +57,7 @@ fun PacienteScreen(
     onAddPatient: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var patients by remember { mutableStateOf<List<Patient>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var cedulaQuery by remember { mutableStateOf("") }
@@ -111,11 +115,22 @@ fun PacienteScreen(
                         searchMessage = null
                         return@FilledTonalButton
                     }
-                    val found = PatientStorage.findByCedula(context, cedulaQuery)
-                    searchMessage = when {
-                        found != null -> "Encontrado: ${found.nombre}"
-                        displayedPatients.isEmpty() -> "No hay paciente con esa cédula"
-                        else -> "${displayedPatients.size} coincidencia(s)"
+                    scope.launch {
+                        searchMessage = "Buscando…"
+                        val local = PatientStorage.findByCedula(context, cedulaQuery)
+                        val found = local ?: try {
+                            CloudSyncService.findGlobalByCedula(cedulaQuery).firstOrNull()
+                        } catch (_: Exception) {
+                            null
+                        }
+                        if (found != null) {
+                            val saved = PatientStorage.ensureInDoctorList(context, found)
+                            patients = PatientStorage.loadAll(context)
+                            cedulaQuery = saved.cedula
+                            searchMessage = "Encontrado: ${saved.nombre}"
+                        } else {
+                            searchMessage = "No hay paciente con esa cédula"
+                        }
                     }
                 },
             ) {

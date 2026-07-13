@@ -32,12 +32,31 @@ object PatientStorage {
     }
 
     fun add(context: Context, patient: Patient): Patient {
-        val all = loadAll(context).toMutableList()
-        all.add(patient)
-        saveAllLocal(context, all)
-        SyncCoordinator.afterPatientSaved(context, patient)
-        return patient
+        return upsert(context, patient)
     }
+
+    /** Guarda o actualiza por cédula en la lista del médico y dispara sync. */
+    fun upsert(context: Context, patient: Patient): Patient {
+        val all = loadAll(context).toMutableList()
+        val cedulaKey = CedulaNormalizer.normalize(patient.cedula)
+        val idx = all.indexOfFirst {
+            it.id == patient.id || CedulaNormalizer.normalize(it.cedula) == cedulaKey
+        }
+        val saved = if (idx >= 0) {
+            val keepId = all[idx].id
+            patient.copy(id = keepId).also { all[idx] = it }
+        } else {
+            all.add(patient)
+            patient
+        }
+        saveAllLocal(context, all)
+        SyncCoordinator.afterPatientSaved(context, saved)
+        return saved
+    }
+
+    /** Asegura que un paciente (p. ej. de la BD global) quede en la lista del doctor. */
+    fun ensureInDoctorList(context: Context, patient: Patient): Patient =
+        upsert(context, patient)
 
     fun findByCedula(context: Context, cedula: String): Patient? {
         val normalized = CedulaNormalizer.normalize(cedula)
@@ -56,6 +75,7 @@ object PatientStorage {
         createdAt = createdAt.toString(),
         whatsapp = whatsapp,
         sexo = sexo,
+        cedulaKey = CedulaNormalizer.normalize(cedula),
     )
 
     private fun PatientDto.toModel() = Patient(

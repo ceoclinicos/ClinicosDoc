@@ -12,7 +12,26 @@ fun sanitizeDocumentContent(content: String): String {
     val withoutPatientSection = removePatientDataSection(trimmed)
     val withoutPatientLines = removeLeadingPatientLines(withoutPatientSection)
     val withoutTitles = removeDuplicateDocumentTitles(withoutPatientLines).trim()
-    return normalizeSectionMarkdown(withoutTitles)
+    val withoutZeroVitals = stripAbsentVitalSigns(withoutTitles)
+    return normalizeSectionMarkdown(withoutZeroVitals)
+}
+
+/** Quita TA/FR/FC/SaTO2 en 0 o vacíos de la línea de signos vitales. */
+private fun stripAbsentVitalSigns(content: String): String {
+    return content.lines().joinToString("\n") { line ->
+        if (!Regex("""(?i)(TA:|FR:|FC:|SaTO2:)""").containsMatchIn(line)) return@joinToString line
+        val vitals = VitalSigns(
+            ta = Regex("""(?i)TA:\s*([^\s|]+)\s*mmHg""").find(line)?.groupValues?.getOrNull(1).orEmpty(),
+            fr = Regex("""(?i)FR:\s*([^\s|]+)\s*rpm""").find(line)?.groupValues?.getOrNull(1).orEmpty(),
+            fc = Regex("""(?i)FC:\s*([^\s|]+)\s*lpm""").find(line)?.groupValues?.getOrNull(1).orEmpty(),
+            sato2 = Regex("""(?i)SaTO2:\s*([^\s|]+)\s*%""").find(line)?.groupValues?.getOrNull(1).orEmpty(),
+        )
+        // Solo reescribir si la línea parece de signos vitales (más de un signo o uno solo con unidades).
+        if (!vitals.hasAnyValue() && Regex("""(?i)(mmHg|rpm|lpm|SaTO2)""").containsMatchIn(line)) {
+            return@joinToString ""
+        }
+        if (vitals.hasAnyValue()) vitals.toLine() else line
+    }.replace(Regex("\n{3,}"), "\n\n")
 }
 
 private val SECTION_MARKER = Regex("""^\[\[SECTION:(.+?)]]\s*$""")

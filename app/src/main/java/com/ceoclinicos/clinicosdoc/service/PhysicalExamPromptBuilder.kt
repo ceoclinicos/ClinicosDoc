@@ -28,10 +28,10 @@ object PhysicalExamPromptBuilder {
             appendLine()
             appendLine("REGLAS DE REDACCIÓN DEL EXAMEN FÍSICO:")
             if (vitalsSystem != null) {
-                appendLine("- Línea 1 SIEMPRE signos vitales con formato:")
-                appendLine("  TA: [valor] mmHg | FR: [valor] rpm | FC: [valor] lpm | SaTO2: [valor]%")
-                appendLine("- Signos vitales NO dictados se escriben como 0 (ej. TA: 0 mmHg | FR: 0 rpm | FC: 82 lpm | SaTO2: 0%).")
-                appendLine("- Signos vitales dictados conservan el valor exacto del dictado.")
+                appendLine("- Signos vitales: escribe SOLO los valores dictados (TA, FR, FC, SaTO2).")
+                appendLine("- Formato ejemplo con todos: TA: 120/80 mmHg | FR: 18 rpm | FC: 82 lpm | SaTO2: 98%")
+                appendLine("- Si un signo NO fue dictado o no tiene valor, OMITIRLO (no escribas 0 ni ---).")
+                appendLine("- Si ningún signo vital fue dictado, NO escribas línea de signos vitales.")
             }
             val bodySystems = systems.filter { it.id != "signos_vitales" }
             if (bodySystems.isNotEmpty()) {

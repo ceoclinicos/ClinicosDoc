@@ -35,6 +35,7 @@ import com.ceoclinicos.clinicosdoc.ui.theme.Teal
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 import com.ceoclinicos.clinicosdoc.util.DocumentSection
+import com.ceoclinicos.clinicosdoc.util.VitalSignsParser
 import com.ceoclinicos.clinicosdoc.util.normalizeSectionMarkdown
 import com.ceoclinicos.clinicosdoc.util.parseDocumentSections
 import com.ceoclinicos.clinicosdoc.util.sanitizeTitleInput
@@ -150,20 +151,55 @@ fun EditableDocumentContent(
                         hint = "Título sección:",
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    PremiumTextField(
-                        label = "Contenido",
-                        value = section.body,
-                        onValueChange = { newBody ->
-                            updateSections(
-                                sections.mapIndexed { i, s ->
-                                    if (i == index) s.copy(body = newBody) else s
-                                },
-                            )
-                        },
-                        hint = "Contenido:",
-                        singleLine = false,
-                        maxLines = 12,
-                    )
+                    if (VitalSignsParser.isPhysicalExam(section.title)) {
+                        val vitals = VitalSignsParser.parseFromBody(section.body)
+                        VitalSignsFields(
+                            values = vitals,
+                            onValuesChange = { updatedVitals ->
+                                updateSections(
+                                    sections.mapIndexed { i, s ->
+                                        if (i == index) {
+                                            s.copy(body = VitalSignsParser.applyToBody(s.body, updatedVitals))
+                                        } else {
+                                            s
+                                        }
+                                    },
+                                )
+                            },
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        PremiumTextField(
+                            label = "Resto del examen físico",
+                            value = VitalSignsParser.bodyWithoutVitals(section.body),
+                            onValueChange = { newRest ->
+                                val currentVitals = VitalSignsParser.parseFromBody(section.body)
+                                val rebuilt = VitalSignsParser.applyToBody(newRest.trim(), currentVitals)
+                                updateSections(
+                                    sections.mapIndexed { i, s ->
+                                        if (i == index) s.copy(body = rebuilt) else s
+                                    },
+                                )
+                            },
+                            hint = "General, cardiopulmonar, abdomen…",
+                            singleLine = false,
+                            maxLines = 12,
+                        )
+                    } else {
+                        PremiumTextField(
+                            label = "Contenido",
+                            value = section.body,
+                            onValueChange = { newBody ->
+                                updateSections(
+                                    sections.mapIndexed { i, s ->
+                                        if (i == index) s.copy(body = newBody) else s
+                                    },
+                                )
+                            },
+                            hint = "Contenido:",
+                            singleLine = false,
+                            maxLines = 12,
+                        )
+                    }
                     if (onRegenerateSection != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         OutlinedButton(

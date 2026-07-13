@@ -9,6 +9,7 @@ internal data class PatientDto(
     val createdAt: String,
     val whatsapp: String? = null,
     val sexo: String? = null,
+    val cedulaKey: String? = null,
 )
 
 internal data class AppointmentDto(

@@ -1,11 +1,15 @@
 package com.ceoclinicos.clinicosdoc.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -14,11 +18,13 @@ import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Cake
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhoneAndroid
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.ceoclinicos.clinicosdoc.data.CloudSyncService
 import com.ceoclinicos.clinicosdoc.data.PatientStorage
 import com.ceoclinicos.clinicosdoc.model.Patient
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
@@ -38,17 +45,22 @@ import com.ceoclinicos.clinicosdoc.ui.components.PremiumTextField
 import com.ceoclinicos.clinicosdoc.ui.components.keyboardCapitalizationWords
 import com.ceoclinicos.clinicosdoc.ui.components.keyboardDigits
 import com.ceoclinicos.clinicosdoc.ui.components.keyboardPhone
+import com.ceoclinicos.clinicosdoc.ui.theme.Teal
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
+import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
+import com.ceoclinicos.clinicosdoc.util.PatientFirestoreId
 import com.ceoclinicos.clinicosdoc.util.PatientUtils
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.format.DateTimeFormatter
-import com.ceoclinicos.clinicosdoc.util.PatientFirestoreId
+
+private enum class AddPatientStep { CEDULA, FORMULARIO }
 
 @Composable
 fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var step by remember { mutableStateOf(AddPatientStep.CEDULA) }
     var nombre by remember { mutableStateOf("") }
     var cedula by remember { mutableStateOf("") }
     var edad by remember { mutableStateOf("") }
@@ -57,6 +69,9 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
     val sexos = listOf("Masculino", "Femenino", "Otro")
     var fechaNacimiento by remember { mutableStateOf<Instant?>(null) }
     var saving by remember { mutableStateOf(false) }
+    var searching by remember { mutableStateOf(false) }
+    var searchMessage by remember { mutableStateOf<String?>(null) }
+    var foundPatients by remember { mutableStateOf<List<Patient>>(emptyList()) }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("dd/MM/yyyy") }
 
     fun validationError(): String? = when {
@@ -71,6 +86,48 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
         else -> null
     }
 
+    fun adoptPatient(patient: Patient) {
+        saving = true
+        scope.launch {
+            val saved = PatientStorage.ensureInDoctorList(context, patient)
+            saving = false
+            Toast.makeText(context, "Paciente agregado a tu lista", Toast.LENGTH_SHORT).show()
+            onSaved(saved)
+        }
+    }
+
+    fun searchByCedula() {
+        if (!CedulaNormalizer.isValid(cedula)) {
+            searchMessage = "Ingresa una cédula válida"
+            return
+        }
+        searching = true
+        searchMessage = null
+        foundPatients = emptyList()
+        scope.launch {
+            val local = PatientStorage.findByCedula(context, cedula)
+            val remote = try {
+                CloudSyncService.findGlobalByCedula(cedula)
+            } catch (_: Exception) {
+                emptyList()
+            }
+            val merged = buildList {
+                local?.let { add(it) }
+                addAll(remote)
+            }.distinctBy { CedulaNormalizer.normalize(it.cedula) + it.nombre.lowercase() }
+
+            searching = false
+            if (merged.isNotEmpty()) {
+                foundPatients = merged
+                searchMessage = "Paciente encontrado. Puedes usarlo o actualizar datos."
+            } else {
+                foundPatients = emptyList()
+                searchMessage = "No existe. Completa los datos para registrarlo."
+                step = AddPatientStep.FORMULARIO
+            }
+        }
+    }
+
     AppScaffold(title = "Registrar paciente", onBack = onBack) { padding ->
         Column(
             modifier = Modifier
@@ -80,115 +137,199 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
         ) {
             Text("Datos del paciente", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Todos los campos son obligatorios", style = MaterialTheme.typography.bodyMedium)
-            Spacer(modifier = Modifier.height(24.dp))
-            PremiumTextField(
-                label = "Nombre completo *",
-                value = nombre,
-                onValueChange = { nombre = it },
-                prefixIcon = Icons.Outlined.Person,
-                keyboardOptions = keyboardCapitalizationWords(),
-                isError = nombre.isBlank(),
-                errorMessage = if (nombre.isBlank()) "Requerido" else null,
+            Text(
+                if (step == AddPatientStep.CEDULA) {
+                    "Primero busca por cédula en la base de datos"
+                } else {
+                    "Completa los datos del paciente nuevo"
+                },
+                style = MaterialTheme.typography.bodyMedium,
             )
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
             PremiumTextField(
                 label = "Cédula *",
                 value = cedula,
-                onValueChange = { cedula = it },
+                onValueChange = {
+                    cedula = it
+                    searchMessage = null
+                    foundPatients = emptyList()
+                    if (step == AddPatientStep.FORMULARIO) step = AddPatientStep.CEDULA
+                },
                 hint = "Ej. V-12345678",
                 prefixIcon = Icons.Outlined.Badge,
                 isError = cedula.isBlank(),
                 errorMessage = if (cedula.isBlank()) "Requerido" else null,
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            PremiumTextField(
-                label = "Edad *",
-                value = edad,
-                onValueChange = { edad = it.filter { c -> c.isDigit() } },
-                hint = "Se calcula con la fecha de nacimiento",
-                prefixIcon = Icons.Outlined.Cake,
-                keyboardOptions = keyboardDigits(),
-                isError = edad.isBlank(),
-                errorMessage = if (edad.isBlank()) "Requerido" else null,
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("Fecha de nacimiento *", style = MaterialTheme.typography.labelLarge.copy(color = TextSecondary))
-            Spacer(modifier = Modifier.height(8.dp))
-            BirthDateSelector(
-                selected = fechaNacimiento,
-                onDateChange = { instant ->
-                    fechaNacimiento = instant
-                    edad = PatientUtils.calcAge(instant).toString()
-                },
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = { searchByCedula() },
+                enabled = !searching && !saving,
                 modifier = Modifier.fillMaxWidth(),
-            )
-            fechaNacimiento?.let { birth ->
-                Spacer(modifier = Modifier.height(6.dp))
+            ) {
+                if (searching) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .size(18.dp),
+                        color = Teal,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        Icons.Outlined.Search,
+                        contentDescription = null,
+                        modifier = Modifier.padding(end = 6.dp),
+                    )
+                }
+                Text(if (searching) "Buscando…" else "Buscar en base de datos")
+            }
+            searchMessage?.let {
                 Text(
-                    "Seleccionado: ${dateFormatter.format(PatientUtils.toLocalDate(birth))}",
+                    it,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
+                    color = if (foundPatients.isNotEmpty()) Teal else TextSecondary,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("Sexo *", style = MaterialTheme.typography.labelLarge.copy(color = TextSecondary))
-            if (sexo == null) {
-                Text(
-                    "Requerido",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            SexoSelector(sexos = sexos, sexo = sexo, onSexoChange = { sexo = it })
-            Spacer(modifier = Modifier.height(16.dp))
-            PremiumTextField(
-                label = "WhatsApp *",
-                value = whatsapp,
-                onValueChange = { whatsapp = it.filter { c -> c.isDigit() } },
-                hint = "Ej. 04141234567",
-                prefixIcon = Icons.Outlined.PhoneAndroid,
-                keyboardOptions = keyboardPhone(),
-                isError = whatsapp.isBlank() || whatsapp.length < 10,
-                errorMessage = when {
-                    whatsapp.isBlank() -> "Requerido"
-                    whatsapp.length < 10 -> "Mínimo 10 dígitos"
-                    else -> null
-                },
-            )
-            Spacer(modifier = Modifier.height(32.dp))
-            PremiumPrimaryButton(
-                label = "Guardar paciente",
-                icon = Icons.Default.Check,
-                loading = saving,
-                onClick = {
-                    val error = validationError()
-                    if (error != null) {
-                        Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
-                        return@PremiumPrimaryButton
-                    }
-                    saving = true
-                    scope.launch {
-                        val birth = fechaNacimiento!!
-                        val age = edad.toIntOrNull() ?: PatientUtils.calcAge(birth)
-                        val patient = Patient(
-                            id = PatientFirestoreId.from(cedula.trim(), nombre.trim()),
-                            nombre = nombre.trim(),
-                            cedula = cedula.trim(),
-                            edad = age,
-                            fechaNacimiento = birth,
-                            createdAt = Instant.now(),
-                            whatsapp = whatsapp.trim(),
-                            sexo = sexo!!,
+
+            foundPatients.forEach { patient ->
+                Spacer(modifier = Modifier.height(12.dp))
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(patient.nombre, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "C.I. ${patient.cedula} · ${patient.edad} años · ${patient.sexo.ifBlank { "—" }}",
+                            style = MaterialTheme.typography.bodyMedium,
                         )
-                        PatientStorage.add(context, patient)
-                        saving = false
-                        onSaved(patient)
+                        if (patient.whatsapp.isNotBlank()) {
+                            Text("WhatsApp: ${patient.whatsapp}", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        PremiumPrimaryButton(
+                            label = "Usar este paciente",
+                            icon = Icons.Default.Check,
+                            loading = saving,
+                            onClick = { adoptPatient(patient) },
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                nombre = patient.nombre
+                                edad = patient.edad.toString()
+                                fechaNacimiento = patient.fechaNacimiento
+                                sexo = patient.sexo.ifBlank { null }
+                                whatsapp = patient.whatsapp
+                                step = AddPatientStep.FORMULARIO
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Editar / completar datos")
+                        }
                     }
-                },
-            )
+                }
+            }
+
+            if (step == AddPatientStep.FORMULARIO) {
+                Spacer(modifier = Modifier.height(24.dp))
+                PremiumTextField(
+                    label = "Nombre completo *",
+                    value = nombre,
+                    onValueChange = { nombre = it },
+                    prefixIcon = Icons.Outlined.Person,
+                    keyboardOptions = keyboardCapitalizationWords(),
+                    isError = nombre.isBlank(),
+                    errorMessage = if (nombre.isBlank()) "Requerido" else null,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                PremiumTextField(
+                    label = "Edad *",
+                    value = edad,
+                    onValueChange = { edad = it.filter { c -> c.isDigit() } },
+                    hint = "Se calcula con la fecha de nacimiento",
+                    prefixIcon = Icons.Outlined.Cake,
+                    keyboardOptions = keyboardDigits(),
+                    isError = edad.isBlank(),
+                    errorMessage = if (edad.isBlank()) "Requerido" else null,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Fecha de nacimiento *", style = MaterialTheme.typography.labelLarge.copy(color = TextSecondary))
+                Spacer(modifier = Modifier.height(8.dp))
+                BirthDateSelector(
+                    selected = fechaNacimiento,
+                    onDateChange = { instant ->
+                        fechaNacimiento = instant
+                        edad = PatientUtils.calcAge(instant).toString()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                fechaNacimiento?.let { birth ->
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Seleccionado: ${dateFormatter.format(PatientUtils.toLocalDate(birth))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Sexo *", style = MaterialTheme.typography.labelLarge.copy(color = TextSecondary))
+                if (sexo == null) {
+                    Text(
+                        "Requerido",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                SexoSelector(sexos = sexos, sexo = sexo, onSexoChange = { sexo = it })
+                Spacer(modifier = Modifier.height(16.dp))
+                PremiumTextField(
+                    label = "WhatsApp *",
+                    value = whatsapp,
+                    onValueChange = { whatsapp = it.filter { c -> c.isDigit() } },
+                    hint = "Ej. 04141234567",
+                    prefixIcon = Icons.Outlined.PhoneAndroid,
+                    keyboardOptions = keyboardPhone(),
+                    isError = whatsapp.isBlank() || whatsapp.length < 10,
+                    errorMessage = when {
+                        whatsapp.isBlank() -> "Requerido"
+                        whatsapp.length < 10 -> "Mínimo 10 dígitos"
+                        else -> null
+                    },
+                )
+                Spacer(modifier = Modifier.height(32.dp))
+                PremiumPrimaryButton(
+                    label = "Guardar paciente",
+                    icon = Icons.Default.Check,
+                    loading = saving,
+                    onClick = {
+                        val error = validationError()
+                        if (error != null) {
+                            Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+                            return@PremiumPrimaryButton
+                        }
+                        saving = true
+                        scope.launch {
+                            val birth = fechaNacimiento!!
+                            val age = edad.toIntOrNull() ?: PatientUtils.calcAge(birth)
+                            val patient = Patient(
+                                id = PatientFirestoreId.from(cedula.trim(), nombre.trim()),
+                                nombre = nombre.trim(),
+                                cedula = cedula.trim(),
+                                edad = age,
+                                fechaNacimiento = birth,
+                                createdAt = Instant.now(),
+                                whatsapp = whatsapp.trim(),
+                                sexo = sexo!!,
+                            )
+                            val saved = PatientStorage.upsert(context, patient)
+                            saving = false
+                            onSaved(saved)
+                        }
+                    },
+                )
+            }
         }
     }
 }

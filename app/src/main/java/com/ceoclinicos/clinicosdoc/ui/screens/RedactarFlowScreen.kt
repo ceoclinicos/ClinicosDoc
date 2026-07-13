@@ -67,6 +67,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.ceoclinicos.clinicosdoc.data.CloudSyncService
 import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.data.DraftStorage
 import com.ceoclinicos.clinicosdoc.data.DocumentStorage
@@ -419,14 +420,28 @@ fun RedactarFlowScreen(
                     Spacer(modifier = Modifier.padding(horizontal = 4.dp))
                     OutlinedButton(
                         onClick = {
-                            val found = PatientStorage.findByCedula(context, cedulaSearch)
-                            if (found != null) {
-                                selectedPatient = found
-                                selectedPatientId = found.id
-                                patientSearchMessage = "Seleccionado: ${found.nombre}"
-                                step = RedactarStep.PLANTILLA
-                            } else {
-                                patientSearchMessage = "No se encontró paciente con esa cédula"
+                            if (!CedulaNormalizer.isValid(cedulaSearch)) {
+                                patientSearchMessage = "Ingresa una cédula válida"
+                                return@OutlinedButton
+                            }
+                            scope.launch {
+                                patientSearchMessage = "Buscando…"
+                                val local = PatientStorage.findByCedula(context, cedulaSearch)
+                                val found = local ?: try {
+                                    CloudSyncService.findGlobalByCedula(cedulaSearch).firstOrNull()
+                                } catch (_: Exception) {
+                                    null
+                                }
+                                if (found != null) {
+                                    val saved = PatientStorage.ensureInDoctorList(context, found)
+                                    patients = PatientStorage.loadAll(context)
+                                    selectedPatient = saved
+                                    selectedPatientId = saved.id
+                                    patientSearchMessage = "Seleccionado: ${saved.nombre}"
+                                    step = RedactarStep.PLANTILLA
+                                } else {
+                                    patientSearchMessage = "No se encontró paciente con esa cédula"
+                                }
                             }
                         },
                     ) {

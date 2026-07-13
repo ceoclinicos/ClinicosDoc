@@ -17,6 +17,7 @@ import com.ceoclinicos.clinicosdoc.service.DoctorAuthService
 import com.google.firebase.firestore.CollectionReference
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
 import com.ceoclinicos.clinicosdoc.util.PatientFirestoreId
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -91,6 +92,7 @@ object CloudSyncService {
         val now = Instant.now().toString()
         val payload = patient.toDto().toMap().toMutableMap().apply {
             put("firestoreKey", key)
+            put("cedulaKey", CedulaNormalizer.normalize(patient.cedula))
             put("updatedAt", now)
             put("lastUpdatedByDoctorId", userId)
         }
@@ -145,6 +147,27 @@ object CloudSyncService {
             .get()
             .await()
         return snap.toPatient()
+    }
+
+    /** Busca pacientes en la BD global por cédula (compartida entre médicos). */
+    suspend fun findGlobalByCedula(cedula: String): List<Patient> {
+        val key = CedulaNormalizer.normalize(cedula)
+        if (key.isBlank()) return emptyList()
+        val col = FirebaseFirestore.getInstance().collection(FirestorePaths.GLOBAL_PATIENTS)
+        val byKey = col.whereEqualTo("cedulaKey", key).get().await().documents.mapNotNull { it.toPatient() }
+        if (byKey.isNotEmpty()) return byKey.distinctBy { it.id }
+
+        val raw = cedula.trim()
+        val variants = listOf(raw, key, "V-$key", "V$key", "E-$key", "E$key").distinct()
+        val found = mutableListOf<Patient>()
+        for (variant in variants) {
+            col.whereEqualTo("cedula", variant).get().await().documents.mapNotNull { it.toPatient() }
+                .forEach { found.add(it) }
+            if (found.isNotEmpty()) break
+        }
+        return found
+            .filter { CedulaNormalizer.normalize(it.cedula) == key }
+            .distinctBy { it.id }
     }
 
     suspend fun pushTemplate(context: Context, userId: String, template: DocumentTemplate) {
@@ -366,6 +389,7 @@ object CloudSyncService {
         createdAt = createdAt.toString(),
         whatsapp = whatsapp,
         sexo = sexo,
+        cedulaKey = CedulaNormalizer.normalize(cedula),
     )
 
     private fun ClinicalDocument.toSyncDto(

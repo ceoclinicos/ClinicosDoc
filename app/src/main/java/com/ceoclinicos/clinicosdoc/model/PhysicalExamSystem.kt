@@ -18,7 +18,7 @@ object PhysicalExamDefaults {
         PhysicalExamSystem(
             id = "signos_vitales",
             name = "Signos vitales",
-            defaultText = "TA: 0 mmHg | FC: 0 lpm | FR: 0 rpm | SaTO2: 0%",
+            defaultText = "",
             sortOrder = 1,
         ),
         PhysicalExamSystem(
