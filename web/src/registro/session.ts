@@ -1,4 +1,5 @@
 import type { PacienteSession, ProfesionalSession } from "./models";
+import { normalizeCedula } from "../services/cedula";
 
 const PROF_KEY = "registro_profesional";
 const PAC_KEY = "registro_paciente";
@@ -13,7 +14,7 @@ interface PersistedSession<T> {
 }
 
 export async function hashPin(cedula: string, pin: string): Promise<string> {
-  const data = new TextEncoder().encode(`${cedula.trim().toUpperCase()}:${pin}`);
+  const data = new TextEncoder().encode(`${normalizeCedula(cedula)}:${pin}`);
   const buf = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, "0"))

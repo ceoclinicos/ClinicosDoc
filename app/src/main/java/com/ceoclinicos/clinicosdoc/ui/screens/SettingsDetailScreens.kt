@@ -57,10 +57,12 @@ import com.ceoclinicos.clinicosdoc.data.HeaderStorage
 import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
 import com.ceoclinicos.clinicosdoc.data.TemplateStorage
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
+import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.HeaderType
 import com.ceoclinicos.clinicosdoc.model.PhysicalExamDefaults
 import com.ceoclinicos.clinicosdoc.model.PhysicalExamSystem
 import com.ceoclinicos.clinicosdoc.model.SectionCatalog
+import com.ceoclinicos.clinicosdoc.ui.components.ActiveSectionsEditor
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumTextField
@@ -75,6 +77,7 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
     var template by remember { mutableStateOf<DocumentTemplate?>(null) }
     var name by remember { mutableStateOf("") }
     var sections by remember { mutableStateOf<List<String>>(emptyList()) }
+    var layoutOrder by remember { mutableStateOf<List<String>>(emptyList()) }
     var isDefault by remember { mutableStateOf(false) }
     var enabledExamIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var examCatalog by remember { mutableStateOf<List<PhysicalExamSystem>>(emptyList()) }
@@ -85,7 +88,8 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
         template = TemplateStorage.loadAll(context).firstOrNull { it.id == templateId }
         template?.let {
             name = it.name
-            sections = it.sections
+            sections = it.normalizedSections()
+            layoutOrder = it.resolvedLayoutOrder()
             isDefault = it.isDefault
             enabledExamIds = it.enabledPhysicalExamSystemIds.ifEmpty {
                 PhysicalExamDefaults.defaultEnabledIds
@@ -100,7 +104,7 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
         return
     }
 
-    val available = SectionCatalog.all.filterNot { sections.contains(it) }
+    val docType = template!!.documentType
 
     AppScaffold(
         title = if (isNew) "Nueva plantilla" else "Editar plantilla",
@@ -128,45 +132,25 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
                 Switch(checked = isDefault, onCheckedChange = { isDefault = it })
             }
             Spacer(modifier = Modifier.height(20.dp))
-            Text("Secciones activas (orden)")
-            sections.forEachIndexed { index, section ->
-                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    ListItem(
-                        headlineContent = { Text(section) },
-                        trailingContent = {
-                            Row {
-                                IconButton(onClick = {
-                                    if (index > 0) {
-                                        val list = sections.toMutableList()
-                                        list.add(index - 1, list.removeAt(index))
-                                        sections = list
-                                    }
-                                }, enabled = index > 0) { Icon(Icons.Default.ArrowUpward, contentDescription = null) }
-                                IconButton(onClick = {
-                                    if (index < sections.lastIndex) {
-                                        val list = sections.toMutableList()
-                                        list.add(index + 1, list.removeAt(index))
-                                        sections = list
-                                    }
-                                }, enabled = index < sections.lastIndex) { Icon(Icons.Default.ArrowDownward, contentDescription = null) }
-                                IconButton(onClick = { sections = sections.filterNot { it == section } }) {
-                                    Icon(Icons.Default.Close, contentDescription = null)
-                                }
-                            }
-                        },
-                    )
-                }
-            }
-            if (available.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(20.dp))
-                Text("Agregar sección")
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    available.take(3).forEach { section ->
-                        FilterChip(selected = false, onClick = { sections = sections + section }, label = { Text(section) })
-                    }
-                }
-            }
-            if (template!!.usesPhysicalExamCatalog()) {
+            Text("Secciones activas (orden)", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Marca las secciones a incluir y ordénalas. «Datos del paciente» siempre va primero.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
+            ActiveSectionsEditor(
+                documentType = docType,
+                layoutOrder = layoutOrder,
+                activeSections = sections,
+                onStateChange = { order, active ->
+                    layoutOrder = order
+                    sections = active
+                },
+            )
+            if (docType == DocumentType.INFORME ||
+                sections.any { it.equals(SectionCatalog.EXAMEN_FISICO, ignoreCase = true) }
+            ) {
                 Spacer(modifier = Modifier.height(24.dp))
                 Text("Sistemas de examen físico (IA)", style = MaterialTheme.typography.titleMedium)
                 Text(
@@ -211,6 +195,7 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
                         template!!.copy(
                             name = name.trim(),
                             sections = sections,
+                            sectionLayoutOrder = layoutOrder,
                             isDefault = isDefault,
                             enabledPhysicalExamSystemIds = enabledExamIds,
                         ),

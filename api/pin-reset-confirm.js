@@ -34,11 +34,15 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: "El enlace expiró. Solicite uno nuevo." });
     }
 
-    const cedula = data.cedula;
+    const cedula = String(data.cedula || "");
+    const docId = String(data.docId || cedula);
+    if (!docId) return res.status(400).json({ error: "Enlace inválido" });
+
+    // Mismo algoritmo que el login web: SHA-256 de normalizeCedula(cedula):PIN
     const pinHash = hashPin(cedula, pin);
     const now = new Date().toISOString();
 
-    await db.collection("pacientes").doc(cedula).set({ pinHash, updatedAt: now }, { merge: true });
+    await db.collection("pacientes").doc(docId).set({ pinHash, updatedAt: now }, { merge: true });
     await ref.set({ used: true, usedAt: now }, { merge: true });
 
     return res.status(200).json({ message: "PIN actualizado. Ya puede iniciar sesión." });

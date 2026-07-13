@@ -23,3 +23,6 @@ app/src/main/assets/config/ai_keys.properties
 web/.env
 serviceAccount*.json
 **/serviceAccountKey*.json
+
+ege/
+

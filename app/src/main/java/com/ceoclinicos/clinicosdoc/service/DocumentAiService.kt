@@ -7,6 +7,7 @@ import com.ceoclinicos.clinicosdoc.model.DocumentHeader
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
 import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.Patient
+import com.ceoclinicos.clinicosdoc.model.ReportSessionConfig
 import com.ceoclinicos.clinicosdoc.model.SectionCatalog
 import com.ceoclinicos.clinicosdoc.util.DocumentSection
 import com.ceoclinicos.clinicosdoc.util.cleanSectionBody
@@ -28,10 +29,14 @@ object DocumentAiService {
         doctor: DoctorProfile,
         dictation: String,
         header: DocumentHeader? = null,
+        sessionConfig: ReportSessionConfig? = null,
     ): String {
         AiConfig.load(context.applicationContext)
+        val effectiveTemplate = sessionConfig?.applyTo(template) ?: template
         val headerBlock = header?.toPlainTextBlock()
-        val physicalExamBlock = PhysicalExamPromptBuilder.buildBlock(context, template)
+        val textOverrides = sessionConfig?.physicalExamTextOverrides.orEmpty()
+        val physicalExamBlock = PhysicalExamPromptBuilder.buildBlock(context, effectiveTemplate, textOverrides)
+        val enfermedadEjemplo = sessionConfig?.enfermedadActualEjemplo.orEmpty()
 
         val system = """
             Eres un asistente médico que redacta y mejora documentos clínicos en español.
@@ -68,6 +73,7 @@ object DocumentAiService {
             appendLine("4. NO incluyas sección \"Datos del paciente\".")
             appendLine("5. Responde SOLO con el cuerpo clínico redactado.")
             appendLine()
+            appendEnfermedadActualHint(enfermedadEjemplo, template.documentType)
 
             when (template.documentType) {
                 DocumentType.HISTORIA_CLINICA -> {
@@ -128,7 +134,9 @@ object DocumentAiService {
                     appendLine("- Primera línea EXACTA de la sección: [[SECTION:Examen físico]]")
                     appendLine("- NO uses asteriscos **. El contenido va en las líneas siguientes.")
                     appendLine("- Línea 1 de contenido (signos vitales):")
-                    appendLine("  TA: [valor o ---] mmHg | FR: [valor o ---] rpm | FC: [valor o ---] lpm | SaTO2: [valor o ---]%")
+                    appendLine("  TA: [valor] mmHg | FR: [valor] rpm | FC: [valor] lpm | SaTO2: [valor]%")
+                    appendLine("- Signos vitales NO dictados = 0 (ej. TA: 0 mmHg | FR: 0 rpm | FC: 82 lpm | SaTO2: 0%).")
+                    appendLine("- Signos vitales dictados conservan el valor exacto.")
                     appendLine("- Usa PLANTILLA BASE de examen físico (abajo). SIEMPRE debe existir esta sección.")
                     appendLine("- NUNCA escribas \"Examen físico\" dentro del párrafo inicial ni como texto suelto en el cuerpo.")
                     appendLine("- Si el dictado dice \"examen físico\", crea SIEMPRE [[SECTION:Examen físico]] y el contenido va DEBAJO, nunca en la misma línea.")
@@ -177,10 +185,14 @@ object DocumentAiService {
         currentSectionBody: String,
         otherSections: List<DocumentSection>,
         header: DocumentHeader? = null,
+        sessionConfig: ReportSessionConfig? = null,
     ): String {
         AiConfig.load(context.applicationContext)
+        val effectiveTemplate = sessionConfig?.applyTo(template) ?: template
         val normalizedTitle = normalizeSectionTitle(sectionTitle)
-        val physicalExamBlock = PhysicalExamPromptBuilder.buildBlock(context, template)
+        val textOverrides = sessionConfig?.physicalExamTextOverrides.orEmpty()
+        val physicalExamBlock = PhysicalExamPromptBuilder.buildBlock(context, effectiveTemplate, textOverrides)
+        val enfermedadEjemplo = sessionConfig?.enfermedadActualEjemplo.orEmpty()
         val isPhysicalExam = normalizedTitle.equals(SectionCatalog.EXAMEN_FISICO, ignoreCase = true) ||
             Regex("""(?i)examen\s+f[ií]sico""").matches(normalizedTitle)
         val isDiagnostico = normalizedTitle.equals(SectionCatalog.DIAGNOSTICO, ignoreCase = true) ||
@@ -228,6 +240,7 @@ object DocumentAiService {
             appendLine("- NO inventes síntomas, signos ni diagnósticos no presentes en el dictado.")
             appendLine("- Mejora redacción, ortografía y semiología según el dictado.")
             appendLine()
+            appendEnfermedadActualHint(enfermedadEjemplo, template.documentType, normalizedTitle)
 
             when {
                 isInformeIntro -> {
@@ -243,7 +256,8 @@ object DocumentAiService {
                 isPhysicalExam -> {
                     appendLine("Tipo: EXAMEN FÍSICO.")
                     appendLine("- Primera línea: signos vitales:")
-                    appendLine("  TA: [valor o ---] mmHg | FR: [valor o ---] rpm | FC: [valor o ---] lpm | SaTO2: [valor o ---]%")
+                    appendLine("  TA: [valor] mmHg | FR: [valor] rpm | FC: [valor] lpm | SaTO2: [valor]%")
+                    appendLine("- Signos vitales NO dictados = 0. Dictados conservan el valor exacto.")
                     appendLine("- Luego una línea por sistema activo del catálogo.")
                     if (physicalExamBlock.isNotBlank()) {
                         appendLine()
@@ -278,6 +292,27 @@ object DocumentAiService {
 
         val raw = AiService.sendPrompt(prompt = prompt, systemMessage = system, maxTokens = 2048)
         return extractRegeneratedSectionBody(raw, normalizedTitle)
+    }
+
+    private fun StringBuilder.appendEnfermedadActualHint(
+        ejemplo: String,
+        documentType: DocumentType,
+        sectionTitle: String = "",
+    ) {
+        if (ejemplo.isBlank()) return
+        val applies = when (documentType) {
+            DocumentType.HISTORIA_CLINICA ->
+                sectionTitle.isBlank() ||
+                    sectionTitle.equals(SectionCatalog.ENFERMEDAD_ACTUAL, ignoreCase = true)
+            DocumentType.INFORME -> sectionTitle.isBlank()
+            else -> false
+        }
+        if (!applies) return
+        appendLine("EJEMPLO DE ESTILO para la narrativa clínica (referencia de redacción; adapta al dictado):")
+        appendLine("\"\"\"")
+        appendLine(ejemplo)
+        appendLine("\"\"\"")
+        appendLine()
     }
 
     private fun sectionStyleHint(title: String): String = when {

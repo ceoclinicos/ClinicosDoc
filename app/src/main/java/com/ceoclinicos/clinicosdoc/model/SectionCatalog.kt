@@ -41,8 +41,68 @@ object SectionCatalog {
         INDICACIONES,
     )
 
+    /** Secciones disponibles para elegir/ordenar por tipo de documento. */
+    fun catalogFor(documentType: DocumentType): List<String> = when (documentType) {
+        DocumentType.HISTORIA_CLINICA -> listOf(
+            DATOS_PACIENTE,
+            MOTIVO_CONSULTA,
+            ENFERMEDAD_ACTUAL,
+            ANTECEDENTES_PERSONALES,
+            ANTECEDENTES_FAMILIARES,
+            HABITOS_PSICOBIOLOGICOS,
+            EXAMEN_FUNCIONAL,
+            EXAMEN_FISICO,
+            DIAGNOSTICO,
+            IMPRESION_DIAGNOSTICA,
+            PLAN,
+            OBSERVACIONES,
+        )
+        DocumentType.INFORME -> listOf(
+            DATOS_PACIENTE,
+            MOTIVO_INFORME,
+            HALLAZGOS_CLINICOS,
+            EXAMEN_FISICO,
+            CONCLUSIONES,
+            RECOMENDACIONES,
+            DIAGNOSTICO,
+        )
+        DocumentType.REPOSO -> listOf(
+            DATOS_PACIENTE,
+            DIAGNOSTICO,
+            DIAS_REPOSO,
+            INDICACIONES,
+            OBSERVACIONES,
+        )
+    }
+
+    fun requiresLockedPatientSection(documentType: DocumentType): Boolean =
+        catalogFor(documentType).firstOrNull() == DATOS_PACIENTE
+
+    /** Asegura «Datos del paciente» primero y solo secciones válidas del catálogo. */
+    fun normalizeActive(documentType: DocumentType, sections: List<String>): List<String> {
+        val catalog = catalogFor(documentType).toSet()
+        val filtered = sections.filter { it in catalog }
+        if (!requiresLockedPatientSection(documentType)) return filtered
+        val withoutLocked = filtered.filterNot { it == DATOS_PACIENTE }
+        return listOf(DATOS_PACIENTE) + withoutLocked
+    }
+
+    /** Orden visual: activas en su orden, luego inactivas según catálogo. */
+    fun initialLayoutOrder(documentType: DocumentType, activeSections: List<String>): List<String> {
+        val catalog = catalogFor(documentType)
+        val active = normalizeActive(documentType, activeSections)
+        val inactive = catalog.filter { it !in active.toSet() }
+        return active + inactive
+    }
+
+    fun activeFromLayout(layoutOrder: List<String>, activeSections: List<String>): List<String> {
+        val activeSet = activeSections.toSet()
+        return layoutOrder.filter { it in activeSet }
+    }
+
     fun defaultsFor(documentType: DocumentType): List<String> = when (documentType) {
         DocumentType.HISTORIA_CLINICA -> listOf(
+            DATOS_PACIENTE,
             MOTIVO_CONSULTA,
             ENFERMEDAD_ACTUAL,
             ANTECEDENTES_PERSONALES,
@@ -56,6 +116,7 @@ object SectionCatalog {
             DIAGNOSTICO,
         )
         DocumentType.REPOSO -> listOf(
+            DATOS_PACIENTE,
             DIAGNOSTICO,
             DIAS_REPOSO,
             INDICACIONES,

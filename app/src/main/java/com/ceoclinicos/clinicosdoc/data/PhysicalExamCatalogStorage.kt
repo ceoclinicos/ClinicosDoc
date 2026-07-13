@@ -73,6 +73,40 @@ object PhysicalExamCatalogStorage {
         return catalog.filter { it.id in ids }.sortedBy { it.sortOrder }
     }
 
+    /** Orden de redacción: signos vitales → general → resto por sortOrder. */
+    fun reportDisplayOrder(systems: List<PhysicalExamSystem>): List<PhysicalExamSystem> {
+        val priority = mapOf("signos_vitales" to 0, "general" to 1)
+        return systems.sortedWith(
+            compareBy<PhysicalExamSystem>(
+                { priority[it.id] ?: (it.sortOrder + 10) },
+                { it.sortOrder },
+            ),
+        )
+    }
+
+    fun resolvedForReport(
+        context: Context,
+        enabledIds: List<String>,
+        textOverrides: Map<String, String> = emptyMap(),
+    ): List<PhysicalExamSystem> {
+        val catalog = loadAll(context).associateBy { it.id }
+        val ids = enabledIds.ifEmpty { PhysicalExamDefaults.defaultEnabledIds }
+        return ids.mapNotNull { catalog[it] }.map { system ->
+            textOverrides[system.id]?.let { system.copy(defaultText = it) } ?: system
+        }
+    }
+
+    /** Orden de la pantalla de configuración: activos primero (orden guardado), luego inactivos. */
+    fun displayOrderForConfig(
+        catalog: List<PhysicalExamSystem>,
+        enabledIds: List<String>,
+    ): List<PhysicalExamSystem> {
+        val byId = catalog.associateBy { it.id }
+        val enabled = enabledIds.mapNotNull { byId[it] }
+        val disabled = reportDisplayOrder(catalog.filter { it.id !in enabledIds.toSet() })
+        return enabled + disabled
+    }
+
     private fun PhysicalExamSystem.toDto() = PhysicalExamSystemCloudDto(
         id = id,
         name = name,

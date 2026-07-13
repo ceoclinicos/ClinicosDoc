@@ -65,6 +65,9 @@ internal data class DocumentTemplateDto(
     val sections: List<String>,
     val isDefault: Boolean?,
     val enabledPhysicalExamSystemIds: List<String>? = null,
+    val physicalExamTextOverrides: Map<String, String>? = null,
+    val enfermedadActualEjemplo: String? = null,
+    val sectionLayoutOrder: List<String>? = null,
 )
 
 internal data class ClinicalDraftDto(

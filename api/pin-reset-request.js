@@ -22,12 +22,12 @@ module.exports = async function handler(req, res) {
   try {
     const db = getAdmin().firestore();
     let snap = null;
-    let cedula = "";
+    let docId = "";
     for (const key of cedulaLookupKeys(inputCedula)) {
       const s = await db.collection("pacientes").doc(key).get();
       if (s.exists) {
         snap = s;
-        cedula = String(s.data().cedula || key);
+        docId = key;
         break;
       }
     }
@@ -38,6 +38,8 @@ module.exports = async function handler(req, res) {
     const email = String(p.correo || "").trim();
     if (!email) return res.status(200).json(OK_MSG);
 
+    // Guardar el ID del documento + cédula del perfil (para hashear igual que el login web)
+    const cedula = String(p.cedula || docId);
     const token = crypto.randomUUID();
     const now = Date.now();
     await db
@@ -46,6 +48,7 @@ module.exports = async function handler(req, res) {
       .set({
         token,
         cedula,
+        docId,
         expiresAt: now + 60 * 60 * 1000,
         used: false,
         createdAt: new Date().toISOString(),

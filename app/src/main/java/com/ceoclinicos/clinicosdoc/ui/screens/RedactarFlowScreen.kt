@@ -70,7 +70,9 @@ import androidx.compose.ui.unit.dp
 import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.data.DraftStorage
 import com.ceoclinicos.clinicosdoc.data.DocumentStorage
+import com.ceoclinicos.clinicosdoc.data.EnfermedadActualStorage
 import com.ceoclinicos.clinicosdoc.data.HeaderStorage
+import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
 import com.ceoclinicos.clinicosdoc.data.PatientStorage
 import com.ceoclinicos.clinicosdoc.data.TemplateStorage
 import com.ceoclinicos.clinicosdoc.model.AiProvider
@@ -82,6 +84,8 @@ import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
 import com.ceoclinicos.clinicosdoc.model.Patient
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
+import com.ceoclinicos.clinicosdoc.model.PhysicalExamSystem
+import com.ceoclinicos.clinicosdoc.model.ReportSessionConfig
 import com.ceoclinicos.clinicosdoc.service.AiService
 import com.ceoclinicos.clinicosdoc.service.DocumentAiService
 import com.ceoclinicos.clinicosdoc.service.SpeechService
@@ -101,7 +105,7 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.UUID
 
-private enum class RedactarStep { PACIENTE, DICTADO, RESULTADO }
+private enum class RedactarStep { PACIENTE, PLANTILLA, DICTADO, RESULTADO }
 
 private val RedactarStepSaver = Saver<RedactarStep, String>(
     save = { it.name },
@@ -156,6 +160,28 @@ fun RedactarFlowScreen(
     var patientSearchMessage by remember { mutableStateOf<String?>(null) }
     var currentDraftId by rememberSaveable { mutableStateOf(draftId) }
     var draftLoaded by rememberSaveable { mutableStateOf(false) }
+    var examCatalog by remember { mutableStateOf<List<PhysicalExamSystem>>(emptyList()) }
+    var enabledExamIds by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
+    var examTextOverrides by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var enfermedadActualEjemplo by rememberSaveable { mutableStateOf("") }
+    var activeSections by remember { mutableStateOf<List<String>>(emptyList()) }
+    var sectionLayoutOrder by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    val sessionConfig = remember(
+        enabledExamIds,
+        examTextOverrides,
+        enfermedadActualEjemplo,
+        activeSections,
+        sectionLayoutOrder,
+    ) {
+        ReportSessionConfig(
+            enabledPhysicalExamSystemIds = enabledExamIds,
+            physicalExamTextOverrides = examTextOverrides,
+            enfermedadActualEjemplo = enfermedadActualEjemplo,
+            activeSections = activeSections,
+            sectionLayoutOrder = sectionLayoutOrder,
+        )
+    }
 
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -187,7 +213,41 @@ fun RedactarFlowScreen(
         template?.let { selectedTemplateId = it.id }
     }
 
-    fun showMsg(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+    fun applyTemplateConfig(tpl: DocumentTemplate) {
+        val config = tpl.toSessionConfig()
+        enabledExamIds = config.enabledPhysicalExamSystemIds
+        examTextOverrides = config.physicalExamTextOverrides
+        enfermedadActualEjemplo = config.enfermedadActualEjemplo.ifBlank {
+            EnfermedadActualStorage.load(context)
+        }
+        activeSections = config.activeSections
+        sectionLayoutOrder = config.sectionLayoutOrder
+    }
+
+    fun persistTemplateConfig(
+        ids: List<String> = enabledExamIds,
+        overrides: Map<String, String> = examTextOverrides,
+        ejemplo: String = enfermedadActualEjemplo,
+        sections: List<String> = activeSections,
+        layout: List<String> = sectionLayoutOrder,
+    ) {
+        val tpl = template ?: return
+        val updated = tpl.withSessionConfig(
+            ReportSessionConfig(
+                enabledPhysicalExamSystemIds = ids,
+                physicalExamTextOverrides = overrides,
+                enfermedadActualEjemplo = ejemplo,
+                activeSections = sections,
+                sectionLayoutOrder = layout,
+            ),
+        )
+        if (updated == tpl) return
+        template = TemplateStorage.upsert(context, updated)
+    }
+
+    fun refreshExamCatalog() {
+        examCatalog = PhysicalExamCatalogStorage.loadAll(context)
+    }
 
     fun applyDraft(draft: ClinicalDraft) {
         currentDraftId = draft.id
@@ -197,8 +257,14 @@ fun RedactarFlowScreen(
         draft.templateId?.let { selectedTemplateId = it }
         draft.headerId?.let { selectedHeaderId = it }
         draft.membrete?.let { membrete = it }
-        step = if (draft.hasGeneratedContent) RedactarStep.RESULTADO else RedactarStep.DICTADO
+        step = when {
+            draft.hasGeneratedContent -> RedactarStep.RESULTADO
+            draft.dictation.isNotBlank() -> RedactarStep.DICTADO
+            else -> RedactarStep.PLANTILLA
+        }
     }
+
+    fun showMsg(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
 
     fun saveDraft(showToast: Boolean = true): Boolean {
         val patient = selectedPatient
@@ -240,6 +306,8 @@ fun RedactarFlowScreen(
         patients = PatientStorage.loadAll(context)
         doctor = DoctorStorage.loadProfile(context)
         reloadTemplate()
+        refreshExamCatalog()
+        template?.let { applyTemplateConfig(it) }
         if (!draftLoaded && draftId != null) {
             DraftStorage.findById(context, draftId)?.let { draft ->
                 applyDraft(draft)
@@ -255,6 +323,10 @@ fun RedactarFlowScreen(
         }
         refreshHeaders()
         loading = false
+    }
+
+    LaunchedEffect(selectedTemplateId) {
+        template?.let { applyTemplateConfig(it) }
     }
 
     LaunchedEffect(step) {
@@ -273,7 +345,11 @@ fun RedactarFlowScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 if (step == RedactarStep.RESULTADO) refreshHeaders()
-                if (step == RedactarStep.DICTADO) reloadTemplate()
+                if (step == RedactarStep.DICTADO || step == RedactarStep.PLANTILLA) {
+                    reloadTemplate()
+                    template?.let { applyTemplateConfig(it) }
+                }
+                if (step == RedactarStep.PLANTILLA) refreshExamCatalog()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -348,7 +424,7 @@ fun RedactarFlowScreen(
                                 selectedPatient = found
                                 selectedPatientId = found.id
                                 patientSearchMessage = "Seleccionado: ${found.nombre}"
-                                step = RedactarStep.DICTADO
+                                step = RedactarStep.PLANTILLA
                             } else {
                                 patientSearchMessage = "No se encontró paciente con esa cédula"
                             }
@@ -378,7 +454,7 @@ fun RedactarFlowScreen(
                             PatientPickCard(patient) {
                                 selectedPatient = patient
                                 selectedPatientId = patient.id
-                                step = RedactarStep.DICTADO
+                                step = RedactarStep.PLANTILLA
                             }
                         }
                     }
@@ -388,6 +464,44 @@ fun RedactarFlowScreen(
                     }
                 }
                 PremiumPrimaryButton("Agregar paciente", onClick = onAddPatient, icon = Icons.Default.PersonAdd)
+            }
+
+            RedactarStep.PLANTILLA -> Box(modifier = Modifier.padding(padding)) {
+                val patient = selectedPatient!!
+                val tpl = template!!
+                TemplateConfigStep(
+                    patient = patient,
+                    template = tpl,
+                    documentType = documentType,
+                    layoutOrder = sectionLayoutOrder,
+                    activeSections = activeSections,
+                    onSectionsStateChange = { order, sections ->
+                        sectionLayoutOrder = order
+                        activeSections = sections
+                        persistTemplateConfig(layout = order, sections = sections)
+                    },
+                    examCatalog = examCatalog,
+                    enabledExamIds = enabledExamIds,
+                    onEnabledExamIdsChange = {
+                        enabledExamIds = it
+                        persistTemplateConfig(ids = it)
+                    },
+                    examTextOverrides = examTextOverrides,
+                    onExamTextOverridesChange = {
+                        examTextOverrides = it
+                        persistTemplateConfig(overrides = it)
+                    },
+                    enfermedadActualEjemplo = enfermedadActualEjemplo,
+                    onEnfermedadActualEjemploChange = {
+                        enfermedadActualEjemplo = it
+                        persistTemplateConfig(ejemplo = it)
+                    },
+                    onChangeTemplate = { showTemplatePicker = true },
+                    onContinue = {
+                        persistTemplateConfig()
+                        step = RedactarStep.DICTADO
+                    },
+                )
             }
 
             RedactarStep.DICTADO -> Column(
@@ -404,28 +518,11 @@ fun RedactarFlowScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(24.dp))
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Plantilla", style = MaterialTheme.typography.labelLarge)
-                        Text(
-                            template?.name ?: "Sin plantilla",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
-                        )
-                        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { showTemplatePicker = true }) {
-                                Text("Cambiar plantilla")
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    template?.let { onEditTemplate(it.id, false) }
-                                },
-                                enabled = template != null,
-                            ) {
-                                Text("Personalizar")
-                            }
-                        }
-                    }
+                OutlinedButton(
+                    onClick = { step = RedactarStep.PLANTILLA },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Configurar plantilla")
                 }
                 Spacer(modifier = Modifier.height(20.dp))
                 Text("Dictado clínico", style = MaterialTheme.typography.titleLarge)
@@ -516,6 +613,7 @@ fun RedactarFlowScreen(
                                     doctor = doc,
                                     dictation = dictation.trim(),
                                     header = header,
+                                    sessionConfig = sessionConfig,
                                 )
                                 membrete = PatientMembrete.fromPatient(selectedPatient!!)
                                 step = RedactarStep.RESULTADO
@@ -609,6 +707,7 @@ fun RedactarFlowScreen(
                                 currentSectionBody = sections[index].body,
                                 otherSections = sections.filterIndexed { i, _ -> i != index },
                                 header = header,
+                                sessionConfig = sessionConfig,
                             )
                         },
                     )
@@ -713,6 +812,7 @@ fun RedactarFlowScreen(
                         onClick = {
                             selectedTemplateId = item.id
                             template = item
+                            applyTemplateConfig(item)
                             showTemplatePicker = false
                         },
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),

@@ -6,10 +6,57 @@ data class DocumentTemplate(
     val documentType: DocumentType,
     val sections: List<String>,
     val isDefault: Boolean = false,
-    /** IDs de sistemas del catálogo de examen físico activos para esta plantilla. */
+    /** Orden visual de todas las secciones del catálogo (activas e inactivas). */
+    val sectionLayoutOrder: List<String> = emptyList(),
+    /** IDs de sistemas activos en el orden de redacción elegido por el médico. */
     val enabledPhysicalExamSystemIds: List<String> = emptyList(),
+    /** Textos base personalizados por sistema (solo para esta plantilla). */
+    val physicalExamTextOverrides: Map<String, String> = emptyMap(),
+    /** Ejemplo de estilo para enfermedad actual / narrativa clínica. */
+    val enfermedadActualEjemplo: String = "",
 ) {
     fun usesPhysicalExamCatalog(): Boolean =
         documentType == DocumentType.INFORME ||
             sections.any { it.equals("Examen físico", ignoreCase = true) }
+
+    fun toSessionConfig(): ReportSessionConfig = ReportSessionConfig(
+        enabledPhysicalExamSystemIds = enabledPhysicalExamSystemIds
+            .ifEmpty { PhysicalExamDefaults.defaultEnabledIds },
+        physicalExamTextOverrides = physicalExamTextOverrides,
+        enfermedadActualEjemplo = enfermedadActualEjemplo,
+        activeSections = normalizedSections(),
+        sectionLayoutOrder = resolvedLayoutOrder(),
+    )
+
+    fun withSessionConfig(config: ReportSessionConfig): DocumentTemplate = copy(
+        enabledPhysicalExamSystemIds = config.enabledPhysicalExamSystemIds,
+        physicalExamTextOverrides = config.physicalExamTextOverrides,
+        enfermedadActualEjemplo = config.enfermedadActualEjemplo,
+        sections = if (config.activeSections.isNotEmpty()) {
+            SectionCatalog.normalizeActive(documentType, config.activeSections)
+        } else {
+            sections
+        },
+        sectionLayoutOrder = if (config.sectionLayoutOrder.isNotEmpty()) {
+            config.sectionLayoutOrder
+        } else {
+            sectionLayoutOrder
+        },
+    )
+
+    fun resolvedLayoutOrder(): List<String> {
+        val catalog = SectionCatalog.catalogFor(documentType)
+        val base = if (sectionLayoutOrder.isNotEmpty()) {
+            val known = sectionLayoutOrder.filter { it in catalog }
+            val missing = catalog.filter { it !in known.toSet() }
+            known + missing
+        } else {
+            SectionCatalog.initialLayoutOrder(documentType, sections)
+        }
+        if (!SectionCatalog.requiresLockedPatientSection(documentType)) return base
+        return listOf(SectionCatalog.DATOS_PACIENTE) + base.filterNot { it == SectionCatalog.DATOS_PACIENTE }
+    }
+
+    fun normalizedSections(): List<String> =
+        SectionCatalog.normalizeActive(documentType, sections)
 }

@@ -317,6 +317,9 @@ object CloudSyncService {
             sections = dto.sections,
             isDefault = dto.isDefault ?: false,
             enabledPhysicalExamSystemIds = dto.enabledPhysicalExamSystemIds.orEmpty(),
+            physicalExamTextOverrides = dto.physicalExamTextOverrides.orEmpty(),
+            enfermedadActualEjemplo = dto.enfermedadActualEjemplo.orEmpty(),
+            sectionLayoutOrder = dto.sectionLayoutOrder.orEmpty(),
         )
     }
 
@@ -412,6 +415,9 @@ object CloudSyncService {
         sections = sections,
         isDefault = isDefault,
         enabledPhysicalExamSystemIds = enabledPhysicalExamSystemIds,
+        physicalExamTextOverrides = physicalExamTextOverrides,
+        enfermedadActualEjemplo = enfermedadActualEjemplo,
+        sectionLayoutOrder = sectionLayoutOrder,
     )
 
     private fun PhysicalExamSystem.toCloudDto() = PhysicalExamSystemCloudDto(

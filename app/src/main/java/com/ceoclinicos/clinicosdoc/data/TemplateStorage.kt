@@ -14,7 +14,7 @@ object TemplateStorage {
     private const val KEY = "document_templates_json"
     private const val INITIALIZED_KEY = "templates_initialized"
     private const val HC_SECTIONS_VERSION_KEY = "hc_template_sections_version"
-    private const val HC_SECTIONS_VERSION = 2
+    private const val HC_SECTIONS_VERSION = 3
     private val gson = Gson()
 
     private fun prefs(context: Context) =
@@ -58,11 +58,35 @@ object TemplateStorage {
         val p = prefs(context)
         if (p.getInt(HC_SECTIONS_VERSION_KEY, 1) >= HC_SECTIONS_VERSION) return
         val all = loadAll(context).toMutableList()
-        val idx = all.indexOfFirst { it.documentType == DocumentType.HISTORIA_CLINICA && it.isDefault }
-        if (idx >= 0 && all[idx].sections == LEGACY_HC_DEFAULT_SECTIONS) {
-            all[idx] = all[idx].copy(sections = SectionCatalog.defaultsFor(DocumentType.HISTORIA_CLINICA))
+        var changed = false
+        for (i in all.indices) {
+            val tpl = all[i]
+            if (tpl.documentType != DocumentType.HISTORIA_CLINICA) continue
+            val normalized = SectionCatalog.normalizeActive(tpl.documentType, tpl.sections)
+            val withExam = if (SectionCatalog.EXAMEN_FISICO !in normalized) {
+                val diagIdx = normalized.indexOf(SectionCatalog.DIAGNOSTICO)
+                if (diagIdx >= 0) {
+                    normalized.toMutableList().apply { add(diagIdx, SectionCatalog.EXAMEN_FISICO) }
+                } else {
+                    normalized + SectionCatalog.EXAMEN_FISICO
+                }
+            } else {
+                normalized
+            }
+            val updated = tpl.copy(
+                sections = withExam,
+                sectionLayoutOrder = tpl.copy(sections = withExam).resolvedLayoutOrder(),
+            )
+            if (updated != tpl) {
+                all[i] = updated
+                changed = true
+            }
+        }
+        if (changed) {
             saveAllLocal(context, all)
-            SyncCoordinator.afterTemplateSaved(context, all[idx])
+            all.filter { it.documentType == DocumentType.HISTORIA_CLINICA }.forEach {
+                SyncCoordinator.afterTemplateSaved(context, it)
+            }
         }
         p.edit().putInt(HC_SECTIONS_VERSION_KEY, HC_SECTIONS_VERSION).persist()
     }
@@ -125,6 +149,9 @@ object TemplateStorage {
         sections = sections,
         isDefault = isDefault,
         enabledPhysicalExamSystemIds = enabledPhysicalExamSystemIds,
+        physicalExamTextOverrides = physicalExamTextOverrides,
+        enfermedadActualEjemplo = enfermedadActualEjemplo,
+        sectionLayoutOrder = sectionLayoutOrder,
     )
 
     private fun DocumentTemplateDto.toModel() = DocumentTemplate(
@@ -133,6 +160,9 @@ object TemplateStorage {
         documentType = DocumentType.fromName(documentType),
         sections = sections,
         isDefault = isDefault ?: false,
+        sectionLayoutOrder = sectionLayoutOrder.orEmpty(),
         enabledPhysicalExamSystemIds = enabledPhysicalExamSystemIds.orEmpty(),
+        physicalExamTextOverrides = physicalExamTextOverrides.orEmpty(),
+        enfermedadActualEjemplo = enfermedadActualEjemplo.orEmpty(),
     )
 }
