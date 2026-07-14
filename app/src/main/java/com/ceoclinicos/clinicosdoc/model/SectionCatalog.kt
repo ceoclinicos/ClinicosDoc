@@ -59,12 +59,12 @@ object SectionCatalog {
         )
         DocumentType.INFORME -> listOf(
             DATOS_PACIENTE,
-            MOTIVO_INFORME,
-            HALLAZGOS_CLINICOS,
+            MOTIVO_CONSULTA,
+            ENFERMEDAD_ACTUAL,
             EXAMEN_FISICO,
+            DIAGNOSTICO,
             CONCLUSIONES,
             RECOMENDACIONES,
-            DIAGNOSTICO,
         )
         DocumentType.REPOSO -> listOf(
             DATOS_PACIENTE,
@@ -113,6 +113,10 @@ object SectionCatalog {
             DIAGNOSTICO,
         )
         DocumentType.INFORME -> listOf(
+            DATOS_PACIENTE,
+            MOTIVO_CONSULTA,
+            ENFERMEDAD_ACTUAL,
+            EXAMEN_FISICO,
             DIAGNOSTICO,
         )
         DocumentType.REPOSO -> listOf(

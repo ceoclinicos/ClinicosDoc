@@ -151,7 +151,7 @@ fun TemplateConfigStep(
             Spacer(modifier = Modifier.height(16.dp))
             Text("Examen físico", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Activa los sistemas a incluir. Orden: signos vitales, general, luego el resto.",
+                "Activa los sistemas a incluir. Orden: signos vitales → general → piel → cabeza/cuello → cardiopulmonar…",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),

@@ -45,8 +45,9 @@ object DocumentAiService {
             Corrige ortografía, gramática y puntuación.
             Convierte expresiones coloquiales a terminología médica equivalente (ej. "no mueve bien el codo" → "limitación funcional a la flexo-extensión del codo"), sin cambiar el significado clínico.
             Organiza el contenido en párrafos fluidos y coherentes.
+            En INFORME MÉDICO / HISTORIA: el examen físico DEBE incluir TODOS los sistemas activos de la plantilla.
+            Si el dictado solo menciona un sistema (ej. Extremidades), ese se adapta y LOS DEMÁS se copian con su texto base normal sin omitirlos.
             No inventes hallazgos clínicos patológicos que contradigan el dictado.
-            En INFORME MÉDICO: si no hay examen físico dictado, usa la plantilla base normal; completa con la plantilla los sistemas no mencionados.
             En HISTORIA CLÍNICA: respeta el orden de secciones de la plantilla; redacta con tecnicismo universitario venezolano (estilo de referencia, no copiar formato manuscrito).
             Si una sección activa no tiene datos en el dictado, usa el TEXTO PREDETERMINADO de esa sección (no inventes patología nueva).
             Usa terminología médica apropiada para Venezuela/Latinoamérica.
@@ -98,7 +99,7 @@ object DocumentAiService {
                     appendLine("- Antecedentes familiares: relaciones, edades y causas si se conocen; sin inventar.")
                     appendLine("- Hábitos psicobiológicos: tóxicos, hábitos intestinales/urinarios, sexuales, sueño; psicobiografía solo si hay datos.")
                     appendLine("- Examen funcional: lo que REFIERE el paciente por sistemas; distinto del examen físico objetivo.")
-                    appendLine("- Examen físico: lo que EXPLORA el médico; semiología por regiones. Plantilla base solo si no hay dictado de exploración.")
+                    appendLine("- Examen físico: lo que EXPLORA el médico. DEBE incluir TODOS los sistemas activos; solo modifica los dictados y conserva el texto base en el resto.")
                     appendLine("- Diagnóstico: lista numerada al final; términos clínicos o CIE según el dictado.")
                     appendLine()
                     appendLine(SectionDefaults.promptBlock(effectiveSections))
@@ -109,56 +110,41 @@ object DocumentAiService {
                     }
                 }
                 DocumentType.INFORME -> {
-                    appendLine("Para INFORME MÉDICO ignora la detección libre de secciones.")
-                    appendLine("El encabezado institucional lo coloca la app; tú generas SOLO el cuerpo en 3 bloques.")
-                    appendLine()
+                    val effectiveSections = effectiveTemplate.normalizedSections()
+                        .filterNot { it.equals(SectionCatalog.DATOS_PACIENTE, ignoreCase = true) }
+                        .ifEmpty {
+                            listOf(
+                                SectionCatalog.MOTIVO_CONSULTA,
+                                SectionCatalog.ENFERMEDAD_ACTUAL,
+                                SectionCatalog.EXAMEN_FISICO,
+                                SectionCatalog.DIAGNOSTICO,
+                            )
+                        }
                     val sexoTexto = when (patient.sexo.lowercase()) {
                         "masculino", "m" -> "masculino"
                         "femenino", "f" -> "femenino"
                         else -> patient.sexo.ifBlank { "de sexo no referido" }
                     }
-                    appendLine("ESTRUCTURA DEL DOCUMENTO (la app arma 1+2+3+4; tú escribes 2, 3 y 4):")
-                    appendLine("1. ENCABEZADO → lo pone la app (NO lo escribas).")
-                    appendLine("2. INICIO del informe → párrafo narrativo SIN título de sección.")
-                    appendLine("3. EXAMEN FÍSICO → línea [[SECTION:Examen físico]] y contenido debajo.")
-                    appendLine("4. DIAGNÓSTICO → línea [[SECTION:Diagnóstico]] al final con lista numerada.")
+                    appendLine("Para INFORME MÉDICO ignora la detección libre de secciones.")
+                    appendLine("El encabezado institucional lo coloca la app; tú generas SOLO el cuerpo.")
+                    appendLine("Genera UNA sección por cada ítem de la plantilla, en el orden exacto indicado.")
+                    appendLine("Formato: línea [[SECTION:Nombre exacto]] y contenido debajo. PROHIBIDO usar **.")
+                    appendLine("NO incluyas \"Datos del paciente\" ni nombre/cédula.")
                     appendLine()
-                    appendLine("═══ BLOQUE 2 (inicio del informe, SIN subtítulo) ═══")
-                    appendLine("- Un párrafo narrativo profesional con el dictado.")
-                    appendLine("- Inicia: \"Se trata de paciente $sexoTexto de ${patient.edad} años de edad...\"")
-                    appendLine("- Incluye motivo, evento, síntomas y conducta médica SOLO según el dictado.")
-                    appendLine("- Redacta semiológicamente lo referido; NO inventes síntomas ni signos.")
-                    appendLine("- NO uses nombre ni cédula. NO uses ** ni título de sección.")
+                    appendLine("Secciones de la plantilla (orden obligatorio):")
+                    effectiveSections.forEach { appendLine("- $it") }
                     appendLine()
-                    appendLine("Referencia de estilo (adapta al dictado y al paciente):")
-                    appendLine("Se trata de paciente femenino de 31 años de edad quien posterior a traumatismo contuso en codo izquierdo presenta aumento de volumen y limitación funcional, por lo cual acude a este centro donde es evaluada por equipo médico de guardia, donde se indica tratamiento endovenoso y estudio de rayos X de miembro superior izquierdo.")
+                    appendLine("Guía de estilo:")
+                    appendLine("- Motivo de consulta: frase breve y directa.")
+                    appendLine("- Enfermedad actual: párrafo narrativo. Inicia \"Se trata de paciente $sexoTexto de ${patient.edad} años de edad...\"; motivo, síntomas y conducta SOLO según el dictado.")
+                    appendLine("- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto.")
+                    appendLine("- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.")
                     appendLine()
-                    appendLine("═══ BLOQUE 3 — Examen físico ═══")
-                    appendLine("- Primera línea EXACTA de la sección: [[SECTION:Examen físico]]")
-                    appendLine("- NO uses asteriscos **. El contenido va en las líneas siguientes.")
-                    appendLine("- Línea 1 de contenido (signos vitales), SOLO si hay valores dictados:")
-                    appendLine("  Ejemplo: TA: 120/80 mmHg | FC: 82 lpm")
-                    appendLine("- Signos NO dictados u con valor 0: OMITIRLOS (no escribas 0 ni ---).")
-                    appendLine("- Si no hay ningún signo vital dictado, empieza directo con el resto del examen físico.")
-                    appendLine("- Usa PLANTILLA BASE de examen físico (abajo). SIEMPRE debe existir esta sección.")
-                    appendLine("- NUNCA escribas \"Examen físico\" dentro del párrafo inicial ni como texto suelto en el cuerpo.")
-                    appendLine("- Si el dictado dice \"examen físico\", crea SIEMPRE [[SECTION:Examen físico]] y el contenido va DEBAJO, nunca en la misma línea.")
-                    appendLine()
+                    appendLine(SectionDefaults.promptBlock(effectiveSections))
                     if (physicalExamBlock.isNotBlank()) {
                         appendLine()
                         appendLine(physicalExamBlock)
                     }
-                    appendLine()
-                    appendLine("═══ BLOQUE 4 — Diagnóstico ═══")
-                    appendLine("- Primera línea EXACTA: [[SECTION:Diagnóstico]]")
-                    appendLine("- Lista numerada: mínimo 1, máximo 4 diagnósticos según el dictado.")
-                    appendLine("- Formato: 1. [diagnóstico]. 2. [diagnóstico].")
-                    appendLine()
-                    appendLine("REGLAS FINALES:")
-                    appendLine("- Solo 3 bloques de texto (inicio + examen físico + diagnóstico).")
-                    appendLine("- Formato sección: [[SECTION:Nombre]] en una línea, contenido debajo.")
-                    appendLine("- PROHIBIDO usar ** para títulos de sección.")
-                    appendLine("- No repitas el párrafo inicial dentro del examen físico.")
                 }
                 DocumentType.REPOSO -> {
                     val effectiveSections = effectiveTemplate.normalizedSections()
@@ -261,10 +247,10 @@ object DocumentAiService {
                 }
                 isPhysicalExam -> {
                     appendLine("Tipo: EXAMEN FÍSICO.")
-                    appendLine("- Primera línea: signos vitales SOLO si hay valores dictados.")
-                    appendLine("- Ejemplo: TA: 120/80 mmHg | FC: 82 lpm")
-                    appendLine("- Signos NO dictados o en 0: OMITIRLOS (no escribas 0).")
-                    appendLine("- Luego una línea por sistema activo del catálogo.")
+                    appendLine("- Incluye TODOS los sistemas activos, aunque el dictado solo mencione uno.")
+                    appendLine("- Sistemas no dictados → texto base intacto. Solo edita los mencionados.")
+                    appendLine("- Signos vitales SOLO si hay valores dictados (ej. TA: 120/80 mmHg | FC: 82 lpm).")
+                    appendLine("- Signos en 0 o no dictados: omitirlos.")
                     if (physicalExamBlock.isNotBlank()) {
                         appendLine()
                         appendLine(physicalExamBlock)

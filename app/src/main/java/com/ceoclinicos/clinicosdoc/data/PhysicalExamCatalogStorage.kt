@@ -11,15 +11,36 @@ object PhysicalExamCatalogStorage {
     private const val PREFS = "clinicos_doc_prefs"
     private const val KEY = "physical_exam_catalog_json"
     private const val INITIALIZED_KEY = "physical_exam_catalog_initialized"
+    private const val ORDER_VERSION_KEY = "physical_exam_order_version"
+    private const val ORDER_VERSION = 3
     private val gson = Gson()
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     suspend fun ensureDefaults(context: Context) {
-        if (prefs(context).getBoolean(INITIALIZED_KEY, false)) return
-        saveAllLocal(context, PhysicalExamDefaults.builtIn)
-        prefs(context).edit().putBoolean(INITIALIZED_KEY, true).persist()
+        val p = prefs(context)
+        if (!p.getBoolean(INITIALIZED_KEY, false)) {
+            saveAllLocal(context, PhysicalExamDefaults.builtIn)
+            p.edit()
+                .putBoolean(INITIALIZED_KEY, true)
+                .putInt(ORDER_VERSION_KEY, ORDER_VERSION)
+                .persist()
+            SyncCoordinator.afterPhysicalExamCatalogBulkSaved(context)
+            return
+        }
+        migrateSortOrder(context)
+    }
+
+    private fun migrateSortOrder(context: Context) {
+        val p = prefs(context)
+        if (p.getInt(ORDER_VERSION_KEY, 1) >= ORDER_VERSION) return
+        val updated = loadAll(context).map { system ->
+            val order = PhysicalExamDefaults.displayPriority[system.id] ?: system.sortOrder
+            system.copy(sortOrder = order)
+        }
+        saveAllLocal(context, reportDisplayOrder(updated))
+        p.edit().putInt(ORDER_VERSION_KEY, ORDER_VERSION).persist()
         SyncCoordinator.afterPhysicalExamCatalogBulkSaved(context)
     }
 
@@ -28,7 +49,7 @@ object PhysicalExamCatalogStorage {
         val type = object : TypeToken<List<PhysicalExamSystemCloudDto>>() {}.type
         return gson.fromJson<List<PhysicalExamSystemCloudDto>>(raw, type)
             ?.map { it.toModel() }
-            ?.sortedBy { it.sortOrder }
+            ?.let { reportDisplayOrder(it) }
             ?: PhysicalExamDefaults.builtIn
     }
 
@@ -73,13 +94,13 @@ object PhysicalExamCatalogStorage {
         return catalog.filter { it.id in ids }.sortedBy { it.sortOrder }
     }
 
-    /** Orden de redacción: signos vitales → general → resto por sortOrder. */
+    /** Orden de redacción clínico fijo (no depende del sortOrder guardado). */
     fun reportDisplayOrder(systems: List<PhysicalExamSystem>): List<PhysicalExamSystem> {
-        val priority = mapOf("signos_vitales" to 0, "general" to 1)
         return systems.sortedWith(
             compareBy<PhysicalExamSystem>(
-                { priority[it.id] ?: (it.sortOrder + 10) },
+                { PhysicalExamDefaults.displayPriority[it.id] ?: (it.sortOrder + 100) },
                 { it.sortOrder },
+                { it.name },
             ),
         )
     }

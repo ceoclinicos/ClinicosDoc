@@ -1,13 +1,23 @@
 package com.ceoclinicos.clinicosdoc.util
 
 data class VitalSigns(
-    val ta: String = "",
+    val tas: String = "",
+    val tad: String = "",
     val fr: String = "",
     val fc: String = "",
     val sato2: String = "",
 ) {
+    /** TA combinada para el documento: TAS/TAD. */
+    val ta: String
+        get() = when {
+            isPresent(tas) && isPresent(tad) -> "${tas.trim()}/${tad.trim()}"
+            isPresent(tas) -> tas.trim()
+            isPresent(tad) -> tad.trim()
+            else -> ""
+        }
+
     fun hasAnyValue(): Boolean =
-        isPresent(ta) || isPresent(fr) || isPresent(fc) || isPresent(sato2)
+        isPresent(tas) || isPresent(tad) || isPresent(fr) || isPresent(fc) || isPresent(sato2)
 
     /** Solo incluye signos con valor distinto de vacío o 0. */
     fun toLine(): String {
@@ -26,6 +36,15 @@ data class VitalSigns(
             if (v.isEmpty()) return false
             if (v == "0" || v == "0.0" || v == "0/0" || v.equals("---", ignoreCase = true)) return false
             return true
+        }
+
+        fun fromTaCombined(ta: String): Pair<String, String> {
+            val parts = ta.trim().split("/", limit = 2)
+            return when {
+                parts.size >= 2 -> parts[0].trim() to parts[1].trim()
+                ta.isNotBlank() -> ta.trim() to ""
+                else -> "" to ""
+            }
         }
     }
 }
@@ -47,8 +66,12 @@ object VitalSignsParser {
     fun parseFromBody(body: String): VitalSigns {
         val firstLine = body.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().trim()
         if (!vitalLineHint.containsMatchIn(firstLine)) return VitalSigns()
+        val (tas, tad) = VitalSigns.fromTaCombined(
+            taRegex.find(firstLine)?.groupValues?.getOrNull(1).orEmpty(),
+        )
         return VitalSigns(
-            ta = taRegex.find(firstLine)?.groupValues?.getOrNull(1).orEmpty(),
+            tas = tas,
+            tad = tad,
             fr = frRegex.find(firstLine)?.groupValues?.getOrNull(1).orEmpty(),
             fc = fcRegex.find(firstLine)?.groupValues?.getOrNull(1).orEmpty(),
             sato2 = sato2Regex.find(firstLine)?.groupValues?.getOrNull(1).orEmpty(),

@@ -20,8 +20,12 @@ fun sanitizeDocumentContent(content: String): String {
 private fun stripAbsentVitalSigns(content: String): String {
     return content.lines().joinToString("\n") { line ->
         if (!Regex("""(?i)(TA:|FR:|FC:|SaTO2:)""").containsMatchIn(line)) return@joinToString line
+        val (tas, tad) = VitalSigns.fromTaCombined(
+            Regex("""(?i)TA:\s*([^\s|]+)\s*mmHg""").find(line)?.groupValues?.getOrNull(1).orEmpty(),
+        )
         val vitals = VitalSigns(
-            ta = Regex("""(?i)TA:\s*([^\s|]+)\s*mmHg""").find(line)?.groupValues?.getOrNull(1).orEmpty(),
+            tas = tas,
+            tad = tad,
             fr = Regex("""(?i)FR:\s*([^\s|]+)\s*rpm""").find(line)?.groupValues?.getOrNull(1).orEmpty(),
             fc = Regex("""(?i)FC:\s*([^\s|]+)\s*lpm""").find(line)?.groupValues?.getOrNull(1).orEmpty(),
             sato2 = Regex("""(?i)SaTO2:\s*([^\s|]+)\s*%""").find(line)?.groupValues?.getOrNull(1).orEmpty(),

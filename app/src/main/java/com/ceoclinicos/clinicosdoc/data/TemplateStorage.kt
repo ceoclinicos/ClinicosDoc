@@ -14,7 +14,7 @@ object TemplateStorage {
     private const val KEY = "document_templates_json"
     private const val INITIALIZED_KEY = "templates_initialized"
     private const val HC_SECTIONS_VERSION_KEY = "hc_template_sections_version"
-    private const val HC_SECTIONS_VERSION = 3
+    private const val HC_SECTIONS_VERSION = 5
     private val gson = Gson()
 
     private fun prefs(context: Context) =
@@ -31,6 +31,7 @@ object TemplateStorage {
                     sections = SectionCatalog.defaultsFor(type),
                     isDefault = true,
                     enabledPhysicalExamSystemIds = defaultExamSystemsFor(type),
+                    sectionLayoutOrder = SectionCatalog.initialLayoutOrder(type, SectionCatalog.defaultsFor(type)),
                 )
             }
             saveAllLocal(context, defaults)
@@ -41,7 +42,7 @@ object TemplateStorage {
             SyncCoordinator.afterTemplatesBulkSaved(context)
             return
         }
-        migrateHistoriaClinicaDefault(context)
+        migrateTemplateSections(context)
     }
 
     private val LEGACY_HC_DEFAULT_SECTIONS = listOf(
@@ -54,28 +55,80 @@ object TemplateStorage {
         SectionCatalog.DIAGNOSTICO,
     )
 
-    private fun migrateHistoriaClinicaDefault(context: Context) {
+    private fun migrateTemplateSections(context: Context) {
         val p = prefs(context)
         if (p.getInt(HC_SECTIONS_VERSION_KEY, 1) >= HC_SECTIONS_VERSION) return
         val all = loadAll(context).toMutableList()
         var changed = false
         for (i in all.indices) {
             val tpl = all[i]
-            if (tpl.documentType != DocumentType.HISTORIA_CLINICA) continue
-            val normalized = SectionCatalog.normalizeActive(tpl.documentType, tpl.sections)
-            val withExam = if (SectionCatalog.EXAMEN_FISICO !in normalized) {
-                val diagIdx = normalized.indexOf(SectionCatalog.DIAGNOSTICO)
-                if (diagIdx >= 0) {
-                    normalized.toMutableList().apply { add(diagIdx, SectionCatalog.EXAMEN_FISICO) }
-                } else {
-                    normalized + SectionCatalog.EXAMEN_FISICO
+            val renamed = tpl.sections.map { section ->
+                when {
+                    section.equals(SectionCatalog.MOTIVO_INFORME, ignoreCase = true) ->
+                        SectionCatalog.MOTIVO_CONSULTA
+                    section.equals(SectionCatalog.HALLAZGOS_CLINICOS, ignoreCase = true) ->
+                        SectionCatalog.ENFERMEDAD_ACTUAL
+                    else -> section
                 }
-            } else {
-                normalized
+            }.distinct()
+            val layoutRenamed = tpl.sectionLayoutOrder.map { section ->
+                when {
+                    section.equals(SectionCatalog.MOTIVO_INFORME, ignoreCase = true) ->
+                        SectionCatalog.MOTIVO_CONSULTA
+                    section.equals(SectionCatalog.HALLAZGOS_CLINICOS, ignoreCase = true) ->
+                        SectionCatalog.ENFERMEDAD_ACTUAL
+                    else -> section
+                }
+            }.distinct()
+
+            val sections = when {
+                tpl.documentType == DocumentType.INFORME -> {
+                    val base = SectionCatalog.defaultsFor(DocumentType.INFORME)
+                    val extras = renamed.filter {
+                        it !in base && it in SectionCatalog.catalogFor(DocumentType.INFORME)
+                    }
+                    SectionCatalog.normalizeActive(DocumentType.INFORME, base + extras)
+                }
+                tpl.documentType == DocumentType.HISTORIA_CLINICA -> {
+                    val normalized = SectionCatalog.normalizeActive(tpl.documentType, renamed)
+                    if (SectionCatalog.EXAMEN_FISICO !in normalized) {
+                        val diagIdx = normalized.indexOf(SectionCatalog.DIAGNOSTICO)
+                        if (diagIdx >= 0) {
+                            normalized.toMutableList().apply { add(diagIdx, SectionCatalog.EXAMEN_FISICO) }
+                        } else {
+                            normalized + SectionCatalog.EXAMEN_FISICO
+                        }
+                    } else {
+                        normalized
+                    }
+                }
+                else -> SectionCatalog.normalizeActive(tpl.documentType, renamed)
             }
+
+            val desiredOrder = if (tpl.documentType == DocumentType.INFORME) {
+                SectionCatalog.catalogFor(DocumentType.INFORME)
+            } else {
+                null
+            }
+
             val updated = tpl.copy(
-                sections = withExam,
-                sectionLayoutOrder = tpl.copy(sections = withExam).resolvedLayoutOrder(),
+                sections = sections,
+                sectionLayoutOrder = when {
+                    desiredOrder != null -> {
+                        val activeFirst = sections
+                        val rest = desiredOrder.filter { it !in activeFirst.toSet() }
+                        activeFirst + rest
+                    }
+                    layoutRenamed.isEmpty() ->
+                        SectionCatalog.initialLayoutOrder(tpl.documentType, sections)
+                    else -> {
+                        val known = layoutRenamed.filter { it in SectionCatalog.catalogFor(tpl.documentType) }
+                        val missing = SectionCatalog.catalogFor(tpl.documentType).filter { it !in known.toSet() }
+                        (listOf(SectionCatalog.DATOS_PACIENTE) +
+                            (known + missing).filterNot { it == SectionCatalog.DATOS_PACIENTE })
+                            .distinct()
+                    }
+                },
             )
             if (updated != tpl) {
                 all[i] = updated
@@ -84,9 +137,7 @@ object TemplateStorage {
         }
         if (changed) {
             saveAllLocal(context, all)
-            all.filter { it.documentType == DocumentType.HISTORIA_CLINICA }.forEach {
-                SyncCoordinator.afterTemplateSaved(context, it)
-            }
+            SyncCoordinator.afterTemplatesBulkSaved(context)
         }
         p.edit().putInt(HC_SECTIONS_VERSION_KEY, HC_SECTIONS_VERSION).persist()
     }
