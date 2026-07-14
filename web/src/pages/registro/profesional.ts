@@ -126,22 +126,24 @@ function bindProfesionalPage(el: HTMLElement): void {
       });
 
       const tipo = body.querySelector<HTMLSelectElement>('select[name="tipo"]');
-      const espWrap = body.querySelector("#esp-wrap") as HTMLElement;
-      const espOtraWrap = body.querySelector("#esp-otra-wrap") as HTMLElement;
+      const espWrap = body.querySelector("#esp-wrap") as HTMLElement | null;
+      const espOtraWrap = body.querySelector("#esp-otra-wrap") as HTMLElement | null;
       const espSelect = body.querySelector<HTMLSelectElement>('select[name="especialidad"]');
-      const syncEsp = (): void => {
-        const esGeneral = tipo?.value === "general";
-        espWrap.hidden = esGeneral;
-        if (esGeneral) {
-          espOtraWrap.hidden = true;
-          if (espSelect) espSelect.value = "";
-        } else {
-          espOtraWrap.hidden = espSelect?.value !== "Otra";
-        }
-      };
-      tipo?.addEventListener("change", syncEsp);
-      espSelect?.addEventListener("change", syncEsp);
-      syncEsp();
+      if (tipo && espWrap && espOtraWrap) {
+        const syncEsp = (): void => {
+          const esGeneral = tipo.value === "general";
+          espWrap.hidden = esGeneral;
+          if (esGeneral) {
+            espOtraWrap.hidden = true;
+            if (espSelect) espSelect.value = "";
+          } else {
+            espOtraWrap.hidden = espSelect?.value !== "Otra";
+          }
+        };
+        tipo.addEventListener("change", syncEsp);
+        espSelect?.addEventListener("change", syncEsp);
+        syncEsp();
+      }
 
       body.querySelector("#prof-login")?.addEventListener("submit", async (e) => {
         e.preventDefault();
