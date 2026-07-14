@@ -1,4 +1,4 @@
-async function sendPinResetEmail(to, nombre, link) {
+async function sendPinResetEmail(to, nombre, link, secretKind = "pin") {
   const key = process.env.RESEND_API_KEY;
   if (!key) throw new Error("RESEND_API_KEY no configurada en Vercel");
 
@@ -12,6 +12,12 @@ async function sendPinResetEmail(to, nombre, link) {
     );
   }
 
+  const isPassword = secretKind === "password";
+  const subject = isPassword
+    ? "Restablecer contraseña — Clínicos Doc"
+    : "Restablecer PIN — Clínicos Doc";
+  const accion = isPassword ? "contraseña" : "PIN";
+
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -21,11 +27,11 @@ async function sendPinResetEmail(to, nombre, link) {
     body: JSON.stringify({
       from,
       to: [to],
-      subject: "Restablecer PIN — Clínicos Doc",
+      subject,
       html: `
         <p>Hola${nombre ? ` ${nombre}` : ""},</p>
-        <p>Recibimos una solicitud para restablecer su PIN en Clínicos Doc.</p>
-        <p><a href="${link}">Haga clic aquí para crear un PIN nuevo</a></p>
+        <p>Recibimos una solicitud para restablecer su ${accion} en Clínicos Doc.</p>
+        <p><a href="${link}">Haga clic aquí para crear un ${accion} nuevo</a></p>
         <p>El enlace vence en 1 hora. Si no solicitó esto, ignore este correo.</p>
         <p style="color:#666;font-size:12px">clinicosdoc.com</p>
       `,

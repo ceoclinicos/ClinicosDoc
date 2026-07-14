@@ -7,15 +7,28 @@ registerRoute({
   path: "/olvide-pin",
   title: "Olvidé mi PIN",
   render: () => {
+    const params = new URLSearchParams(window.location.hash.split("?")[1] || "");
+    const tipoPref = params.get("tipo") || "paciente";
+
     const el = page(
-      "Olvidé mi PIN",
+      "Recuperar acceso",
       `
-      <p class="lead">Ingrese su cédula. Si está registrado, enviaremos un enlace a su correo.</p>
+      <p class="lead">Ingrese su cédula. Si tiene correo registrado, le enviaremos un enlace.</p>
       <form class="form" id="form-olvide-pin">
+        <label>Tipo de cuenta
+          <select name="tipo">
+            <option value="paciente" ${tipoPref === "paciente" ? "selected" : ""}>Paciente</option>
+            <option value="profesional" ${tipoPref === "profesional" || tipoPref === "medico" ? "selected" : ""}>Médico (web)</option>
+            <option value="app" ${tipoPref === "app" ? "selected" : ""}>Médico (app Android)</option>
+          </select>
+        </label>
         <label>Cédula<input name="cedula" required placeholder="Ej. 23536843" inputmode="numeric" /></label>
         <button type="submit" class="btn btn-primary">Enviar enlace</button>
       </form>
-      <p class="muted"><a href="#/paciente">← Volver al portal paciente</a></p>
+      <p class="muted">
+        <a href="#/paciente">Portal paciente</a> ·
+        <a href="#/profesional">Portal médico</a>
+      </p>
       <div id="olvide-msg"></div>
       `,
     );
@@ -28,7 +41,7 @@ registerRoute({
       btn.disabled = true;
       msg.innerHTML = `<p class="muted">Enviando…</p>`;
       try {
-        const text = await requestPinReset(String(fd.get("cedula")));
+        const text = await requestPinReset(String(fd.get("cedula")), String(fd.get("tipo") || "paciente"));
         msg.innerHTML = `<p class="status-badge status-ok">${text}</p>`;
         (e.target as HTMLFormElement).reset();
       } catch (err) {

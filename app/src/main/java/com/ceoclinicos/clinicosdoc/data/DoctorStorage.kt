@@ -28,6 +28,7 @@ object DoctorStorage {
             .remove("${PREFIX}sexo")
             .remove("${PREFIX}especialidad")
             .remove("${PREFIX}whatsapp")
+            .remove("${PREFIX}correo")
             .apply()
     }
 
@@ -41,6 +42,7 @@ object DoctorStorage {
             sexo = p.getString("${PREFIX}sexo", "") ?: "",
             especialidad = p.getString("${PREFIX}especialidad", "") ?: "",
             whatsapp = p.getString("${PREFIX}whatsapp", "") ?: "",
+            correo = p.getString("${PREFIX}correo", "") ?: "",
         )
     }
 
@@ -53,6 +55,7 @@ object DoctorStorage {
             putString("${PREFIX}sexo", profile.sexo)
             putString("${PREFIX}especialidad", profile.especialidad)
             putString("${PREFIX}whatsapp", profile.whatsapp)
+            putString("${PREFIX}correo", profile.correo)
             putBoolean(REGISTERED_KEY, true)
             persist()
         }
@@ -66,6 +69,7 @@ object DoctorStorage {
             putString("${PREFIX}sexo", profile.sexo)
             putString("${PREFIX}especialidad", profile.especialidad)
             putString("${PREFIX}whatsapp", profile.whatsapp)
+            putString("${PREFIX}correo", profile.correo)
             putBoolean(REGISTERED_KEY, true)
             persist()
         }

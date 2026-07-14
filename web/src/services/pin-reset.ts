@@ -29,13 +29,13 @@ function fail(res: Response, data: ApiPayload, raw: string, fallback: string): n
   });
 }
 
-export async function requestPinReset(cedula: string): Promise<string> {
+export async function requestPinReset(cedula: string, tipo = "paciente"): Promise<string> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/api/pin-reset-request`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cedula }),
+      body: JSON.stringify({ cedula, tipo }),
     });
   } catch (err) {
     throw new ApiCallError("No se pudo conectar con el servidor", {
@@ -49,13 +49,21 @@ export async function requestPinReset(cedula: string): Promise<string> {
   return data.message || "Revise su correo.";
 }
 
-export async function confirmPinReset(token: string, pin: string): Promise<string> {
+export async function confirmPinReset(
+  token: string,
+  secret: string,
+  modo: "pin" | "password" = "pin",
+): Promise<string> {
   let res: Response;
   try {
+    const body =
+      modo === "password"
+        ? { token, password: secret }
+        : { token, pin: secret };
     res = await fetch(`${API_BASE}/api/pin-reset-confirm`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, pin }),
+      body: JSON.stringify(body),
     });
   } catch (err) {
     throw new ApiCallError("No se pudo conectar con el servidor", {
@@ -65,6 +73,6 @@ export async function confirmPinReset(token: string, pin: string): Promise<strin
   }
 
   const { data, raw } = await readApiResponse(res);
-  if (!res.ok) fail(res, data, raw, "No se pudo restablecer el PIN");
-  return data.message || "PIN actualizado.";
+  if (!res.ok) fail(res, data, raw, "No se pudo restablecer el acceso");
+  return data.message || "Actualizado.";
 }

@@ -59,6 +59,9 @@ import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
 import com.ceoclinicos.clinicosdoc.service.DoctorAuthService
 import com.ceoclinicos.clinicosdoc.service.MppsValidationService
+import com.ceoclinicos.clinicosdoc.service.PinResetService
+import androidx.compose.material.icons.outlined.Email
+import androidx.compose.material3.TextButton
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumTextField
@@ -87,6 +90,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
     var nombre by remember { mutableStateOf("") }
     var cedula by remember { mutableStateOf("") }
     var mpps by remember { mutableStateOf("") }
+    var correo by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var sexo by remember { mutableStateOf<String?>(null) }
     var especialidad by remember { mutableStateOf<String?>(null) }
@@ -96,6 +100,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
     var nombreError by remember { mutableStateOf<String?>(null) }
     var cedulaError by remember { mutableStateOf<String?>(null) }
     var mppsError by remember { mutableStateOf<String?>(null) }
+    var correoError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var whatsappError by remember { mutableStateOf<String?>(null) }
 
@@ -156,7 +161,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
             Text(
                 when {
                     authMode == AuthMode.LOGIN -> "Usa tu cédula y contraseña"
-                    step == 0 -> "Nombre, cédula, MPPS y contraseña"
+                    step == 0 -> "Nombre, cédula, correo, MPPS y contraseña"
                     else -> "Completa tu información de contacto"
                 },
                 style = MaterialTheme.typography.bodyMedium,
@@ -205,6 +210,25 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                             )
                         }
                     },
+                    onForgotPassword = {
+                        cedulaError = when {
+                            cedula.isBlank() -> "Ingresa tu cédula para recuperar"
+                            !CedulaNormalizer.isValid(cedula) -> "Cédula inválida"
+                            else -> null
+                        }
+                        if (cedulaError != null) return@LoginForm
+                        loading = true
+                        scope.launch {
+                            val result = PinResetService.requestReset(cedula, "app")
+                            loading = false
+                            result.fold(
+                                onSuccess = { msg ->
+                                    showToast(msg)
+                                },
+                                onFailure = { showToast(it.message ?: "No se pudo enviar el correo") },
+                            )
+                        }
+                    },
                 )
 
                 AuthMode.REGISTRO -> when (step) {
@@ -213,12 +237,15 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                         onNombreChange = { nombre = it },
                         cedula = cedula,
                         onCedulaChange = { cedula = it },
+                        correo = correo,
+                        onCorreoChange = { correo = it.trim() },
                         mpps = mpps,
                         onMppsChange = { mpps = it.filter { c -> c.isDigit() } },
                         password = password,
                         onPasswordChange = { password = it },
                         nombreError = nombreError,
                         cedulaError = cedulaError,
+                        correoError = correoError,
                         mppsError = mppsError,
                         passwordError = passwordError,
                         loading = loading,
@@ -229,13 +256,18 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                                 !CedulaNormalizer.isValid(cedula) -> "Cédula inválida"
                                 else -> null
                             }
+                            correoError = when {
+                                correo.isBlank() -> "Ingresa tu correo"
+                                !correo.contains("@") -> "Correo inválido"
+                                else -> null
+                            }
                             mppsError = if (mpps.isBlank()) "Ingresa tu MPPS" else null
                             passwordError = when {
                                 password.isBlank() -> "Ingresa tu contraseña"
                                 password.length < 4 -> "Mínimo 4 caracteres"
                                 else -> null
                             }
-                            if (listOf(nombreError, cedulaError, mppsError, passwordError).any { it != null }) {
+                            if (listOf(nombreError, cedulaError, correoError, mppsError, passwordError).any { it != null }) {
                                 return@RegistrationStep1
                             }
                             loading = true
@@ -305,6 +337,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                                 sexo = sexo!!,
                                 especialidad = especialidadFinal,
                                 whatsapp = whatsapp.trim(),
+                                correo = correo.trim(),
                             )
 
                             loading = true
@@ -348,6 +381,7 @@ private fun LoginForm(
     passwordError: String?,
     loading: Boolean,
     onLogin: () -> Unit,
+    onForgotPassword: () -> Unit,
 ) {
     PremiumTextField(
         "Cédula",
@@ -370,7 +404,11 @@ private fun LoginForm(
         isError = passwordError != null,
         errorMessage = passwordError,
     )
-    Spacer(modifier = Modifier.height(32.dp))
+    Spacer(modifier = Modifier.height(8.dp))
+    TextButton(onClick = onForgotPassword, enabled = !loading) {
+        Text("Olvidé mi contraseña")
+    }
+    Spacer(modifier = Modifier.height(16.dp))
     PremiumPrimaryButton(
         label = "Iniciar sesión",
         onClick = onLogin,
@@ -385,12 +423,15 @@ private fun RegistrationStep1(
     onNombreChange: (String) -> Unit,
     cedula: String,
     onCedulaChange: (String) -> Unit,
+    correo: String,
+    onCorreoChange: (String) -> Unit,
     mpps: String,
     onMppsChange: (String) -> Unit,
     password: String,
     onPasswordChange: (String) -> Unit,
     nombreError: String?,
     cedulaError: String?,
+    correoError: String?,
     mppsError: String?,
     passwordError: String?,
     loading: Boolean,
@@ -418,10 +459,20 @@ private fun RegistrationStep1(
     )
     Spacer(modifier = Modifier.height(20.dp))
     PremiumTextField(
+        "Correo electrónico",
+        correo,
+        onCorreoChange,
+        hint = "Para recuperar contraseña",
+        prefixIcon = Icons.Outlined.Email,
+        isError = correoError != null,
+        errorMessage = correoError,
+    )
+    Spacer(modifier = Modifier.height(20.dp))
+    PremiumTextField(
         "MPPS",
         mpps,
         onMppsChange,
-        hint = "Número de registro MPPS",
+        hint = "Se valida con SACS",
         prefixIcon = Icons.Outlined.Verified,
         keyboardOptions = keyboardDigits(),
         isError = mppsError != null,

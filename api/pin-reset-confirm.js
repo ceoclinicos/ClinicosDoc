@@ -1,5 +1,5 @@
 const { getAdmin } = require("./_lib/firebase");
-const { hashPin, assertPin4 } = require("./_lib/pin");
+const { hashPin, assertPin4, hashPassword, assertPassword } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
@@ -12,14 +12,9 @@ module.exports = async function handler(req, res) {
   const body = parseBody(req);
   const token = String(body.token || "").trim();
   const pin = String(body.pin || "");
+  const password = String(body.password || body.pin || "");
 
   if (!token) return res.status(400).json({ error: "Token requerido" });
-
-  try {
-    assertPin4(pin);
-  } catch (e) {
-    return res.status(400).json({ error: e.message });
-  }
 
   try {
     const db = getAdmin().firestore();
@@ -36,13 +31,35 @@ module.exports = async function handler(req, res) {
 
     const cedula = String(data.cedula || "");
     const docId = String(data.docId || cedula);
+    const collection = String(data.collection || "pacientes");
+    const secretKind = String(data.secretKind || "pin");
     if (!docId) return res.status(400).json({ error: "Enlace inválido" });
 
-    // Mismo algoritmo que el login web: SHA-256 de normalizeCedula(cedula):PIN
-    const pinHash = hashPin(cedula, pin);
     const now = new Date().toISOString();
 
-    await db.collection("pacientes").doc(docId).set({ pinHash, updatedAt: now }, { merge: true });
+    if (secretKind === "password" || collection === "clinicosdoc_user") {
+      try {
+        assertPassword(password);
+      } catch (e) {
+        return res.status(400).json({ error: e.message });
+      }
+      const passwordHash = hashPassword(password);
+      await db.collection(collection).doc(docId).set(
+        { passwordHash, updatedAt: now },
+        { merge: true },
+      );
+      await ref.set({ used: true, usedAt: now }, { merge: true });
+      return res.status(200).json({ message: "Contraseña actualizada. Ya puede iniciar sesión en la app." });
+    }
+
+    try {
+      assertPin4(pin);
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
+
+    const pinHash = hashPin(cedula, pin);
+    await db.collection(collection).doc(docId).set({ pinHash, updatedAt: now }, { merge: true });
     await ref.set({ used: true, usedAt: now }, { merge: true });
 
     return res.status(200).json({ message: "PIN actualizado. Ya puede iniciar sesión." });
@@ -51,7 +68,7 @@ module.exports = async function handler(req, res) {
     return apiError(
       res,
       500,
-      "No se pudo actualizar el PIN",
+      "No se pudo actualizar el PIN/contraseña",
       err?.message || String(err),
       "PIN_CONFIRM_FAILED",
     );

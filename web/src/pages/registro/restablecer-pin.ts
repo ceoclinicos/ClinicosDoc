@@ -9,12 +9,25 @@ registerRoute({
   render: () => {
     const hash = window.location.hash || "";
     const query = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
-    const token = new URLSearchParams(query).get("token")?.trim() || "";
+    const params = new URLSearchParams(query);
+    const token = params.get("token")?.trim() || "";
+    const modo = (params.get("modo") || "pin").toLowerCase();
+    const isPassword = modo === "password";
 
     const el = page(
-      "Crear PIN nuevo",
+      isPassword ? "Crear contraseña nueva" : "Crear PIN nuevo",
       token
-        ? `
+        ? isPassword
+          ? `
+      <p class="lead">Elija una contraseña nueva para la app (mínimo 4 caracteres).</p>
+      <form class="form" id="form-nuevo-pin">
+        <label>Contraseña nueva<input name="pin" type="password" minlength="4" required /></label>
+        <label>Confirmar contraseña<input name="pin2" type="password" minlength="4" required /></label>
+        <button type="submit" class="btn btn-primary">Guardar contraseña</button>
+      </form>
+      <div id="reset-msg"></div>
+      `
+          : `
       <p class="lead">Elija un PIN de 4 dígitos para su cuenta.</p>
       <form class="form" id="form-nuevo-pin">
         <label>PIN nuevo (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
@@ -24,7 +37,7 @@ registerRoute({
       <div id="reset-msg"></div>
       `
         : `
-      <p class="status-badge status-error">Enlace inválido. Solicite uno nuevo desde <a href="#/olvide-pin">Olvidé mi PIN</a>.</p>
+      <p class="status-badge status-error">Enlace inválido. Solicite uno nuevo desde <a href="#/olvide-pin">Recuperar acceso</a>.</p>
       `,
     );
 
@@ -36,13 +49,13 @@ registerRoute({
         const pin2 = String(fd.get("pin2"));
         const msg = el.querySelector("#reset-msg") as HTMLElement;
         if (pin !== pin2) {
-          msg.innerHTML = `<p class="status-badge status-error">Los PIN no coinciden</p>`;
+          msg.innerHTML = `<p class="status-badge status-error">Los valores no coinciden</p>`;
           return;
         }
         try {
-          const text = await confirmPinReset(token, pin);
+          const text = await confirmPinReset(token, pin, isPassword ? "password" : "pin");
           msg.innerHTML = `<p class="status-badge status-ok">${text}</p>`;
-          setTimeout(() => navigate("/paciente"), 2000);
+          setTimeout(() => navigate(isPassword ? "/" : "/paciente"), 2000);
         } catch (err) {
           const text = err instanceof Error ? err.message : "Error";
           msg.innerHTML = `<p class="status-badge status-error">${text}</p>
@@ -50,7 +63,7 @@ registerRoute({
           msg.querySelector("#btn-ver-error-reset")?.addEventListener("click", () => {
             showErrorDialog(text, err);
           });
-          showErrorDialog("No se pudo restablecer el PIN", err);
+          showErrorDialog(isPassword ? "No se pudo restablecer la contraseña" : "No se pudo restablecer el PIN", err);
         }
       });
     }

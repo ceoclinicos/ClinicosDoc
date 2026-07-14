@@ -36,6 +36,7 @@ function loginForm(): string {
       <label>Cédula<input name="cedula" required autocomplete="username" /></label>
       <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required autocomplete="current-password" /></label>
       <label>Código MPPS<input name="mpps" required autocomplete="off" /></label>
+      <p class="muted"><a href="#/olvide-pin?tipo=profesional">Olvidé mi PIN</a></p>
       <button type="submit" class="btn btn-primary">Ingresar</button>
     </form>
   `;
@@ -47,6 +48,7 @@ function registerForm(): string {
     <form class="form" id="prof-registro">
       <label>Nombre completo<input name="nombre" required /></label>
       <label>Cédula<input name="cedula" required /></label>
+      <label>Correo electrónico<input name="correo" type="email" required placeholder="para recuperar PIN" /></label>
       <label>
         <span>Tipo</span>
         <select name="tipo">
@@ -156,6 +158,7 @@ function bindProfesionalPage(el: HTMLElement): void {
             especialidad: String(fd.get("especialidad") ?? ""),
             esMedicoGeneral: esGeneral,
             mpps: check.medico.mpps || mpps,
+            correo: String(fd.get("correo")),
             pin: String(fd.get("pin")),
           });
           const s = await loginProfesional(cedula, String(fd.get("pin")), check.medico.mpps || mpps);

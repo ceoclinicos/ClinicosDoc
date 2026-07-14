@@ -26,4 +26,27 @@ function assertPin4(pin) {
   }
 }
 
-module.exports = { normalizeCedula, cedulaLookupKeys, hashPin, assertPin4 };
+function digitsOnly(s) {
+  return String(s || "").replace(/\D/g, "");
+}
+
+/** Hash de contraseña app Android (DoctorAuthService). */
+function hashPassword(password) {
+  return crypto.createHash("sha256").update(String(password), "utf8").digest("hex");
+}
+
+function assertPassword(password) {
+  if (String(password).length < 4) {
+    throw new Error("La contraseña debe tener al menos 4 caracteres");
+  }
+}
+
+module.exports = {
+  normalizeCedula,
+  cedulaLookupKeys,
+  hashPin,
+  assertPin4,
+  digitsOnly,
+  hashPassword,
+  assertPassword,
+};

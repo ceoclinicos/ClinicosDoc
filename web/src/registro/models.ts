@@ -49,6 +49,7 @@ export interface ProfesionalRegistro {
   especialidad: string;
   esMedicoGeneral: boolean;
   mpps: string;
+  correo: string;
   pinHash: string;
   activo: boolean;
   createdAt: string;

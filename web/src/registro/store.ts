@@ -94,10 +94,13 @@ export async function registerProfesional(input: {
   especialidad: string;
   esMedicoGeneral: boolean;
   mpps: string;
+  correo: string;
   pin: string;
 }): Promise<ProfesionalRegistro> {
   const cedula = normalizeCedula(input.cedula);
   assertPin4(input.pin);
+  const correo = input.correo.trim();
+  if (!correo || !correo.includes("@")) throw new Error("Correo electrónico requerido");
   const existing = await getProfesional(cedula);
   if (existing) throw new Error("Ya existe un profesional con esa cédula");
 
@@ -107,6 +110,7 @@ export async function registerProfesional(input: {
     especialidad: input.esMedicoGeneral ? "Médico general" : input.especialidad.trim(),
     esMedicoGeneral: input.esMedicoGeneral,
     mpps: input.mpps.trim(),
+    correo,
     pinHash: await hashPin(cedula, input.pin),
     activo: true,
     createdAt: new Date().toISOString(),

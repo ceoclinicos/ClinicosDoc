@@ -59,6 +59,9 @@ object DoctorAuthService {
         if (profile.mpps.isBlank()) {
             return Result.failure(IllegalStateException("Código MPPS requerido"))
         }
+        if (profile.correo.isBlank() || !profile.correo.contains("@")) {
+            return Result.failure(IllegalStateException("Correo electrónico requerido"))
+        }
         if (password.length < 4) {
             return Result.failure(IllegalStateException("La contraseña debe tener al menos 4 caracteres"))
         }
@@ -89,6 +92,7 @@ object DoctorAuthService {
                     "sexo" to profileValidated.sexo,
                     "especialidad" to profileValidated.especialidad,
                     "whatsapp" to profileValidated.whatsapp,
+                    "correo" to profileValidated.correo.trim(),
                     "passwordHash" to hashPassword(password),
                     "mppsValidado" to true,
                     "profesionSacs" to validated.profesion,
@@ -153,5 +157,6 @@ object DoctorAuthService {
         sexo = getString("sexo").orEmpty(),
         especialidad = getString("especialidad").orEmpty(),
         whatsapp = getString("whatsapp").orEmpty(),
+        correo = getString("correo").orEmpty().ifBlank { getString("email").orEmpty() },
     )
 }
