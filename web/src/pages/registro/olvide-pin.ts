@@ -13,7 +13,7 @@ registerRoute({
     const el = page(
       "Recuperar acceso",
       `
-      <p class="lead">Ingrese su cédula. Si tiene correo registrado, le enviaremos un enlace.</p>
+      <p class="lead">Ingrese su cédula. Si tiene correo registrado, le enviaremos un enlace para restablecer su PIN (contraseña).</p>
       <form class="form" id="form-olvide-pin">
         <label>Tipo de cuenta
           <select name="tipo">

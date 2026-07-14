@@ -34,9 +34,9 @@ function loginForm(): string {
     ${tabs("login")}
     <form class="form" id="prof-login">
       <label>Cédula<input name="cedula" required autocomplete="username" /></label>
-      <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required autocomplete="current-password" /></label>
+      <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required autocomplete="current-password" /></label>
       <label>Código MPPS<input name="mpps" required autocomplete="off" /></label>
-      <p class="muted"><a href="#/olvide-pin?tipo=profesional">Olvidé mi PIN</a></p>
+      <p class="muted"><a href="#/olvide-pin?tipo=profesional">Olvidé mi PIN (contraseña)</a></p>
       <button type="submit" class="btn btn-primary">Ingresar</button>
     </form>
   `;
@@ -48,7 +48,7 @@ function registerForm(): string {
     <form class="form" id="prof-registro">
       <label>Nombre completo<input name="nombre" required /></label>
       <label>Cédula<input name="cedula" required /></label>
-      <label>Correo electrónico<input name="correo" type="email" required placeholder="para recuperar PIN" /></label>
+      <label>Correo electrónico<input name="correo" type="email" required placeholder="para recuperar PIN (contraseña)" /></label>
       <label>
         <span>Tipo</span>
         <select name="tipo">
@@ -59,7 +59,7 @@ function registerForm(): string {
       <label id="esp-wrap" hidden>Especialidad<input name="especialidad" placeholder="Ej. Traumatología" /></label>
       <label>Código MPPS<input name="mpps" required placeholder="Ej. 154472" /></label>
       <p class="muted">Se valida contra el registro SACS (cédula + MPPS deben coincidir).</p>
-      <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+      <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
       <button type="submit" class="btn btn-primary">Registrar profesional</button>
     </form>
   `;

@@ -28,11 +28,11 @@ registerRoute({
       <div id="reset-msg"></div>
       `
           : `
-      <p class="lead">Elija un PIN de 4 dígitos para su cuenta.</p>
+      <p class="lead">Elija un PIN (contraseña) de 4 dígitos para su cuenta.</p>
       <form class="form" id="form-nuevo-pin">
-        <label>PIN nuevo (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
-        <label>Confirmar PIN<input name="pin2" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
-        <button type="submit" class="btn btn-primary">Guardar PIN</button>
+        <label>PIN nuevo (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+        <label>Confirmar PIN (contraseña)<input name="pin2" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+        <button type="submit" class="btn btn-primary">Guardar PIN (contraseña)</button>
       </form>
       <div id="reset-msg"></div>
       `

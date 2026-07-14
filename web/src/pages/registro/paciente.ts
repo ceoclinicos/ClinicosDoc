@@ -29,8 +29,8 @@ function bindPacientePage(el: HTMLElement): void {
           ${tabs("consultar")}
           <form class="form" id="pac-login">
             <label>Cédula<input name="cedula" required placeholder="Ej. V-12345678" /></label>
-            <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
-            <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN</a></p>
+            <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+            <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN (contraseña)</a></p>
             <button type="submit" class="btn btn-primary">Ver mis registros</button>
           </form>
         `
@@ -50,7 +50,7 @@ function bindPacientePage(el: HTMLElement): void {
             </label>
             <label>Teléfono<input name="telefono" type="tel" required placeholder="0412…" /></label>
             <label>Correo<input name="correo" type="email" required /></label>
-            <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+            <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
             <button type="submit" class="btn btn-primary">Registrarme</button>
           </form>
         `;
@@ -157,8 +157,8 @@ registerRoute({
         ${tabs("consultar")}
         <form class="form" id="pac-login">
           <label>Cédula<input name="cedula" required placeholder="Ej. V-12345678" /></label>
-          <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
-          <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN</a></p>
+          <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+          <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN (contraseña)</a></p>
           <button type="submit" class="btn btn-primary">Ver mis registros</button>
         </form>
       `,
