@@ -27,6 +27,7 @@ export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => v
     <div class="shell">
       <header class="topbar">
         <a href="#/" class="brand-row">
+          <img src="/img/logo.png" alt="Clínicos Doc" class="brand-logo" width="40" height="40" />
           <span class="brand">Clínicos Doc</span>
           <img src="/img/bandera_venezuela.png" alt="Bandera de Venezuela" class="brand-flag" width="48" height="32" />
         </a>
