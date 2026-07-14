@@ -71,6 +71,7 @@ import com.ceoclinicos.clinicosdoc.ui.components.keyboardPhone
 import com.ceoclinicos.clinicosdoc.ui.theme.DividerColor
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
+import com.ceoclinicos.clinicosdoc.model.EspecialidadesMedicas
 import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
 
 import kotlinx.coroutines.launch
@@ -106,11 +107,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
 
     val firebaseReady = remember(context) { DoctorAuthService.isConfigured(context) }
     val sexos = listOf("Masculino", "Femenino", "Otro")
-    val especialidades = listOf(
-        "Medicina general", "Medicina interna", "Pediatría", "Ginecología",
-        "Cardiología", "Dermatología", "Traumatología", "Neurología",
-        "Psiquiatría", "Cirugía general", "Otra",
-    )
+    val especialidades = EspecialidadesMedicas.LISTA
 
     fun showToast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
 
@@ -255,7 +252,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                         onEspecialidadChange = { especialidad = it },
                         especialidadOtra = especialidadOtra,
                         onEspecialidadOtraChange = { especialidadOtra = it },
-                        especialidades = especialidades.filter { it != "Medicina general" },
+                        especialidades = especialidades,
                         mpps = mpps,
                         onMppsChange = { mpps = it.filter { c -> c.isDigit() } },
                         password = password,

@@ -18,7 +18,12 @@ import {
 } from "../../registro/session";
 import type { AtencionRegistro, PacienteRegistro } from "../../registro/models";
 import { validarMpps } from "../../services/mpps-validation";
+import { ESPECIALIDADES_MEDICAS_VE } from "../../registro/especialidades";
 import { bindNavButtons, page } from "../helpers";
+
+function especialidadOptions(): string {
+  return ESPECIALIDADES_MEDICAS_VE.map((e) => `<option value="${e}">${e}</option>`).join("");
+}
 
 function tabs(active: "login" | "registro"): string {
   return `
@@ -56,9 +61,16 @@ function registerForm(): string {
           <option value="especialista">Especialista</option>
         </select>
       </label>
-      <label id="esp-wrap" hidden>Especialidad<input name="especialidad" placeholder="Ej. Traumatología" /></label>
+      <label id="esp-wrap" hidden>
+        Especialidad
+        <select name="especialidad">
+          <option value="">Seleccione…</option>
+          ${especialidadOptions()}
+        </select>
+      </label>
+      <label id="esp-otra-wrap" hidden>Otra especialidad<input name="especialidad_otra" placeholder="Escriba su especialidad" /></label>
       <label>Código MPPS<input name="mpps" required placeholder="Ej. 154472" /></label>
-      <p class="muted">Se valida contra el registro SACS (cédula + MPPS deben coincidir).</p>
+      <p class="muted">Se valida en vivo contra SACS (cédula + MPPS deben coincidir).</p>
       <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
       <button type="submit" class="btn btn-primary">Registrar profesional</button>
     </form>
@@ -115,9 +127,21 @@ function bindProfesionalPage(el: HTMLElement): void {
 
       const tipo = body.querySelector<HTMLSelectElement>('select[name="tipo"]');
       const espWrap = body.querySelector("#esp-wrap") as HTMLElement;
-      tipo?.addEventListener("change", () => {
-        espWrap.hidden = tipo.value === "general";
-      });
+      const espOtraWrap = body.querySelector("#esp-otra-wrap") as HTMLElement;
+      const espSelect = body.querySelector<HTMLSelectElement>('select[name="especialidad"]');
+      const syncEsp = (): void => {
+        const esGeneral = tipo?.value === "general";
+        espWrap.hidden = esGeneral;
+        if (esGeneral) {
+          espOtraWrap.hidden = true;
+          if (espSelect) espSelect.value = "";
+        } else {
+          espOtraWrap.hidden = espSelect?.value !== "Otra";
+        }
+      };
+      tipo?.addEventListener("change", syncEsp);
+      espSelect?.addEventListener("change", syncEsp);
+      syncEsp();
 
       body.querySelector("#prof-login")?.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -145,6 +169,14 @@ function bindProfesionalPage(el: HTMLElement): void {
         try {
           const cedula = String(fd.get("cedula"));
           const mpps = String(fd.get("mpps"));
+          let especialidad = String(fd.get("especialidad") ?? "").trim();
+          if (!esGeneral) {
+            if (!especialidad) throw new Error("Seleccione su especialidad");
+            if (especialidad === "Otra") {
+              especialidad = String(fd.get("especialidad_otra") ?? "").trim();
+              if (!especialidad) throw new Error("Escriba su especialidad");
+            }
+          }
           const check = await validarMpps(cedula, mpps);
           let nombre = String(fd.get("nombre")).trim();
           if (!nombre && check.medico.nombreCompleto) {
@@ -155,7 +187,7 @@ function bindProfesionalPage(el: HTMLElement): void {
           await registerProfesional({
             cedula,
             nombre,
-            especialidad: String(fd.get("especialidad") ?? ""),
+            especialidad,
             esMedicoGeneral: esGeneral,
             mpps: check.medico.mpps || mpps,
             correo: String(fd.get("correo")),
