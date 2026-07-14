@@ -444,6 +444,7 @@ private fun LoginForm(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RegistrationStep1(
     nombre: String,

@@ -72,6 +72,7 @@ object DocumentPdfExporter {
         var page = pdf.startPage(pageInfo)
         var canvas = page.canvas
         var y = MARGIN
+        val membrete = document.membrete ?: PatientMembrete.forDocument(document)
 
         fun newPageIfNeeded(extra: Float = LINE_HEIGHT) {
             if (y + extra > PAGE_HEIGHT - MARGIN) {
@@ -82,6 +83,18 @@ object DocumentPdfExporter {
                 canvas = page.canvas
                 y = MARGIN
             }
+        }
+
+        fun drawReportDateTopRight() {
+            val dateText = membrete.displayFecha()
+            if (dateText == "—") return
+            val paint = Paint(metaPaint).apply {
+                textSize = 11f
+                color = android.graphics.Color.BLACK
+            }
+            val width = paint.measureText(dateText)
+            canvas.drawText(dateText, PAGE_WIDTH - MARGIN - width, y, paint)
+            y += LINE_HEIGHT + 6f
         }
 
         fun drawLineAt(x: Float, text: String, paint: Paint = bodyPaint) {
@@ -197,7 +210,7 @@ object DocumentPdfExporter {
             drawField("Nombre", membrete.displayNombre())
             drawField("Edad", membrete.displayEdad())
             drawField("Sexo", membrete.displaySexo())
-            drawField("Fecha", membrete.displayFecha(), addGap = false)
+            drawField("Fecha de nacimiento", membrete.displayFechaNacimiento(), addGap = false)
             y += LINE_HEIGHT
         }
 
@@ -215,6 +228,9 @@ object DocumentPdfExporter {
                 }
             }
         }
+
+        // Fecha del día: esquina superior derecha, encima del encabezado.
+        drawReportDateTopRight()
 
         document.headerSnapshot?.let { header ->
             val headerStartY = y
@@ -280,7 +296,6 @@ object DocumentPdfExporter {
         drawCentered(document.type.reportTitle, titlePaint)
         y += 6f
 
-        val membrete = document.membrete ?: PatientMembrete.forDocument(document)
         drawMembreteLine(membrete)
         y += 8f
 

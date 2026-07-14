@@ -412,6 +412,7 @@ object CloudSyncService {
         membreteNombre = membrete?.nombre,
         membreteEdad = membrete?.edad,
         membreteSexo = membrete?.sexo,
+        membreteFechaNacimiento = membrete?.fechaNacimiento,
         membreteFecha = membrete?.fecha,
         doctorId = doctorId,
         doctorNombre = doctorNombre,
@@ -463,13 +464,19 @@ object CloudSyncService {
     )
 
     private fun ClinicalDocumentDto.toMembrete(): PatientMembrete? {
-        val hasData = listOf(membreteNombre, membreteEdad, membreteSexo, membreteFecha)
-            .any { !it.isNullOrBlank() }
+        val hasData = listOf(
+            membreteNombre,
+            membreteEdad,
+            membreteSexo,
+            membreteFechaNacimiento,
+            membreteFecha,
+        ).any { !it.isNullOrBlank() }
         if (!hasData) return null
         return PatientMembrete(
             nombre = membreteNombre.orEmpty(),
             edad = membreteEdad.orEmpty(),
             sexo = membreteSexo.orEmpty(),
+            fechaNacimiento = membreteFechaNacimiento.orEmpty(),
             fecha = membreteFecha.orEmpty(),
         )
     }

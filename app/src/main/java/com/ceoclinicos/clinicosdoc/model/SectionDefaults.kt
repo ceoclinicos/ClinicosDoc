@@ -2,9 +2,14 @@ package com.ceoclinicos.clinicosdoc.model
 
 /** Textos predeterminados para secciones activas sin datos en el dictado. */
 object SectionDefaults {
+    /** Igual en Informe e Historia clínica: solo síntomas llamativos. */
+    const val MOTIVO_CONSULTA_STYLE =
+        "- Motivo de consulta: SOLO síntomas principales (máximo 3), unidos con \"y\"/\"e\". " +
+            "Ejemplo: \"diarrea y vómito\". PROHIBIDO frases largas, \"consulta por…\", evolución, antecedentes o diagnóstico."
+
     fun textFor(section: String): String = when {
         section.equals(SectionCatalog.MOTIVO_CONSULTA, ignoreCase = true) ->
-            "Consulta por evaluación médica."
+            "Evaluación médica."
         section.equals(SectionCatalog.ENFERMEDAD_ACTUAL, ignoreCase = true) ->
             "Paciente refiere cuadro clínico de evolución reciente. Sin mayores detalles aportados en la evaluación actual."
         section.equals(SectionCatalog.ANTECEDENTES_PERSONALES, ignoreCase = true) ->

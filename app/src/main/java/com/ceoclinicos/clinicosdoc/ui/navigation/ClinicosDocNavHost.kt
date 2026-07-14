@@ -102,7 +102,6 @@ fun ClinicosDocNavHost() {
                 informeRefreshKey = informeRefreshKey,
                 onPatientTabSelected = { patientRefreshKey++ },
                 onInformeTabSelected = { informeRefreshKey++ },
-                onOpenInformeTab = { informeRefreshKey++ },
                 onOpenInforme = { docId -> navController.navigate(Routes.informeDetail(docId)) },
             )
         }

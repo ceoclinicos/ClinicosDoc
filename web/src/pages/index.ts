@@ -5,6 +5,7 @@ import "./patients";
 import "./documents";
 import "./drafts";
 import "./redactar";
+import "./settings";
 import "./plantillas/hub";
 import "./plantillas/physical-exam";
 import "./plantillas/templates";

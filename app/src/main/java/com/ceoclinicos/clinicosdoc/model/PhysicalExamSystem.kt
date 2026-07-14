@@ -20,6 +20,32 @@ object PhysicalExamDefaults {
         "neurologico" to 7,
     )
 
+    /** Reordena IDs activos al orden clínico fijo (ignora el orden de activación). */
+    fun orderEnabledIds(ids: List<String>): List<String> {
+        val unique = ids.distinct()
+        return unique.sortedWith(
+            compareBy(
+                { displayPriority[it] ?: 100 },
+                { it },
+            ),
+        )
+    }
+
+    fun priorityForName(name: String): Int {
+        val n = name.trim().lowercase()
+        return when {
+            n.startsWith("signos") -> 0
+            n.startsWith("general") -> 1
+            n.startsWith("piel") -> 2
+            n.startsWith("cabeza") -> 3
+            n.startsWith("cardiopulmonar") || n.startsWith("cardio") -> 4
+            n.startsWith("abdomen") -> 5
+            n.startsWith("extremidades") -> 6
+            n.startsWith("neurol") -> 7
+            else -> 100
+        }
+    }
+
     val builtIn: List<PhysicalExamSystem> = listOf(
         PhysicalExamSystem(
             id = "signos_vitales",

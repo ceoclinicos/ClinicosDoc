@@ -43,14 +43,14 @@ fun PlantillasHubScreen(
         SettingsTile(
             icon = Icons.Outlined.ViewHeadline,
             title = "Encabezados",
-            subtitle = "Logo, nombre de clínica o médico",
+            subtitle = "Hasta 4: logo, clínica o médico",
             onClick = onOpenHeaders,
         )
         Spacer(modifier = Modifier.height(12.dp))
         SettingsTile(
             icon = Icons.Outlined.Description,
             title = "Informes y historias",
-            subtitle = "Plantillas de informe, historia clínica y reposo",
+            subtitle = "Una plantilla por tipo (personalizar)",
             onClick = onOpenDocumentTemplates,
         )
         Spacer(modifier = Modifier.height(12.dp))

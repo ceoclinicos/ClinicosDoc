@@ -38,7 +38,6 @@ fun MainShell(
     informeRefreshKey: Int,
     onPatientTabSelected: () -> Unit,
     onInformeTabSelected: () -> Unit,
-    onOpenInformeTab: () -> Unit,
     onOpenInforme: (String) -> Unit,
 ) {
     var currentIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -71,11 +70,6 @@ fun MainShell(
                 0 -> HomeScreen(
                     onOpenSettings = onOpenSettings,
                     onRedactar = onRedactar,
-                    onAddPatient = onAddPatient,
-                    onOpenInformes = {
-                        currentIndex = 2
-                        onOpenInformeTab()
-                    },
                     onOpenPlantillas = onOpenPlantillas,
                     onOpenDrafts = onOpenDrafts,
                 )

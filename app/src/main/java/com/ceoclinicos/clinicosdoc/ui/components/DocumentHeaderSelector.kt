@@ -48,6 +48,7 @@ fun DocumentHeaderSelector(
     onHeadersRefresh: () -> Unit,
     openEditHeaderId: String? = null,
     onOpenEditConsumed: () -> Unit = {},
+    canCreateNew: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     var editingHeaderId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -169,9 +170,17 @@ fun DocumentHeaderSelector(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
-            OutlinedButton(onClick = onCreateNew, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Text("Crear nuevo encabezado", modifier = Modifier.padding(start = 8.dp))
+            if (canCreateNew) {
+                OutlinedButton(onClick = onCreateNew, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Text("Crear nuevo encabezado", modifier = Modifier.padding(start = 8.dp))
+                }
+            } else {
+                Text(
+                    "Máximo 4 encabezados. Edita o elimina uno existente para crear otro.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                )
             }
 
             selectedHeader?.let { header ->

@@ -85,6 +85,7 @@ import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
 import com.ceoclinicos.clinicosdoc.model.Patient
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
+import com.ceoclinicos.clinicosdoc.model.PhysicalExamDefaults
 import com.ceoclinicos.clinicosdoc.model.PhysicalExamSystem
 import com.ceoclinicos.clinicosdoc.model.ReportSessionConfig
 import com.ceoclinicos.clinicosdoc.service.AiService
@@ -93,6 +94,7 @@ import com.ceoclinicos.clinicosdoc.service.SpeechService
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
 import com.ceoclinicos.clinicosdoc.ui.components.DocumentHeaderSelector
 import com.ceoclinicos.clinicosdoc.ui.components.DocumentPdfActions
+import com.ceoclinicos.clinicosdoc.ui.components.DocumentReportDateEditor
 import com.ceoclinicos.clinicosdoc.ui.components.EditableDocumentContent
 import com.ceoclinicos.clinicosdoc.ui.components.PatientMembreteEditor
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
@@ -114,8 +116,20 @@ private val RedactarStepSaver = Saver<RedactarStep, String>(
 )
 
 private val PatientMembreteSaver = Saver<PatientMembrete, List<String>>(
-    save = { listOf(it.nombre, it.edad, it.sexo, it.fecha) },
-    restore = { PatientMembrete(it[0], it[1], it[2], it[3]) },
+    save = { listOf(it.nombre, it.edad, it.sexo, it.fechaNacimiento, it.fecha) },
+    restore = {
+        when (it.size) {
+            5 -> PatientMembrete(it[0], it[1], it[2], it[3], it[4])
+            4 -> PatientMembrete(
+                nombre = it[0],
+                edad = it[1],
+                sexo = it[2],
+                fechaNacimiento = "",
+                fecha = it[3],
+            )
+            else -> PatientMembrete()
+        }
+    },
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -216,7 +230,9 @@ fun RedactarFlowScreen(
 
     fun applyTemplateConfig(tpl: DocumentTemplate) {
         val config = tpl.toSessionConfig()
-        enabledExamIds = config.enabledPhysicalExamSystemIds
+        enabledExamIds = PhysicalExamDefaults.orderEnabledIds(
+            config.enabledPhysicalExamSystemIds.ifEmpty { PhysicalExamDefaults.defaultEnabledIds },
+        )
         examTextOverrides = config.physicalExamTextOverrides
         enfermedadActualEjemplo = config.enfermedadActualEjemplo.ifBlank {
             EnfermedadActualStorage.load(context)
@@ -498,8 +514,9 @@ fun RedactarFlowScreen(
                     examCatalog = examCatalog,
                     enabledExamIds = enabledExamIds,
                     onEnabledExamIdsChange = {
-                        enabledExamIds = it
-                        persistTemplateConfig(ids = it)
+                        val ordered = PhysicalExamDefaults.orderEnabledIds(it)
+                        enabledExamIds = ordered
+                        persistTemplateConfig(ids = ordered)
                     },
                     examTextOverrides = examTextOverrides,
                     onExamTextOverridesChange = {
@@ -511,6 +528,7 @@ fun RedactarFlowScreen(
                         enfermedadActualEjemplo = it
                         persistTemplateConfig(ejemplo = it)
                     },
+                    canChangeTemplate = availableTemplates.size > 1,
                     onChangeTemplate = { showTemplatePicker = true },
                     onContinue = {
                         persistTemplateConfig()
@@ -654,6 +672,11 @@ fun RedactarFlowScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(24.dp),
                 ) {
+                    DocumentReportDateEditor(
+                        fecha = membrete.fecha,
+                        onFechaChange = { membrete = membrete.copy(fecha = it) },
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     DocumentHeaderSelector(
                         headers = availableHeaders,
                         selectedHeader = header,
@@ -664,17 +687,25 @@ fun RedactarFlowScreen(
                             }
                         },
                         onCreateNew = {
-                            val doctorProfile = doctor
-                            val newHeader = if (doctorProfile != null) {
-                                HeaderStorage.createFromDoctor(doctorProfile)
+                            if (!HeaderStorage.canAdd(context)) {
+                                Toast.makeText(
+                                    context,
+                                    "Máximo ${HeaderStorage.MAX_HEADERS} encabezados",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
                             } else {
-                                HeaderStorage.createClinic()
+                                val doctorProfile = doctor
+                                val newHeader = if (doctorProfile != null) {
+                                    HeaderStorage.createFromDoctor(doctorProfile)
+                                } else {
+                                    HeaderStorage.createClinic()
+                                }
+                                HeaderStorage.upsert(context, newHeader)
+                                refreshHeaders()
+                                selectedHeaderId = newHeader.id
+                                header = newHeader
+                                openEditHeaderId = newHeader.id
                             }
-                            HeaderStorage.upsert(context, newHeader)
-                            refreshHeaders()
-                            selectedHeaderId = newHeader.id
-                            header = newHeader
-                            openEditHeaderId = newHeader.id
                         },
                         onHeaderUpdated = { saved ->
                             selectedHeaderId = saved.id
@@ -684,6 +715,7 @@ fun RedactarFlowScreen(
                         onHeadersRefresh = { refreshHeaders() },
                         openEditHeaderId = openEditHeaderId,
                         onOpenEditConsumed = { openEditHeaderId = null },
+                        canCreateNew = HeaderStorage.canAdd(context),
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     HorizontalDivider(modifier = Modifier.fillMaxWidth())

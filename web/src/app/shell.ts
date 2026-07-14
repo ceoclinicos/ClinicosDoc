@@ -1,18 +1,33 @@
-import { getNavRoutes, matchRoute, navigate, onRouteChange } from "./router";
+import { getNavRoutes, isMedicoLoggedIn, matchRoute, navigate, onRouteChange } from "./router";
 import { isUserLoggedIn, logoutAllSessions } from "../registro/session";
 
-function navHtml(): string {
-  const items = getNavRoutes();
+function linksHtml(
+  items: { path: string; title: string; navLabel?: string }[],
+  withLogout: boolean,
+): string {
   const links = items
     .map(
       (r) =>
         `<a href="#${r.path}" class="nav-link" data-path="${r.path}">${r.navLabel ?? r.title}</a>`,
     )
     .join("");
-  const logout = isUserLoggedIn()
-    ? `<button type="button" class="nav-link nav-link-logout" id="btn-nav-logout">Cerrar sesión</button>`
-    : "";
+  const logout =
+    withLogout && isUserLoggedIn()
+      ? `<button type="button" class="nav-link nav-link-logout" id="btn-nav-logout">Cerrar sesión</button>`
+      : "";
   return links + logout;
+}
+
+/** Bottom bar tipo app: Home | Paciente | Informe */
+function bottomNavItems() {
+  if (!isMedicoLoggedIn()) {
+    return getNavRoutes().filter((r) => !r.medicoOnly);
+  }
+  const all = getNavRoutes();
+  const order = ["/", "/pacientes", "/informes"];
+  return order
+    .map((p) => all.find((r) => r.path === p))
+    .filter((r): r is NonNullable<typeof r> => !!r);
 }
 
 function bindLogout(root: HTMLElement): void {
@@ -43,8 +58,8 @@ export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => v
   const bottomnav = root.querySelector("#bottomnav") as HTMLElement;
 
   function renderNav(): void {
-    topnav.innerHTML = navHtml();
-    bottomnav.innerHTML = navHtml();
+    topnav.innerHTML = linksHtml(getNavRoutes(), true);
+    bottomnav.innerHTML = linksHtml(bottomNavItems(), false);
     bindLogout(topnav);
     bindLogout(bottomnav);
 

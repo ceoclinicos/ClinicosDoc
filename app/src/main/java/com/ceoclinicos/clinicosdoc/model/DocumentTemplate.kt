@@ -8,7 +8,7 @@ data class DocumentTemplate(
     val isDefault: Boolean = false,
     /** Orden visual de todas las secciones del catálogo (activas e inactivas). */
     val sectionLayoutOrder: List<String> = emptyList(),
-    /** IDs de sistemas activos en el orden de redacción elegido por el médico. */
+    /** IDs de sistemas activos (se reordenan al orden clínico fijo al generar). */
     val enabledPhysicalExamSystemIds: List<String> = emptyList(),
     /** Textos base personalizados por sistema (solo para esta plantilla). */
     val physicalExamTextOverrides: Map<String, String> = emptyMap(),
@@ -20,8 +20,9 @@ data class DocumentTemplate(
             sections.any { it.equals("Examen físico", ignoreCase = true) }
 
     fun toSessionConfig(): ReportSessionConfig = ReportSessionConfig(
-        enabledPhysicalExamSystemIds = enabledPhysicalExamSystemIds
-            .ifEmpty { PhysicalExamDefaults.defaultEnabledIds },
+        enabledPhysicalExamSystemIds = PhysicalExamDefaults.orderEnabledIds(
+            enabledPhysicalExamSystemIds.ifEmpty { PhysicalExamDefaults.defaultEnabledIds },
+        ),
         physicalExamTextOverrides = physicalExamTextOverrides,
         enfermedadActualEjemplo = enfermedadActualEjemplo,
         activeSections = normalizedSections(),
@@ -29,7 +30,9 @@ data class DocumentTemplate(
     )
 
     fun withSessionConfig(config: ReportSessionConfig): DocumentTemplate = copy(
-        enabledPhysicalExamSystemIds = config.enabledPhysicalExamSystemIds,
+        enabledPhysicalExamSystemIds = PhysicalExamDefaults.orderEnabledIds(
+            config.enabledPhysicalExamSystemIds,
+        ),
         physicalExamTextOverrides = config.physicalExamTextOverrides,
         enfermedadActualEjemplo = config.enfermedadActualEjemplo,
         sections = if (config.activeSections.isNotEmpty()) {

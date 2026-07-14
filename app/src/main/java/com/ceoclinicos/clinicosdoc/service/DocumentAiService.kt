@@ -93,7 +93,7 @@ object DocumentAiService {
                     appendLine(sectionsList)
                     appendLine()
                     appendLine("Guía de estilo técnico por sección (contenido, no formato fijo):")
-                    appendLine("- Motivo de consulta: frase breve, terminología clínica directa.")
+                    appendLine(SectionDefaults.MOTIVO_CONSULTA_STYLE)
                     appendLine("- Enfermedad actual: narrativa cronológica; tiempos, evolución, consultas, paraclínicos y tratamientos si el dictado los trae.")
                     appendLine("- Antecedentes personales: lenguaje semiológico; puede agrupar fisiológicos, socioeconómicos, vacunas y patológicos; \"Niega...\" para negativos.")
                     appendLine("- Antecedentes familiares: relaciones, edades y causas si se conocen; sin inventar.")
@@ -135,7 +135,7 @@ object DocumentAiService {
                     effectiveSections.forEach { appendLine("- $it") }
                     appendLine()
                     appendLine("Guía de estilo:")
-                    appendLine("- Motivo de consulta: frase breve y directa.")
+                    appendLine(SectionDefaults.MOTIVO_CONSULTA_STYLE)
                     appendLine("- Enfermedad actual: párrafo narrativo. Inicia \"Se trata de paciente $sexoTexto de ${patient.edad} años de edad...\"; motivo, síntomas y conducta SOLO según el dictado.")
                     appendLine("- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto.")
                     appendLine("- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.")
@@ -309,7 +309,7 @@ object DocumentAiService {
 
     private fun sectionStyleHint(title: String): String = when {
         title.equals(SectionCatalog.MOTIVO_CONSULTA, ignoreCase = true) ->
-            "- Motivo de consulta: frase breve y directa."
+            SectionDefaults.MOTIVO_CONSULTA_STYLE
         title.equals(SectionCatalog.ENFERMEDAD_ACTUAL, ignoreCase = true) ->
             "- Enfermedad actual: narrativa cronológica con tiempos, evolución y tratamientos del dictado."
         title.contains("Antecedentes personales", ignoreCase = true) ->

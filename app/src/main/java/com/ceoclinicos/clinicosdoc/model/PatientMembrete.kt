@@ -8,6 +8,7 @@ data class PatientMembrete(
     val nombre: String = "",
     val edad: String = "",
     val sexo: String = "",
+    val fechaNacimiento: String = "",
     val fecha: String = "",
 ) {
     fun displayNombre(): String = nombre.trim().ifBlank { "—" }
@@ -21,6 +22,8 @@ data class PatientMembrete(
 
     fun displaySexo(): String = sexo.trim().ifBlank { "—" }
 
+    fun displayFechaNacimiento(): String = fechaNacimiento.trim().ifBlank { "—" }
+
     fun displayFecha(): String = fecha.trim().ifBlank { "—" }
 
     companion object {
@@ -32,6 +35,7 @@ data class PatientMembrete(
                 nombre = patient.nombre,
                 edad = patient.edad.toString(),
                 sexo = patient.sexo,
+                fechaNacimiento = dateFormatter.format(patient.fechaNacimiento),
                 fecha = dateFormatter.format(at),
             )
 
@@ -47,6 +51,8 @@ data class PatientMembrete(
                 sexo = stored?.sexo?.takeIf { it.isNotBlank() }
                     ?: fromPatient?.sexo
                     ?: patient?.sexo.orEmpty(),
+                fechaNacimiento = stored?.fechaNacimiento?.takeIf { it.isNotBlank() }
+                    ?: fromPatient?.fechaNacimiento.orEmpty(),
                 fecha = stored?.fecha?.takeIf { it.isNotBlank() }
                     ?: fromPatient?.fecha
                     ?: dateFormatter.format(doc.createdAt),

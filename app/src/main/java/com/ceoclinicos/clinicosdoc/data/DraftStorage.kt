@@ -58,6 +58,7 @@ object DraftStorage {
         membreteNombre = membrete?.nombre,
         membreteEdad = membrete?.edad,
         membreteSexo = membrete?.sexo,
+        membreteFechaNacimiento = membrete?.fechaNacimiento,
         membreteFecha = membrete?.fecha,
         createdAt = createdAt.toString(),
         updatedAt = updatedAt.toString(),
@@ -74,11 +75,18 @@ object DraftStorage {
         templateName = templateName,
         headerId = headerId,
         generatedContent = generatedContent,
-        membrete = if (membreteNombre != null || membreteEdad != null || membreteSexo != null || membreteFecha != null) {
+        membrete = if (
+            membreteNombre != null ||
+            membreteEdad != null ||
+            membreteSexo != null ||
+            membreteFechaNacimiento != null ||
+            membreteFecha != null
+        ) {
             PatientMembrete(
                 nombre = membreteNombre.orEmpty(),
                 edad = membreteEdad.orEmpty(),
                 sexo = membreteSexo.orEmpty(),
+                fechaNacimiento = membreteFechaNacimiento.orEmpty(),
                 fecha = membreteFecha.orEmpty(),
             )
         } else {

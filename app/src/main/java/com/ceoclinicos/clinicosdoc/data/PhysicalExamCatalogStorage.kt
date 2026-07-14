@@ -12,7 +12,7 @@ object PhysicalExamCatalogStorage {
     private const val KEY = "physical_exam_catalog_json"
     private const val INITIALIZED_KEY = "physical_exam_catalog_initialized"
     private const val ORDER_VERSION_KEY = "physical_exam_order_version"
-    private const val ORDER_VERSION = 3
+    private const val ORDER_VERSION = 4
     private val gson = Gson()
 
     private fun prefs(context: Context) =
@@ -90,11 +90,13 @@ object PhysicalExamCatalogStorage {
 
     fun resolvedForTemplate(context: Context, enabledIds: List<String>): List<PhysicalExamSystem> {
         val catalog = loadAll(context)
-        val ids = enabledIds.ifEmpty { PhysicalExamDefaults.defaultEnabledIds }
-        return catalog.filter { it.id in ids }.sortedBy { it.sortOrder }
+        val ids = PhysicalExamDefaults.orderEnabledIds(
+            enabledIds.ifEmpty { PhysicalExamDefaults.defaultEnabledIds },
+        )
+        return reportDisplayOrder(catalog.filter { it.id in ids })
     }
 
-    /** Orden de redacción clínico fijo (no depende del sortOrder guardado). */
+    /** Orden de redacción clínico fijo (no depende del orden de activación). */
     fun reportDisplayOrder(systems: List<PhysicalExamSystem>): List<PhysicalExamSystem> {
         return systems.sortedWith(
             compareBy<PhysicalExamSystem>(
@@ -111,22 +113,22 @@ object PhysicalExamCatalogStorage {
         textOverrides: Map<String, String> = emptyMap(),
     ): List<PhysicalExamSystem> {
         val catalog = loadAll(context).associateBy { it.id }
-        val ids = enabledIds.ifEmpty { PhysicalExamDefaults.defaultEnabledIds }
-        return ids.mapNotNull { catalog[it] }.map { system ->
-            textOverrides[system.id]?.let { system.copy(defaultText = it) } ?: system
-        }
+        val ids = PhysicalExamDefaults.orderEnabledIds(
+            enabledIds.ifEmpty { PhysicalExamDefaults.defaultEnabledIds },
+        )
+        return reportDisplayOrder(
+            ids.mapNotNull { catalog[it] }.map { system ->
+                textOverrides[system.id]?.let { system.copy(defaultText = it) } ?: system
+            },
+        )
     }
 
-    /** Orden de la pantalla de configuración: activos primero (orden guardado), luego inactivos. */
+    /** Misma secuencia clínica del informe. */
+    @Suppress("UNUSED_PARAMETER")
     fun displayOrderForConfig(
         catalog: List<PhysicalExamSystem>,
         enabledIds: List<String>,
-    ): List<PhysicalExamSystem> {
-        val byId = catalog.associateBy { it.id }
-        val enabled = enabledIds.mapNotNull { byId[it] }
-        val disabled = reportDisplayOrder(catalog.filter { it.id !in enabledIds.toSet() })
-        return enabled + disabled
-    }
+    ): List<PhysicalExamSystem> = reportDisplayOrder(catalog)
 
     private fun PhysicalExamSystem.toDto() = PhysicalExamSystemCloudDto(
         id = id,

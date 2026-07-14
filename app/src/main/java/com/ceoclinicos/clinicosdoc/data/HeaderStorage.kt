@@ -15,10 +15,15 @@ object HeaderStorage {
     private const val PREFS = "clinicos_doc_prefs"
     private const val KEY = "document_headers_json"
     private const val INITIALIZED_KEY = "headers_initialized"
+    const val MAX_HEADERS = 4
     private val gson = Gson()
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    fun canAdd(context: Context): Boolean = loadAll(context).size < MAX_HEADERS
+
+    fun count(context: Context): Int = loadAll(context).size
 
     suspend fun ensureDefaults(context: Context) {
         if (prefs(context).getBoolean(INITIALIZED_KEY, false)) return
@@ -87,6 +92,10 @@ object HeaderStorage {
 
     fun upsert(context: Context, header: DocumentHeader): DocumentHeader {
         val all = loadAll(context).toMutableList()
+        val idx = all.indexOfFirst { it.id == header.id }
+        if (idx < 0 && all.size >= MAX_HEADERS) {
+            return all.firstOrNull() ?: header
+        }
         if (header.isDefault) {
             for (i in all.indices) {
                 if (all[i].id != header.id) {
@@ -94,9 +103,8 @@ object HeaderStorage {
                 }
             }
         }
-        val idx = all.indexOfFirst { it.id == header.id }
         if (idx >= 0) all[idx] = header else all.add(header)
-        saveAllLocal(context, all)
+        saveAllLocal(context, all.take(MAX_HEADERS))
         SyncCoordinator.afterHeaderSaved(context, header)
         return header
     }

@@ -22,8 +22,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.outlined.Description
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ViewList
 import androidx.compose.material3.Card
@@ -62,8 +60,6 @@ import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 fun HomeScreen(
     onOpenSettings: () -> Unit,
     onRedactar: () -> Unit,
-    onAddPatient: () -> Unit,
-    onOpenInformes: () -> Unit,
     onOpenPlantillas: () -> Unit,
     onOpenDrafts: () -> Unit,
 ) {
@@ -106,24 +102,6 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(28.dp))
         Text("Accesos rápidos", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(16.dp))
-        Row(modifier = Modifier.fillMaxWidth()) {
-            QuickActionCard(
-                icon = Icons.Outlined.Person,
-                label = "Nuevo paciente",
-                color = NavyLight,
-                modifier = Modifier.weight(1f),
-                onClick = onAddPatient,
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            QuickActionCard(
-                icon = Icons.Outlined.FolderOpen,
-                label = "Ver informes",
-                color = Teal,
-                modifier = Modifier.weight(1f),
-                onClick = onOpenInformes,
-            )
-        }
-        Spacer(modifier = Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             QuickActionCard(
                 icon = Icons.Outlined.ViewList,

@@ -58,6 +58,7 @@ import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
 import com.ceoclinicos.clinicosdoc.ui.components.DocumentHeaderSelector
 import com.ceoclinicos.clinicosdoc.ui.components.DocumentPreviewDialog
 import com.ceoclinicos.clinicosdoc.ui.components.EditableDocumentContent
+import com.ceoclinicos.clinicosdoc.ui.components.DocumentReportDateEditor
 import com.ceoclinicos.clinicosdoc.ui.components.DocumentReportLayout
 import com.ceoclinicos.clinicosdoc.ui.components.PatientMembreteEditor
 import com.ceoclinicos.clinicosdoc.ui.theme.DividerColor
@@ -287,6 +288,11 @@ fun InformeDetailScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             if (editing) {
+                DocumentReportDateEditor(
+                    fecha = editableMembrete.fecha,
+                    onFechaChange = { editableMembrete = editableMembrete.copy(fecha = it) },
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 DocumentHeaderSelector(
                     headers = availableHeaders,
                     selectedHeader = selectedHeader,
@@ -297,17 +303,25 @@ fun InformeDetailScreen(
                         }
                     },
                     onCreateNew = {
-                        val doctor = DoctorStorage.loadProfile(context)
-                        val newHeader = if (doctor != null) {
-                            HeaderStorage.createFromDoctor(doctor)
+                        if (!HeaderStorage.canAdd(context)) {
+                            Toast.makeText(
+                                context,
+                                "Máximo ${HeaderStorage.MAX_HEADERS} encabezados",
+                                Toast.LENGTH_SHORT,
+                            ).show()
                         } else {
-                            HeaderStorage.createClinic()
+                            val doctor = DoctorStorage.loadProfile(context)
+                            val newHeader = if (doctor != null) {
+                                HeaderStorage.createFromDoctor(doctor)
+                            } else {
+                                HeaderStorage.createClinic()
+                            }
+                            HeaderStorage.upsert(context, newHeader)
+                            refreshHeaders()
+                            selectedHeaderId = newHeader.id
+                            selectedHeader = newHeader
+                            openEditHeaderId = newHeader.id
                         }
-                        HeaderStorage.upsert(context, newHeader)
-                        refreshHeaders()
-                        selectedHeaderId = newHeader.id
-                        selectedHeader = newHeader
-                        openEditHeaderId = newHeader.id
                     },
                     onHeaderUpdated = { saved ->
                         selectedHeaderId = saved.id
@@ -317,6 +331,7 @@ fun InformeDetailScreen(
                     onHeadersRefresh = { refreshHeaders() },
                     openEditHeaderId = openEditHeaderId,
                     onOpenEditConsumed = { openEditHeaderId = null },
+                    canCreateNew = HeaderStorage.canAdd(context),
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(modifier = Modifier.fillMaxWidth(), color = DividerColor)

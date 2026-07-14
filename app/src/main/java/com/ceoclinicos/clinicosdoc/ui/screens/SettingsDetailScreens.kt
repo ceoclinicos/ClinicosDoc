@@ -1,6 +1,6 @@
 package com.ceoclinicos.clinicosdoc.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
+import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,24 +15,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Label
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -40,18 +35,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import android.widget.Toast
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.data.HeaderStorage
 import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
@@ -78,10 +69,8 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
     var name by remember { mutableStateOf("") }
     var sections by remember { mutableStateOf<List<String>>(emptyList()) }
     var layoutOrder by remember { mutableStateOf<List<String>>(emptyList()) }
-    var isDefault by remember { mutableStateOf(false) }
     var enabledExamIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var examCatalog by remember { mutableStateOf<List<PhysicalExamSystem>>(emptyList()) }
-    var showDelete by remember { mutableStateOf(false) }
 
     LaunchedEffect(templateId) {
         examCatalog = PhysicalExamCatalogStorage.loadAll(context)
@@ -90,7 +79,6 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
             name = it.name
             sections = it.normalizedSections()
             layoutOrder = it.resolvedLayoutOrder()
-            isDefault = it.isDefault
             enabledExamIds = it.enabledPhysicalExamSystemIds.ifEmpty {
                 PhysicalExamDefaults.defaultEnabledIds
             }
@@ -107,13 +95,8 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
     val docType = template!!.documentType
 
     AppScaffold(
-        title = if (isNew) "Nueva plantilla" else "Editar plantilla",
+        title = "Personalizar plantilla",
         onBack = onBack,
-        actions = {
-            if (!isNew) IconButton(onClick = { showDelete = true }) {
-                Icon(Icons.Default.Delete, contentDescription = "Eliminar")
-            }
-        },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -124,13 +107,12 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
             PremiumTextField("Nombre de la plantilla", name, { name = it }, prefixIcon = Icons.Outlined.Label)
             Spacer(modifier = Modifier.height(12.dp))
             Text("Tipo: ${template!!.documentType.label}")
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Usar como predeterminada")
-                    Text("Se seleccionará al redactar este tipo de documento")
-                }
-                Switch(checked = isDefault, onCheckedChange = { isDefault = it })
-            }
+            Text(
+                "Esta es la única plantilla de este tipo. Los cambios se aplican al redactar.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
             Spacer(modifier = Modifier.height(20.dp))
             Text("Secciones activas (orden)", style = MaterialTheme.typography.titleMedium)
             Text(
@@ -159,7 +141,7 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
                     color = TextSecondary,
                     modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
                 )
-                examCatalog.forEach { system ->
+                PhysicalExamCatalogStorage.reportDisplayOrder(examCatalog).forEach { system ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -175,11 +157,13 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
                         Switch(
                             checked = system.id in enabledExamIds,
                             onCheckedChange = { checked ->
-                                enabledExamIds = if (checked) {
-                                    enabledExamIds + system.id
-                                } else {
-                                    enabledExamIds.filterNot { it == system.id }
-                                }
+                                enabledExamIds = PhysicalExamDefaults.orderEnabledIds(
+                                    if (checked) {
+                                        enabledExamIds + system.id
+                                    } else {
+                                        enabledExamIds.filterNot { it == system.id }
+                                    },
+                                )
                             },
                         )
                     }
@@ -196,8 +180,8 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
                             name = name.trim(),
                             sections = sections,
                             sectionLayoutOrder = layoutOrder,
-                            isDefault = isDefault,
-                            enabledPhysicalExamSystemIds = enabledExamIds,
+                            isDefault = true,
+                            enabledPhysicalExamSystemIds = PhysicalExamDefaults.orderEnabledIds(enabledExamIds),
                         ),
                     )
                     Toast.makeText(context, "Plantilla guardada", Toast.LENGTH_SHORT).show()
@@ -205,22 +189,6 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
                 },
             )
         }
-    }
-
-    if (showDelete) {
-        AlertDialog(
-            onDismissRequest = { showDelete = false },
-            title = { Text("Eliminar plantilla") },
-            text = { Text("¿Seguro que deseas eliminar esta plantilla?") },
-            confirmButton = {
-                TextButton(onClick = {
-                    TemplateStorage.delete(context, templateId)
-                    showDelete = false
-                    onBack()
-                }) { Text("Eliminar") }
-            },
-            dismissButton = { TextButton(onClick = { showDelete = false }) { Text("Cancelar") } },
-        )
     }
 }
 
@@ -249,15 +217,19 @@ fun HeadersScreen(onBack: () -> Unit, onEditHeader: (String, Boolean) -> Unit) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    val canAdd = headers.size < HeaderStorage.MAX_HEADERS
+
     AppScaffold(
         title = "Encabezados",
         onBack = onBack,
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddSheet = true },
-                containerColor = Navy,
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = Color.White)
+            if (canAdd) {
+                FloatingActionButton(
+                    onClick = { showAddSheet = true },
+                    containerColor = Navy,
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.White)
+                }
             }
         },
     ) { padding ->
@@ -267,6 +239,14 @@ fun HeadersScreen(onBack: () -> Unit, onEditHeader: (String, Boolean) -> Unit) {
             }
         } else {
             LazyColumn(modifier = Modifier.padding(padding).padding(16.dp)) {
+                item {
+                    Text(
+                        "Máximo ${HeaderStorage.MAX_HEADERS} encabezados (${headers.size}/${HeaderStorage.MAX_HEADERS}).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(bottom = 12.dp),
+                    )
+                }
                 items(headers, key = { it.id }) { header ->
                     Card(onClick = { onEditHeader(header.id, false) }, modifier = Modifier.padding(bottom = 10.dp)) {
                         ListItem(
@@ -297,6 +277,15 @@ fun HeadersScreen(onBack: () -> Unit, onEditHeader: (String, Boolean) -> Unit) {
                 Spacer(modifier = Modifier.height(20.dp))
                 Card(
                     onClick = {
+                        if (!HeaderStorage.canAdd(context)) {
+                            Toast.makeText(
+                                context,
+                                "Máximo ${HeaderStorage.MAX_HEADERS} encabezados",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                            showAddSheet = false
+                            return@Card
+                        }
                         val doctor = DoctorStorage.loadProfile(context)
                         val header = if (doctor != null) {
                             HeaderStorage.createFromDoctor(doctor)
@@ -319,6 +308,15 @@ fun HeadersScreen(onBack: () -> Unit, onEditHeader: (String, Boolean) -> Unit) {
                 }
                 Card(
                     onClick = {
+                        if (!HeaderStorage.canAdd(context)) {
+                            Toast.makeText(
+                                context,
+                                "Máximo ${HeaderStorage.MAX_HEADERS} encabezados",
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                            showAddSheet = false
+                            return@Card
+                        }
                         val header = HeaderStorage.createClinic()
                         HeaderStorage.upsert(context, header)
                         showAddSheet = false

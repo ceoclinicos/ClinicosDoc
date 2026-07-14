@@ -31,7 +31,7 @@ fun PatientMembreteEditor(
             style = MaterialTheme.typography.titleMedium,
         )
         Text(
-            "Se rellena con los datos del paciente; puedes ajustarlos si hace falta",
+            "La fecha del informe va arriba a la derecha, encima del encabezado.",
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
@@ -66,9 +66,9 @@ fun PatientMembreteEditor(
                         modifier = Modifier.weight(0.8f),
                     )
                     PremiumTextField(
-                        label = "Fecha",
-                        value = membrete.fecha,
-                        onValueChange = { onMembreteChange(membrete.copy(fecha = it)) },
+                        label = "F. nacimiento",
+                        value = membrete.fechaNacimiento,
+                        onValueChange = { onMembreteChange(membrete.copy(fechaNacimiento = it)) },
                         hint = "dd/MM/yyyy",
                         modifier = Modifier.weight(1f),
                     )
@@ -108,5 +108,5 @@ fun buildMembreteAnnotated(membrete: PatientMembrete): AnnotatedString = buildAn
     append("   ")
     field("Sexo", membrete.displaySexo())
     append("   ")
-    field("Fecha", membrete.displayFecha())
+    field("Fecha de nacimiento", membrete.displayFechaNacimiento())
 }

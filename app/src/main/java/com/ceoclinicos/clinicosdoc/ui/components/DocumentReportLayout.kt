@@ -29,6 +29,8 @@ fun DocumentReportLayout(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
+        DocumentReportDate(fecha = membrete.fecha)
+        Spacer(modifier = Modifier.height(8.dp))
         header?.let {
             HeaderPreview(header = it, compact = true)
             Spacer(modifier = Modifier.height(12.dp))

@@ -16,10 +16,21 @@ import {
   setAtencionCedula,
   setProfessionalSession,
 } from "../../registro/session";
-import type { AtencionRegistro, PacienteRegistro } from "../../registro/models";
+import type { AtencionRegistro, PacienteRegistro, ProfesionalSession } from "../../registro/models";
 import { validarMpps } from "../../services/mpps-validation";
 import { ESPECIALIDADES_MEDICAS_VE } from "../../registro/especialidades";
+import { loadDoctorProfile, saveDoctorProfile } from "../../services/doctor-local";
 import { bindNavButtons, page } from "../helpers";
+
+function seedDoctorFromSession(s: ProfesionalSession): void {
+  const existing = loadDoctorProfile();
+  saveDoctorProfile({
+    nombre: s.nombre || existing?.nombre || "",
+    cedula: s.cedula || existing?.cedula || "",
+    especialidad: s.especialidad || existing?.especialidad || "Médico general",
+    mpps: s.mpps || existing?.mpps || "",
+  });
+}
 
 function especialidadOptions(): string {
   return ESPECIALIDADES_MEDICAS_VE.map((e) => `<option value="${e}">${e}</option>`).join("");
@@ -155,7 +166,8 @@ function bindProfesionalPage(el: HTMLElement): void {
             String(fd.get("mpps")),
           );
           setProfessionalSession(s);
-          navigate("/profesional");
+          seedDoctorFromSession(s);
+          navigate("/");
         } catch (err) {
           alert(err instanceof Error ? err.message : "Error al ingresar");
         }
@@ -197,7 +209,8 @@ function bindProfesionalPage(el: HTMLElement): void {
           });
           const s = await loginProfesional(cedula, String(fd.get("pin")), check.medico.mpps || mpps);
           setProfessionalSession(s);
-          navigate("/profesional");
+          seedDoctorFromSession(s);
+          navigate("/");
         } catch (err) {
           alert(err instanceof Error ? err.message : "Error al registrar");
         } finally {
@@ -276,6 +289,7 @@ registerRoute({
       session
         ? `
         <p class="lead">Busque al paciente por cédula para ver historial o registrar atención.</p>
+        <p class="muted"><a href="#/">← Volver al consultorio (Redactar, informes, plantillas)</a></p>
         <div class="search-row">
           <label class="search-label">Cédula del paciente
             <input id="cedula-buscar" placeholder="Ej. V-12345678" autocomplete="off" />

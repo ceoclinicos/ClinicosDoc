@@ -14,7 +14,8 @@ object TemplateStorage {
     private const val KEY = "document_templates_json"
     private const val INITIALIZED_KEY = "templates_initialized"
     private const val HC_SECTIONS_VERSION_KEY = "hc_template_sections_version"
-    private const val HC_SECTIONS_VERSION = 5
+    private const val HC_SECTIONS_VERSION = 7
+    const val MAX_PER_TYPE = 1
     private val gson = Gson()
 
     private fun prefs(context: Context) =
@@ -43,6 +44,45 @@ object TemplateStorage {
             return
         }
         migrateTemplateSections(context)
+        enforceOneTemplatePerType(context)
+    }
+
+    /** Deja una sola plantilla por tipo (preferida: la predeterminada). */
+    private fun collapseToOnePerType(templates: List<DocumentTemplate>): List<DocumentTemplate> {
+        return DocumentType.entries.mapNotNull { type ->
+            val ofType = templates.filter { it.documentType == type }
+            ofType.firstOrNull { it.isDefault } ?: ofType.firstOrNull()
+        }.map { it.copy(isDefault = true) }
+    }
+
+    private fun enforceOneTemplatePerType(context: Context) {
+        val all = loadAll(context)
+        val unique = collapseToOnePerType(all).toMutableList()
+        var changed = unique.size != all.size ||
+            unique.any { a -> all.none { b -> b.id == a.id && b.isDefault == a.isDefault } }
+        DocumentType.entries.forEach { type ->
+            if (unique.none { it.documentType == type }) {
+                unique.add(
+                    DocumentTemplate(
+                        id = UUID.randomUUID().toString(),
+                        name = "Plantilla ${type.label}",
+                        documentType = type,
+                        sections = SectionCatalog.defaultsFor(type),
+                        isDefault = true,
+                        enabledPhysicalExamSystemIds = defaultExamSystemsFor(type),
+                        sectionLayoutOrder = SectionCatalog.initialLayoutOrder(
+                            type,
+                            SectionCatalog.defaultsFor(type),
+                        ),
+                    ),
+                )
+                changed = true
+            }
+        }
+        if (changed) {
+            saveAllLocal(context, unique)
+            SyncCoordinator.afterTemplatesBulkSaved(context)
+        }
     }
 
     private val LEGACY_HC_DEFAULT_SECTIONS = listOf(
@@ -168,22 +208,45 @@ object TemplateStorage {
 
     fun upsert(context: Context, template: DocumentTemplate): DocumentTemplate {
         val all = loadAll(context).toMutableList()
-        if (template.isDefault) {
-            for (i in all.indices) {
-                if (all[i].documentType == template.documentType && all[i].id != template.id) {
-                    all[i] = all[i].copy(isDefault = false)
-                }
-            }
-        }
         val idx = all.indexOfFirst { it.id == template.id }
-        if (idx >= 0) all[idx] = template else all.add(template)
-        saveAllLocal(context, all)
-        SyncCoordinator.afterTemplateSaved(context, template)
-        return template
+        // Solo se permite personalizar la única plantilla de cada tipo; no crear extras.
+        val toSave = if (idx < 0) {
+            val existing = all.firstOrNull { it.documentType == template.documentType }
+            if (existing != null) {
+                template.copy(id = existing.id, isDefault = true)
+            } else {
+                template.copy(isDefault = true)
+            }
+        } else {
+            template.copy(isDefault = true)
+        }.let { tpl ->
+            tpl.copy(
+                enabledPhysicalExamSystemIds = PhysicalExamDefaults.orderEnabledIds(
+                    tpl.enabledPhysicalExamSystemIds.ifEmpty {
+                        defaultExamSystemsFor(tpl.documentType)
+                    },
+                ),
+            )
+        }
+        val saveIdx = all.indexOfFirst { it.id == toSave.id }
+        if (saveIdx >= 0) {
+            all[saveIdx] = toSave
+        } else {
+            all.add(toSave)
+        }
+        val unique = collapseToOnePerType(all)
+        saveAllLocal(context, unique)
+        val saved = unique.first { it.documentType == toSave.documentType }
+        SyncCoordinator.afterTemplateSaved(context, saved)
+        return saved
     }
 
     fun delete(context: Context, id: String) {
-        saveAllLocal(context, loadAll(context).filterNot { it.id == id })
+        // No permitir borrar la única plantilla de un tipo.
+        val all = loadAll(context)
+        val target = all.firstOrNull { it.id == id } ?: return
+        if (all.count { it.documentType == target.documentType } <= MAX_PER_TYPE) return
+        saveAllLocal(context, all.filterNot { it.id == id })
         SyncCoordinator.afterTemplateDeleted(context, id)
     }
 
@@ -212,7 +275,9 @@ object TemplateStorage {
         sections = sections,
         isDefault = isDefault ?: false,
         sectionLayoutOrder = sectionLayoutOrder.orEmpty(),
-        enabledPhysicalExamSystemIds = enabledPhysicalExamSystemIds.orEmpty(),
+        enabledPhysicalExamSystemIds = PhysicalExamDefaults.orderEnabledIds(
+            enabledPhysicalExamSystemIds.orEmpty(),
+        ),
         physicalExamTextOverrides = physicalExamTextOverrides.orEmpty(),
         enfermedadActualEjemplo = enfermedadActualEjemplo.orEmpty(),
     )

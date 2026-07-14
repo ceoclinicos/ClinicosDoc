@@ -59,6 +59,7 @@ fun TemplateConfigStep(
     onExamTextOverridesChange: (Map<String, String>) -> Unit,
     enfermedadActualEjemplo: String,
     onEnfermedadActualEjemploChange: (String) -> Unit,
+    canChangeTemplate: Boolean = false,
     onChangeTemplate: () -> Unit,
     onContinue: () -> Unit,
 ) {
@@ -103,9 +104,11 @@ fun TemplateConfigStep(
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(template.name, style = MaterialTheme.typography.titleMedium)
-                Spacer(modifier = Modifier.height(12.dp))
-                OutlinedButton(onClick = onChangeTemplate) {
-                    Text("Cambiar plantilla")
+                if (canChangeTemplate) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(onClick = onChangeTemplate) {
+                        Text("Cambiar plantilla")
+                    }
                 }
             }
         }
@@ -170,11 +173,13 @@ fun TemplateConfigStep(
                         checked = checked,
                         onCheckedChange = { isChecked ->
                             onEnabledExamIdsChange(
-                                if (isChecked) {
-                                    enabledExamIds + system.id
-                                } else {
-                                    enabledExamIds.filterNot { it == system.id }
-                                },
+                                PhysicalExamDefaults.orderEnabledIds(
+                                    if (isChecked) {
+                                        enabledExamIds + system.id
+                                    } else {
+                                        enabledExamIds.filterNot { it == system.id }
+                                    },
+                                ),
                             )
                         },
                         modifier = Modifier

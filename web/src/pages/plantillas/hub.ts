@@ -10,10 +10,22 @@ registerRoute({
       "Plantillas",
       `
       <div class="stack">
-        <button type="button" class="tile tile-full" data-nav="/plantillas/examen-fisico">Catálogo examen físico</button>
-        <button type="button" class="tile tile-full" data-nav="/plantillas/encabezados">Encabezados</button>
-        <button type="button" class="tile tile-full" data-nav="/plantillas/documentos">Informes y historias</button>
-        <button type="button" class="tile tile-full tile-muted" disabled>Recetas — próximamente</button>
+        <button type="button" class="tile tile-full" data-nav="/plantillas/examen-fisico">
+          <strong>Catálogo examen físico</strong>
+          <span class="muted">Sistemas y texto base para la IA</span>
+        </button>
+        <button type="button" class="tile tile-full" data-nav="/plantillas/encabezados">
+          <strong>Encabezados</strong>
+          <span class="muted">Hasta 4: logo, clínica o médico</span>
+        </button>
+        <button type="button" class="tile tile-full" data-nav="/plantillas/documentos">
+          <strong>Informes y historias</strong>
+          <span class="muted">Una plantilla por tipo de documento</span>
+        </button>
+        <button type="button" class="tile tile-full tile-muted" disabled>
+          <strong>Recetas</strong>
+          <span class="muted">Próximamente…</span>
+        </button>
       </div>
       `,
     );
