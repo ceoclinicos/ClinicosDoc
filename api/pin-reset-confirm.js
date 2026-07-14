@@ -1,5 +1,5 @@
 const { getAdmin } = require("./_lib/firebase");
-const { hashPin, assertPin4, hashPassword, assertPassword } = require("./_lib/pin");
+const { hashPin, assertPin4, hashPassword } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
@@ -39,7 +39,7 @@ module.exports = async function handler(req, res) {
 
     if (secretKind === "password" || collection === "clinicosdoc_user") {
       try {
-        assertPassword(password);
+        assertPin4(password);
       } catch (e) {
         return res.status(400).json({ error: e.message });
       }
@@ -49,7 +49,7 @@ module.exports = async function handler(req, res) {
         { merge: true },
       );
       await ref.set({ used: true, usedAt: now }, { merge: true });
-      return res.status(200).json({ message: "Contraseña actualizada. Ya puede iniciar sesión en la app." });
+      return res.status(200).json({ message: "PIN actualizado. Ya puede iniciar sesión en la app." });
     }
 
     try {

@@ -67,7 +67,6 @@ import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumTextField
 import com.ceoclinicos.clinicosdoc.ui.components.keyboardCapitalizationWords
 import com.ceoclinicos.clinicosdoc.ui.components.keyboardDigits
-import com.ceoclinicos.clinicosdoc.ui.components.keyboardPassword
 import com.ceoclinicos.clinicosdoc.ui.components.keyboardPhone
 import com.ceoclinicos.clinicosdoc.ui.theme.DividerColor
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
@@ -95,6 +94,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
     var sexo by remember { mutableStateOf<String?>(null) }
     var especialidad by remember { mutableStateOf<String?>(null) }
     var especialidadOtra by remember { mutableStateOf("") }
+    var esMedicoGeneral by remember { mutableStateOf(true) }
     var whatsapp by remember { mutableStateOf("") }
 
     var nombreError by remember { mutableStateOf<String?>(null) }
@@ -160,9 +160,9 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 when {
-                    authMode == AuthMode.LOGIN -> "Usa tu cédula y contraseña"
-                    step == 0 -> "Nombre, cédula, correo, MPPS y contraseña"
-                    else -> "Completa tu información de contacto"
+                    authMode == AuthMode.LOGIN -> "Usa tu cédula, PIN y MPPS"
+                    step == 0 -> "Igual que en la web: nombre, cédula, correo, MPPS y PIN"
+                    else -> "Sexo y WhatsApp de contacto"
                 },
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -182,9 +182,12 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                     cedula = cedula,
                     onCedulaChange = { cedula = it },
                     password = password,
-                    onPasswordChange = { password = it },
+                    onPasswordChange = { password = it.filter { c -> c.isDigit() }.take(4) },
+                    mpps = mpps,
+                    onMppsChange = { mpps = it.filter { c -> c.isDigit() } },
                     cedulaError = cedulaError,
                     passwordError = passwordError,
+                    mppsError = mppsError,
                     loading = loading,
                     onLogin = {
                         cedulaError = when {
@@ -192,8 +195,13 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                             !CedulaNormalizer.isValid(cedula) -> "Cédula inválida"
                             else -> null
                         }
-                        passwordError = if (password.isBlank()) "Ingresa tu contraseña" else null
-                        if (cedulaError != null || passwordError != null) return@LoginForm
+                        passwordError = when {
+                            password.isBlank() -> "Ingresa tu PIN (contraseña)"
+                            password.length != 4 -> "El PIN debe tener 4 dígitos"
+                            else -> null
+                        }
+                        mppsError = if (mpps.isBlank()) "Ingresa tu MPPS" else null
+                        if (cedulaError != null || passwordError != null || mppsError != null) return@LoginForm
 
                         if (!firebaseReady) {
                             showToast("Necesitas internet para iniciar sesión")
@@ -202,7 +210,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
 
                         loading = true
                         scope.launch {
-                            val result = DoctorAuthService.signIn(context, cedula, password)
+                            val result = DoctorAuthService.signIn(context, cedula, password, mpps)
                             loading = false
                             result.fold(
                                 onSuccess = { onRegistered() },
@@ -222,9 +230,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                             val result = PinResetService.requestReset(cedula, "app")
                             loading = false
                             result.fold(
-                                onSuccess = { msg ->
-                                    showToast(msg)
-                                },
+                                onSuccess = { msg -> showToast(msg) },
                                 onFailure = { showToast(it.message ?: "No se pudo enviar el correo") },
                             )
                         }
@@ -239,10 +245,21 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                         onCedulaChange = { cedula = it },
                         correo = correo,
                         onCorreoChange = { correo = it.trim() },
+                        esGeneral = esMedicoGeneral,
+                        onEsGeneralChange = { general ->
+                            esMedicoGeneral = general
+                            especialidad = if (general) "Medicina general" else null
+                            especialidadOtra = ""
+                        },
+                        especialidad = especialidad,
+                        onEspecialidadChange = { especialidad = it },
+                        especialidadOtra = especialidadOtra,
+                        onEspecialidadOtraChange = { especialidadOtra = it },
+                        especialidades = especialidades.filter { it != "Medicina general" },
                         mpps = mpps,
                         onMppsChange = { mpps = it.filter { c -> c.isDigit() } },
                         password = password,
-                        onPasswordChange = { password = it },
+                        onPasswordChange = { password = it.filter { c -> c.isDigit() }.take(4) },
                         nombreError = nombreError,
                         cedulaError = cedulaError,
                         correoError = correoError,
@@ -263,13 +280,18 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                             }
                             mppsError = if (mpps.isBlank()) "Ingresa tu MPPS" else null
                             passwordError = when {
-                                password.isBlank() -> "Ingresa tu contraseña"
-                                password.length < 4 -> "Mínimo 4 caracteres"
+                                password.isBlank() -> "Ingresa tu PIN (contraseña)"
+                                password.length != 4 -> "El PIN debe tener 4 dígitos"
                                 else -> null
+                            }
+                            if (!esMedicoGeneral && (especialidad.isNullOrBlank() || (especialidad == "Otra" && especialidadOtra.isBlank()))) {
+                                showToast("Selecciona o escribe tu especialidad")
+                                return@RegistrationStep1
                             }
                             if (listOf(nombreError, cedulaError, correoError, mppsError, passwordError).any { it != null }) {
                                 return@RegistrationStep1
                             }
+                            if (esMedicoGeneral) especialidad = "Medicina general"
                             loading = true
                             scope.launch {
                                 val result = MppsValidationService.validate(cedula, mpps)
@@ -297,11 +319,6 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                         sexos = sexos,
                         sexo = sexo,
                         onSexoChange = { sexo = it },
-                        especialidades = especialidades,
-                        especialidad = especialidad,
-                        onEspecialidadChange = { especialidad = it },
-                        especialidadOtra = especialidadOtra,
-                        onEspecialidadOtraChange = { especialidadOtra = it },
                         whatsapp = whatsapp,
                         onWhatsappChange = { whatsapp = it.filter { c -> c.isDigit() } },
                         whatsappError = whatsappError,
@@ -313,21 +330,20 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                                 whatsapp.length < 10 -> "Número inválido"
                                 else -> null
                             }
-                            if (sexo == null || especialidad == null || whatsappError != null) {
-                                if (sexo == null || especialidad == null) {
-                                    showToast("Selecciona sexo y especialidad")
-                                }
+                            if (sexo == null || whatsappError != null) {
+                                if (sexo == null) showToast("Selecciona sexo")
                                 return@RegistrationStep2
                             }
-                            val especialidadFinal = if (especialidad == "Otra") {
-                                especialidadOtra.trim().also {
-                                    if (it.isBlank()) {
-                                        showToast("Escribe tu especialidad")
-                                        return@RegistrationStep2
-                                    }
+                            val especialidadFinal = when {
+                                esMedicoGeneral -> "Medicina general"
+                                especialidad == "Otra" -> especialidadOtra.trim().ifBlank {
+                                    showToast("Escribe tu especialidad")
+                                    return@RegistrationStep2
                                 }
-                            } else {
-                                especialidad!!
+                                else -> especialidad?.takeIf { it.isNotBlank() } ?: run {
+                                    showToast("Selecciona especialidad")
+                                    return@RegistrationStep2
+                                }
                             }
 
                             val profile = DoctorProfile(
@@ -377,8 +393,11 @@ private fun LoginForm(
     onCedulaChange: (String) -> Unit,
     password: String,
     onPasswordChange: (String) -> Unit,
+    mpps: String,
+    onMppsChange: (String) -> Unit,
     cedulaError: String?,
     passwordError: String?,
+    mppsError: String?,
     loading: Boolean,
     onLogin: () -> Unit,
     onForgotPassword: () -> Unit,
@@ -394,19 +413,30 @@ private fun LoginForm(
     )
     Spacer(modifier = Modifier.height(20.dp))
     PremiumTextField(
-        "Contraseña",
+        "PIN (contraseña, 4 dígitos)",
         password,
         onPasswordChange,
-        hint = "Mínimo 4 caracteres",
+        hint = "4 dígitos",
         prefixIcon = Icons.Outlined.Lock,
-        keyboardOptions = keyboardPassword(),
+        keyboardOptions = keyboardDigits(),
         visualTransformation = PasswordVisualTransformation(),
         isError = passwordError != null,
         errorMessage = passwordError,
     )
+    Spacer(modifier = Modifier.height(20.dp))
+    PremiumTextField(
+        "Código MPPS",
+        mpps,
+        onMppsChange,
+        hint = "Ej. 154472",
+        prefixIcon = Icons.Outlined.Verified,
+        keyboardOptions = keyboardDigits(),
+        isError = mppsError != null,
+        errorMessage = mppsError,
+    )
     Spacer(modifier = Modifier.height(8.dp))
     TextButton(onClick = onForgotPassword, enabled = !loading) {
-        Text("Olvidé mi contraseña")
+        Text("Olvidé mi PIN (contraseña)")
     }
     Spacer(modifier = Modifier.height(16.dp))
     PremiumPrimaryButton(
@@ -425,6 +455,13 @@ private fun RegistrationStep1(
     onCedulaChange: (String) -> Unit,
     correo: String,
     onCorreoChange: (String) -> Unit,
+    esGeneral: Boolean,
+    onEsGeneralChange: (Boolean) -> Unit,
+    especialidad: String?,
+    onEspecialidadChange: (String?) -> Unit,
+    especialidadOtra: String,
+    onEspecialidadOtraChange: (String) -> Unit,
+    especialidades: List<String>,
     mpps: String,
     onMppsChange: (String) -> Unit,
     password: String,
@@ -437,8 +474,10 @@ private fun RegistrationStep1(
     loading: Boolean,
     onNext: () -> Unit,
 ) {
+    var especialidadExpanded by remember { mutableStateOf(false) }
+
     PremiumTextField(
-        "Nombre a mostrar",
+        "Nombre completo",
         nombre,
         onNombreChange,
         hint = "Ej. Dr. Juan Pérez",
@@ -462,30 +501,108 @@ private fun RegistrationStep1(
         "Correo electrónico",
         correo,
         onCorreoChange,
-        hint = "Para recuperar contraseña",
+        hint = "Para recuperar PIN (contraseña)",
         prefixIcon = Icons.Outlined.Email,
         isError = correoError != null,
         errorMessage = correoError,
     )
     Spacer(modifier = Modifier.height(20.dp))
+    Text("Tipo", style = MaterialTheme.typography.labelLarge.copy(color = TextSecondary))
+    Spacer(modifier = Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        FilterChip(
+            selected = esGeneral,
+            onClick = { onEsGeneralChange(true) },
+            label = { Text("Médico general") },
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = Teal.copy(alpha = 0.15f),
+                selectedLabelColor = Teal,
+            ),
+        )
+        FilterChip(
+            selected = !esGeneral,
+            onClick = { onEsGeneralChange(false) },
+            label = { Text("Especialista") },
+            colors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = Teal.copy(alpha = 0.15f),
+                selectedLabelColor = Teal,
+            ),
+        )
+    }
+    if (!esGeneral) {
+        Spacer(modifier = Modifier.height(16.dp))
+        ExposedDropdownMenuBox(
+            expanded = especialidadExpanded,
+            onExpandedChange = { especialidadExpanded = !especialidadExpanded },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedTextField(
+                value = if (especialidad == "Medicina general") "" else (especialidad ?: ""),
+                onValueChange = {},
+                readOnly = true,
+                placeholder = { Text("Especialidad") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = especialidadExpanded) },
+                leadingIcon = { Icon(Icons.Outlined.MedicalServices, contentDescription = null, tint = Teal) },
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Teal,
+                    cursorColor = Teal,
+                ),
+            )
+            DropdownMenu(
+                expanded = especialidadExpanded,
+                onDismissRequest = { especialidadExpanded = false },
+            ) {
+                especialidades.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            onEspecialidadChange(option)
+                            especialidadExpanded = false
+                        },
+                    )
+                }
+            }
+        }
+        if (especialidad == "Otra") {
+            Spacer(modifier = Modifier.height(12.dp))
+            PremiumTextField(
+                "Especifica tu especialidad",
+                especialidadOtra,
+                onEspecialidadOtraChange,
+                hint = "Ej. Traumatología",
+                prefixIcon = Icons.Outlined.MedicalServices,
+                keyboardOptions = keyboardCapitalizationWords(),
+            )
+        }
+    }
+    Spacer(modifier = Modifier.height(20.dp))
     PremiumTextField(
-        "MPPS",
+        "Código MPPS",
         mpps,
         onMppsChange,
-        hint = "Se valida con SACS",
+        hint = "Ej. 154472 — se valida con SACS",
         prefixIcon = Icons.Outlined.Verified,
         keyboardOptions = keyboardDigits(),
         isError = mppsError != null,
         errorMessage = mppsError,
     )
+    Text(
+        "Se valida contra el registro SACS (cédula + MPPS deben coincidir).",
+        style = MaterialTheme.typography.bodySmall,
+        color = TextSecondary,
+        modifier = Modifier.padding(top = 6.dp),
+    )
     Spacer(modifier = Modifier.height(20.dp))
     PremiumTextField(
-        "Contraseña",
+        "PIN (contraseña, 4 dígitos)",
         password,
         onPasswordChange,
-        hint = "Mínimo 4 caracteres",
+        hint = "4 dígitos",
         prefixIcon = Icons.Outlined.Lock,
-        keyboardOptions = keyboardPassword(),
+        keyboardOptions = keyboardDigits(),
         visualTransformation = PasswordVisualTransformation(),
         isError = passwordError != null,
         errorMessage = passwordError,
@@ -505,11 +622,6 @@ private fun RegistrationStep2(
     sexos: List<String>,
     sexo: String?,
     onSexoChange: (String) -> Unit,
-    especialidades: List<String>,
-    especialidad: String?,
-    onEspecialidadChange: (String?) -> Unit,
-    especialidadOtra: String,
-    onEspecialidadOtraChange: (String) -> Unit,
     whatsapp: String,
     onWhatsappChange: (String) -> Unit,
     whatsappError: String?,
@@ -517,8 +629,6 @@ private fun RegistrationStep2(
     onBack: () -> Unit,
     onFinish: () -> Unit,
 ) {
-    var especialidadExpanded by remember { mutableStateOf(false) }
-
     Text("Sexo", style = MaterialTheme.typography.labelLarge.copy(color = TextSecondary))
     Spacer(modifier = Modifier.height(10.dp))
     Row(
@@ -536,55 +646,6 @@ private fun RegistrationStep2(
                 ),
             )
         }
-    }
-    Spacer(modifier = Modifier.height(24.dp))
-    Text("Especialidad", style = MaterialTheme.typography.labelLarge.copy(color = TextSecondary))
-    Spacer(modifier = Modifier.height(8.dp))
-    ExposedDropdownMenuBox(
-        expanded = especialidadExpanded,
-        onExpandedChange = { especialidadExpanded = !especialidadExpanded },
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        OutlinedTextField(
-            value = especialidad ?: "",
-            onValueChange = {},
-            readOnly = true,
-            placeholder = { Text("Selecciona tu especialidad") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = especialidadExpanded) },
-            leadingIcon = { Icon(Icons.Outlined.MedicalServices, contentDescription = null, tint = Teal) },
-            modifier = Modifier
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Teal,
-                cursorColor = Teal,
-            ),
-        )
-        DropdownMenu(
-            expanded = especialidadExpanded,
-            onDismissRequest = { especialidadExpanded = false },
-        ) {
-            especialidades.forEach { option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = {
-                        onEspecialidadChange(option)
-                        especialidadExpanded = false
-                    },
-                )
-            }
-        }
-    }
-    if (especialidad == "Otra") {
-        Spacer(modifier = Modifier.height(12.dp))
-        PremiumTextField(
-            "Especifica tu especialidad",
-            especialidadOtra,
-            onEspecialidadOtraChange,
-            hint = "Ej. Endocrinología",
-            prefixIcon = Icons.Outlined.MedicalServices,
-            keyboardOptions = keyboardCapitalizationWords(),
-        )
     }
     Spacer(modifier = Modifier.height(20.dp))
     PremiumTextField(
@@ -612,7 +673,7 @@ private fun RegistrationStep2(
             }
             Spacer(modifier = Modifier.width(gap))
             PremiumPrimaryButton(
-                label = "Entrar",
+                label = "Registrar",
                 onClick = onFinish,
                 modifier = Modifier.width(enterWidth),
                 loading = loading,

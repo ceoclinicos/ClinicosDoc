@@ -27,16 +27,29 @@ object DoctorAuthService {
     suspend fun cedulaExists(cedulaInput: String): Boolean =
         findUserDocument(cedulaInput) != null
 
-    suspend fun signIn(context: Context, cedulaInput: String, password: String): Result<DoctorProfile> {
+    suspend fun signIn(
+        context: Context,
+        cedulaInput: String,
+        password: String,
+        mpps: String = "",
+    ): Result<DoctorProfile> {
         if (!isConfigured(context)) {
             return Result.failure(IllegalStateException("Sin conexión a Firebase"))
         }
+        if (!password.matches(Regex("^\\d{4}$"))) {
+            return Result.failure(IllegalStateException("El PIN debe tener exactamente 4 dígitos"))
+        }
         return runCatching {
             val doc = findUserDocument(cedulaInput)
-                ?: error("Cédula o contraseña incorrectos")
+                ?: error("Cédula o PIN incorrectos")
             val hash = doc.getString("passwordHash").orEmpty()
             if (hash.isEmpty() || hash != hashPassword(password)) {
-                error("Cédula o contraseña incorrectos")
+                error("Cédula o PIN incorrectos")
+            }
+            val storedMpps = doc.getString("mpps").orEmpty().filter { it.isDigit() }
+            val inputMpps = mpps.filter { it.isDigit() }
+            if (storedMpps.isNotEmpty() && inputMpps.isNotEmpty() && storedMpps != inputMpps) {
+                error("Código MPPS incorrecto")
             }
             val profile = doc.toDoctorProfile()
             DoctorStorage.saveSession(context, profile, doc.id)
@@ -62,8 +75,8 @@ object DoctorAuthService {
         if (profile.correo.isBlank() || !profile.correo.contains("@")) {
             return Result.failure(IllegalStateException("Correo electrónico requerido"))
         }
-        if (password.length < 4) {
-            return Result.failure(IllegalStateException("La contraseña debe tener al menos 4 caracteres"))
+        if (!password.matches(Regex("^\\d{4}$"))) {
+            return Result.failure(IllegalStateException("El PIN debe tener exactamente 4 dígitos"))
         }
         val mppsCheck = MppsValidationService.validate(profile.cedula, profile.mpps)
         if (mppsCheck.isFailure) {

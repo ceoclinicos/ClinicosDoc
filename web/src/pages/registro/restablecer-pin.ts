@@ -17,18 +17,8 @@ registerRoute({
     const el = page(
       isPassword ? "Crear contraseña nueva" : "Crear PIN nuevo",
       token
-        ? isPassword
-          ? `
-      <p class="lead">Elija una contraseña nueva para la app (mínimo 4 caracteres).</p>
-      <form class="form" id="form-nuevo-pin">
-        <label>Contraseña nueva<input name="pin" type="password" minlength="4" required /></label>
-        <label>Confirmar contraseña<input name="pin2" type="password" minlength="4" required /></label>
-        <button type="submit" class="btn btn-primary">Guardar contraseña</button>
-      </form>
-      <div id="reset-msg"></div>
-      `
-          : `
-      <p class="lead">Elija un PIN (contraseña) de 4 dígitos para su cuenta.</p>
+        ? `
+      <p class="lead">Elija un PIN (contraseña) de 4 dígitos${isPassword ? " para la app" : ""}.</p>
       <form class="form" id="form-nuevo-pin">
         <label>PIN nuevo (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
         <label>Confirmar PIN (contraseña)<input name="pin2" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
