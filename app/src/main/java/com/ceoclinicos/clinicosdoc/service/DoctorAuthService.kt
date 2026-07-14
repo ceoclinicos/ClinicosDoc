@@ -56,31 +56,47 @@ object DoctorAuthService {
         if (!CedulaNormalizer.isValid(profile.cedula)) {
             return Result.failure(IllegalStateException("Cédula inválida"))
         }
+        if (profile.mpps.isBlank()) {
+            return Result.failure(IllegalStateException("Código MPPS requerido"))
+        }
         if (password.length < 4) {
             return Result.failure(IllegalStateException("La contraseña debe tener al menos 4 caracteres"))
         }
+        val mppsCheck = MppsValidationService.validate(profile.cedula, profile.mpps)
+        if (mppsCheck.isFailure) {
+            return Result.failure(
+                mppsCheck.exceptionOrNull() ?: IllegalStateException("No se pudo validar MPPS"),
+            )
+        }
+        val validated = mppsCheck.getOrThrow()
+        val profileValidated = profile.copy(
+            mpps = validated.mpps.ifBlank { profile.mpps },
+            nombre = profile.nombre.ifBlank { validated.nombreCompleto },
+        )
         return runCatching {
-            if (cedulaExists(profile.cedula)) {
+            if (cedulaExists(profileValidated.cedula)) {
                 error("Esta cédula ya está registrada. Usa Login")
             }
             val db = firestore(context)
-            val cedulaNorm = CedulaNormalizer.normalize(profile.cedula)
+            val cedulaNorm = CedulaNormalizer.normalize(profileValidated.cedula)
             val docRef = db.collection(FirestorePaths.USERS).document()
             docRef.set(
                 mapOf(
-                    "nombre" to profile.nombre,
-                    "cedula" to profile.cedula.trim(),
+                    "nombre" to profileValidated.nombre,
+                    "cedula" to profileValidated.cedula.trim(),
                     "cedulaNormalizada" to cedulaNorm,
-                    "mpps" to profile.mpps,
-                    "sexo" to profile.sexo,
-                    "especialidad" to profile.especialidad,
-                    "whatsapp" to profile.whatsapp,
+                    "mpps" to profileValidated.mpps,
+                    "sexo" to profileValidated.sexo,
+                    "especialidad" to profileValidated.especialidad,
+                    "whatsapp" to profileValidated.whatsapp,
                     "passwordHash" to hashPassword(password),
+                    "mppsValidado" to true,
+                    "profesionSacs" to validated.profesion,
                 ),
             ).await()
-            DoctorStorage.saveSession(context, profile, docRef.id)
+            DoctorStorage.saveSession(context, profileValidated, docRef.id)
             CloudSyncService.syncOnLogin(context, docRef.id)
-            profile
+            profileValidated
         }
     }
 

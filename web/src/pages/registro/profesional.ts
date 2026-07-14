@@ -17,6 +17,7 @@ import {
   setProfessionalSession,
 } from "../../registro/session";
 import type { AtencionRegistro, PacienteRegistro } from "../../registro/models";
+import { validarMpps } from "../../services/mpps-validation";
 import { bindNavButtons, page } from "../helpers";
 
 function tabs(active: "login" | "registro"): string {
@@ -54,7 +55,8 @@ function registerForm(): string {
         </select>
       </label>
       <label id="esp-wrap" hidden>Especialidad<input name="especialidad" placeholder="Ej. Traumatología" /></label>
-      <label>Código MPPS<input name="mpps" required /></label>
+      <label>Código MPPS<input name="mpps" required placeholder="Ej. 154472" /></label>
+      <p class="muted">Se valida contra el registro SACS (cédula + MPPS deben coincidir).</p>
       <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
       <button type="submit" class="btn btn-primary">Registrar profesional</button>
     </form>
@@ -133,26 +135,36 @@ function bindProfesionalPage(el: HTMLElement): void {
 
       body.querySelector("#prof-registro")?.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const fd = new FormData(e.target as HTMLFormElement);
+        const form = e.target as HTMLFormElement;
+        const fd = new FormData(form);
         const esGeneral = fd.get("tipo") === "general";
+        const btn = form.querySelector('[type="submit"]') as HTMLButtonElement | null;
+        if (btn) btn.disabled = true;
         try {
+          const cedula = String(fd.get("cedula"));
+          const mpps = String(fd.get("mpps"));
+          const check = await validarMpps(cedula, mpps);
+          let nombre = String(fd.get("nombre")).trim();
+          if (!nombre && check.medico.nombreCompleto) {
+            nombre = check.medico.nombreCompleto;
+            const nombreInput = form.querySelector<HTMLInputElement>('input[name="nombre"]');
+            if (nombreInput) nombreInput.value = nombre;
+          }
           await registerProfesional({
-            cedula: String(fd.get("cedula")),
-            nombre: String(fd.get("nombre")),
+            cedula,
+            nombre,
             especialidad: String(fd.get("especialidad") ?? ""),
             esMedicoGeneral: esGeneral,
-            mpps: String(fd.get("mpps")),
+            mpps: check.medico.mpps || mpps,
             pin: String(fd.get("pin")),
           });
-          const s = await loginProfesional(
-            String(fd.get("cedula")),
-            String(fd.get("pin")),
-            String(fd.get("mpps")),
-          );
+          const s = await loginProfesional(cedula, String(fd.get("pin")), check.medico.mpps || mpps);
           setProfessionalSession(s);
           navigate("/profesional");
         } catch (err) {
           alert(err instanceof Error ? err.message : "Error al registrar");
+        } finally {
+          if (btn) btn.disabled = false;
         }
       });
     };

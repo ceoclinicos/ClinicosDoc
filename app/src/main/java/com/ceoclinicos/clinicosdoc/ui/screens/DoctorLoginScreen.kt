@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
 import com.ceoclinicos.clinicosdoc.service.DoctorAuthService
+import com.ceoclinicos.clinicosdoc.service.MppsValidationService
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumTextField
@@ -220,6 +221,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                         cedulaError = cedulaError,
                         mppsError = mppsError,
                         passwordError = passwordError,
+                        loading = loading,
                         onNext = {
                             nombreError = if (nombre.isBlank()) "Ingresa tu nombre" else null
                             cedulaError = when {
@@ -233,8 +235,28 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                                 password.length < 4 -> "Mínimo 4 caracteres"
                                 else -> null
                             }
-                            if (listOf(nombreError, cedulaError, mppsError, passwordError).all { it == null }) {
-                                step = 1
+                            if (listOf(nombreError, cedulaError, mppsError, passwordError).any { it != null }) {
+                                return@RegistrationStep1
+                            }
+                            loading = true
+                            scope.launch {
+                                val result = MppsValidationService.validate(cedula, mpps)
+                                loading = false
+                                result.fold(
+                                    onSuccess = { medico ->
+                                        mppsError = null
+                                        mpps = medico.mpps.filter { it.isDigit() }.ifBlank { mpps }
+                                        if (nombre.isBlank() && medico.nombreCompleto.isNotBlank()) {
+                                            nombre = medico.nombreCompleto
+                                        }
+                                        showToast("MPPS verificado: ${medico.profesion}")
+                                        step = 1
+                                    },
+                                    onFailure = {
+                                        mppsError = it.message ?: "No se pudo validar MPPS"
+                                        showToast(mppsError ?: "Error de validación")
+                                    },
+                                )
                             }
                         },
                     )
@@ -295,6 +317,12 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                                         onFailure = { showToast(it.message ?: "Error al registrar") },
                                     )
                                 } else {
+                                    val check = MppsValidationService.validate(profile.cedula, profile.mpps)
+                                    if (check.isFailure) {
+                                        loading = false
+                                        showToast(check.exceptionOrNull()?.message ?: "No se pudo validar MPPS")
+                                        return@launch
+                                    }
                                     DoctorStorage.saveProfileLocal(context, profile)
                                     loading = false
                                     onRegistered()
@@ -365,6 +393,7 @@ private fun RegistrationStep1(
     cedulaError: String?,
     mppsError: String?,
     passwordError: String?,
+    loading: Boolean,
     onNext: () -> Unit,
 ) {
     PremiumTextField(
@@ -412,8 +441,9 @@ private fun RegistrationStep1(
     )
     Spacer(modifier = Modifier.height(32.dp))
     PremiumPrimaryButton(
-        label = "Siguiente",
+        label = if (loading) "Validando MPPS…" else "Siguiente",
         onClick = onNext,
+        loading = loading,
         icon = Icons.AutoMirrored.Filled.ArrowForward,
     )
 }
