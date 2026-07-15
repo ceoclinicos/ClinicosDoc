@@ -393,16 +393,11 @@ function bindIngresoCedula(
   });
 }
 
-registerRoute({
-  path: "/ayudame",
-  title: "Ayúdame",
-  nav: true,
-  navLabel: "Ayúdame",
-  render: () => {
-    const el = page(
-      "Muro de ayuda",
+function renderAyudemos(): HTMLElement {
+  const el = page(
+      "Ayudemos",
       `
-      <p class="lead">Zonas afectadas: Caracas, litoral de La Guaira, Catia La Mar, Tanaguarena, Morón, Tucacas y alrededores.</p>
+      <p class="lead">Muro comunitario: publique y vea pedidos de ayuda. Zonas: Caracas, La Guaira, Catia La Mar, Tanaguarena, Morón, Tucacas y alrededores.</p>
       <div class="mural-toolbar card-panel mural-filter">
         <div class="filter-field">
           <span class="filter-field-icon" aria-hidden="true">📍</span>
@@ -431,8 +426,25 @@ registerRoute({
     renderFeed(el, getFiltro());
     filtro?.addEventListener("change", () => renderFeed(el, getFiltro()));
 
-    bindNavButtons(el);
-    return el;
+  bindNavButtons(el);
+  return el;
+}
+
+registerRoute({
+  path: "/ayudemos",
+  title: "Ayudemos",
+  nav: true,
+  navLabel: "Ayudemos",
+  render: renderAyudemos,
+});
+
+/** Alias por si quedan enlaces antiguos */
+registerRoute({
+  path: "/ayudame",
+  title: "Ayudemos",
+  render: () => {
+    window.location.hash = "/ayudemos";
+    return page("Ayudemos", `<p class="muted">Redirigiendo…</p>`);
   },
 });
 
@@ -441,7 +453,7 @@ registerRoute({
   title: "Solicitud",
   render: () => {
     const id = window.location.hash.replace(/^#\/solicitud\//, "").split("?")[0];
-    const el = page("Solicitud de ayuda", `<div id="sol-one"></div><p><a href="#/ayudame">← Volver al muro</a></p>`);
+    const el = page("Solicitud de ayuda", `<div id="sol-one"></div><p><a href="#/ayudemos">← Volver a Ayudemos</a></p>`);
     listSolicitudes().then((items) => {
       const s = items.find((i) => i.id === id);
       const box = el.querySelector("#sol-one") as HTMLElement;

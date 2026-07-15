@@ -103,7 +103,7 @@ export async function buildSolicitudShareImage(s: ShareSolicitudData): Promise<B
   ctx.textAlign = "left";
   ctx.fillStyle = "#cbd5e1";
   ctx.font = "500 20px system-ui, Segoe UI, sans-serif";
-  ctx.fillText("Ayúdame · Clínicos Doc", padX, H - 36);
+  ctx.fillText("Ayudemos · Clínicos Doc", padX, H - 36);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(

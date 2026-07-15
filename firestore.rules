@@ -113,9 +113,16 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Muro Ayúdame — solicitudes públicas
+    // Muro Ayudemos — solicitudes públicas
     match /solicitudes/{solicitudId} {
       allow read, write: if true;
+    }
+
+    // Ficha médica de emergencia (QR público)
+    match /fichas_emergencia/{fichaId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
     }
 
     match /pin_reset_tokens/{tokenId} {
