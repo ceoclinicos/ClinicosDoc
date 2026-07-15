@@ -162,11 +162,11 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Tarjeta vertical elegante; altura base −10%, luego +40% tamaño total. */
+/** Tarjeta vertical elegante; altura base −10%, escala ×1.96 (tamaño actual −30%). */
 export async function buildEmergencyCardBlob(ficha: FichaEmergencia): Promise<Blob> {
   const BASE_W = 709;
   const BASE_H = Math.round(1063 * 0.9); // 957
-  const S = 1.4; // +40% tamaño total de la imagen
+  const S = 1.96; // 2.8 −30% (como se ve ahora, un poco más pequeña)
   const W = Math.round(BASE_W * S);
   const H = Math.round(BASE_H * S);
   const canvas = document.createElement("canvas");
