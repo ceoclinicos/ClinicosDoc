@@ -90,6 +90,30 @@ export function bindExamSystemsEditor(
     );
   };
 
+  /** Dialog fuera de cualquier <form> padre (formularios anidados rompen showModal / submit). */
+  const ensureDialog = (): { dialog: HTMLDialogElement; form: HTMLFormElement } => {
+    let dialog = document.getElementById("exam-sys-dialog") as HTMLDialogElement | null;
+    if (!dialog) {
+      dialog = document.createElement("dialog");
+      dialog.id = "exam-sys-dialog";
+      document.body.appendChild(dialog);
+    }
+    dialog.innerHTML = `
+      <form class="form" id="exam-sys-form">
+        <h3 id="exam-sys-title">Editar sistema</h3>
+        <input type="hidden" name="id" />
+        <label>Nombre<input name="name" required placeholder="Ej. Genitourinario" /></label>
+        <label>Texto base (ejemplo)<textarea name="defaultText" rows="5" required placeholder="Texto predeterminado del sistema…"></textarea></label>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-ghost" id="exam-sys-cancel">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </form>
+    `;
+    const form = dialog.querySelector("#exam-sys-form") as HTMLFormElement;
+    return { dialog, form };
+  };
+
   const render = () => {
     catalog = clinicalOrder(catalog);
     container.innerHTML = `
@@ -116,22 +140,9 @@ export function bindExamSystemsEditor(
           .join("")}
       </ul>
       <button type="button" class="btn btn-secondary btn-sm" id="exam-sys-add">+ Nuevo sistema</button>
-      <dialog id="exam-sys-dialog">
-        <form method="dialog" class="form" id="exam-sys-form">
-          <h3 id="exam-sys-title">Editar sistema</h3>
-          <input type="hidden" name="id" />
-          <label>Nombre<input name="name" required /></label>
-          <label>Texto base (ejemplo)<textarea name="defaultText" rows="5" required></textarea></label>
-          <div class="dialog-actions">
-            <button type="button" class="btn btn-ghost" id="exam-sys-cancel">Cancelar</button>
-            <button type="submit" class="btn btn-primary">Guardar</button>
-          </div>
-        </form>
-      </dialog>
     `;
 
-    const dialog = container.querySelector("#exam-sys-dialog") as HTMLDialogElement;
-    const form = container.querySelector("#exam-sys-form") as HTMLFormElement;
+    const { dialog, form } = ensureDialog();
 
     container.querySelectorAll("[data-exam-check]").forEach((node) => {
       node.addEventListener("change", () => {
@@ -168,7 +179,7 @@ export function bindExamSystemsEditor(
       (form.elements.namedItem("id") as HTMLInputElement).value = system.id;
       (form.elements.namedItem("name") as HTMLInputElement).value = system.name;
       (form.elements.namedItem("defaultText") as HTMLTextAreaElement).value = system.defaultText;
-      (container.querySelector("#exam-sys-title") as HTMLElement).textContent = creating
+      (dialog.querySelector("#exam-sys-title") as HTMLElement).textContent = creating
         ? "Nuevo sistema"
         : `Editar ${system.name}`;
       dialog.showModal();
@@ -185,12 +196,13 @@ export function bindExamSystemsEditor(
 
     container.querySelector("#exam-sys-add")?.addEventListener("click", (e) => {
       e.preventDefault();
+      e.stopPropagation();
       openEdit(createExamSystem("", ""), true);
     });
 
-    container.querySelector("#exam-sys-cancel")?.addEventListener("click", () => dialog.close());
+    dialog.querySelector("#exam-sys-cancel")?.addEventListener("click", () => dialog.close());
 
-    form.addEventListener("submit", (e) => {
+    form.onsubmit = (e) => {
       e.preventDefault();
       const fd = new FormData(form);
       const id = String(fd.get("id"));
@@ -200,17 +212,13 @@ export function bindExamSystemsEditor(
       const existing = catalog.find((s) => s.id === id);
       const system: PhysicalExamSystem = existing
         ? { ...existing, name, defaultText }
-        : createExamSystem(name, defaultText);
-      if (!existing) {
-        system.name = name;
-        system.defaultText = defaultText;
-        enabled.add(system.id);
-      }
+        : { ...createExamSystem(name, defaultText), name, defaultText };
+      if (!existing) enabled.add(system.id);
       catalog = upsertExamSystem(system);
       emit();
       dialog.close();
       render();
-    });
+    };
   };
 
   render();

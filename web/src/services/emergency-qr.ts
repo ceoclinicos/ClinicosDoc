@@ -182,7 +182,15 @@ export async function buildEmergencyCardBlob(ficha: FichaEmergencia): Promise<Bl
   const muted = "#64748b";
   const footerGray = "#64748b";
 
-  // Mismo degradado que la referencia (navy → teal → navy)
+  // Datos del paciente +10% tipografía
+  const fontTitle = 21; // 19×1.1
+  const fontName = 31; // 28×1.1
+  const fontNameLH = 35;
+  const fontCi = 18; // 16×1.1
+  const fontLabel = 15; // 14×1.1
+  const fontValue = 18; // 16×1.1
+  const fontValueLH = 22;
+
   const bg = ctx.createLinearGradient(0, 0, 0, BASE_H);
   bg.addColorStop(0, "#0b1f33");
   bg.addColorStop(0.45, "#0f766e");
@@ -191,48 +199,16 @@ export async function buildEmergencyCardBlob(ficha: FichaEmergencia): Promise<Bl
   ctx.fillRect(0, 0, BASE_W, BASE_H);
 
   const padX = 28;
-  const padY = 24;
   const cardX = padX;
-  const cardY = padY;
   const cardW = BASE_W - padX * 2;
-  const cardH = BASE_H - padY * 2 - 36; // deja aire para "Clínicos Doc · Ayudemos"
   const radius = 26;
   const contentL = cardX + 40;
   const contentW = cardW - 80;
   const cx = BASE_W / 2;
+  const qrSize = 180;
+  const cardPadTop = 40;
+  const cardPadBottom = 22;
 
-  ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.22)";
-  ctx.shadowBlur = 22;
-  ctx.shadowOffsetY = 8;
-  roundRect(ctx, cardX, cardY, cardW, cardH, radius);
-  ctx.fillStyle = "#ffffff";
-  ctx.fill();
-  ctx.restore();
-
-  roundRect(ctx, cardX, cardY, cardW, cardH, radius);
-  ctx.fillStyle = "#ffffff";
-  ctx.fill();
-
-  // Cabecera centrada (como la referencia)
-  let y = cardY + 48;
-  ctx.textAlign = "center";
-  ctx.fillStyle = red;
-  ctx.font = "700 19px system-ui, Segoe UI, sans-serif";
-  ctx.fillText("FICHA MÉDICA DE EMERGENCIA", cx, y);
-
-  y += 38;
-  ctx.fillStyle = navy;
-  ctx.font = "700 28px system-ui, Segoe UI, sans-serif";
-  y = wrapText(ctx, ficha.nombre.slice(0, 48), cx, y, contentW, 32);
-
-  y += 6;
-  ctx.fillStyle = muted;
-  ctx.font = "500 16px system-ui, Segoe UI, sans-serif";
-  ctx.fillText(`C.I. ${ficha.patientCedula}`, cx, y);
-
-  y += 40;
-  ctx.textAlign = "left";
   const rows: [string, string][] = [
     ["Tipo de sangre", ficha.tipoSangre || "—"],
     ["Alergias", ficha.alergias || "—"],
@@ -249,29 +225,83 @@ export async function buildEmergencyCardBlob(ficha: FichaEmergencia): Promise<Bl
     ]);
   }
 
+  // Medir alto del bloque (misma lógica que el dibujo) para acotar la tarjeta blanca
+  const measureBlockEnd = (startY: number): number => {
+    let y = startY + 40; // tras título
+    ctx.font = `700 ${fontName}px system-ui, Segoe UI, sans-serif`;
+    y += measureWrap(ctx, ficha.nombre.slice(0, 48), contentW, fontNameLH);
+    y += 6; // C.I.
+    y += 36; // inicio filas
+    for (const [, value] of rows) {
+      y += 24; // label
+      ctx.font = `400 ${fontValue}px system-ui, Segoe UI, sans-serif`;
+      for (const line of value.split("\n")) {
+        y += measureWrap(ctx, line || "—", contentW, fontValueLH) + 2;
+      }
+      y += 10;
+    }
+    const qrY = y + 12;
+    return qrY + qrSize + 26; // línea Escanea…
+  };
+
+  const cardY = 36;
+  const contentStartY = cardY + cardPadTop;
+  const scanBottom = measureBlockEnd(contentStartY);
+  const cardH = scanBottom - cardY + cardPadBottom;
+
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.22)";
+  ctx.shadowBlur = 22;
+  ctx.shadowOffsetY = 8;
+  roundRect(ctx, cardX, cardY, cardW, cardH, radius);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.restore();
+
+  roundRect(ctx, cardX, cardY, cardW, cardH, radius);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+
+  let y = contentStartY;
+  ctx.textAlign = "center";
+  ctx.fillStyle = red;
+  ctx.font = `700 ${fontTitle}px system-ui, Segoe UI, sans-serif`;
+  ctx.fillText("FICHA MÉDICA DE EMERGENCIA", cx, y);
+
+  y += 40;
+  ctx.fillStyle = navy;
+  ctx.font = `700 ${fontName}px system-ui, Segoe UI, sans-serif`;
+  y = wrapText(ctx, ficha.nombre.slice(0, 48), cx, y, contentW, fontNameLH);
+
+  y += 6;
+  ctx.fillStyle = muted;
+  ctx.font = `500 ${fontCi}px system-ui, Segoe UI, sans-serif`;
+  ctx.fillText(`C.I. ${ficha.patientCedula}`, cx, y);
+
+  y += 36;
+  ctx.textAlign = "left";
   for (const [label, value] of rows) {
     ctx.fillStyle = teal;
-    ctx.font = "700 14px system-ui, Segoe UI, sans-serif";
+    ctx.font = `700 ${fontLabel}px system-ui, Segoe UI, sans-serif`;
     ctx.fillText(label.toUpperCase(), contentL, y);
-    y += 22;
+    y += 24;
     ctx.fillStyle = navy;
-    ctx.font = "400 16px system-ui, Segoe UI, sans-serif";
+    ctx.font = `400 ${fontValue}px system-ui, Segoe UI, sans-serif`;
     for (const line of value.split("\n")) {
-      y = wrapText(ctx, line || "—", contentL, y, contentW, 20);
+      y = wrapText(ctx, line || "—", contentL, y, contentW, fontValueLH);
       y += 2;
     }
-    y += 14;
+    y += 10;
   }
 
-  const scanY = cardY + cardH - 28;
-  const qrSize = 190;
-  let qrY = Math.max(y + 10, scanY - qrSize - 28);
-  if (qrY + qrSize + 24 > scanY) qrY = scanY - qrSize - 24;
+  // QR pegado a los datos (sin hueco grande)
+  const qrY = y + 12;
   const qrX = (BASE_W - qrSize) / 2;
   const qrDataUrl = await buildEmergencyQrDataUrl(ficha.publicId, Math.round(qrSize * S));
   const qrImg = await loadImage(qrDataUrl);
   ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
 
+  const scanY = qrY + qrSize + 26;
   ctx.fillStyle = footerGray;
   ctx.font = "500 14px system-ui, Segoe UI, sans-serif";
   ctx.textAlign = "center";
@@ -284,6 +314,28 @@ export async function buildEmergencyCardBlob(ficha: FichaEmergencia): Promise<Bl
   return new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("No se pudo generar la tarjeta"))), "image/png");
   });
+}
+
+function measureWrap(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  lineHeight: number,
+): number {
+  const words = text.split(/\s+/);
+  let line = "";
+  let lines = 0;
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines += 1;
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines += 1;
+  return Math.max(1, lines) * lineHeight;
 }
 
 /** Abre diálogo de impresión / Guardar PDF a tamaño vertical ~6×9 cm. */
