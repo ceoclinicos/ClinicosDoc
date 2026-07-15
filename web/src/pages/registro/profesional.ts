@@ -94,7 +94,6 @@ function registerForm(): string {
           ${especialidadOptions()}
         </select>
       </label>
-      <label id="esp-otra-wrap" hidden>Otra especialidad<input name="especialidad_otra" placeholder="Escriba su especialidad" /></label>
       <div id="mpps-wrap">
         <label>Código MPPS<input name="mpps" id="mpps-input" placeholder="Ej. 154472" /></label>
         <p class="muted">Se valida en vivo contra SACS (cédula + MPPS deben coincidir).</p>
@@ -156,22 +155,16 @@ function bindProfesionalPage(el: HTMLElement): void {
       const tipo = body.querySelector<HTMLSelectElement>('select[name="tipo"]');
       const nac = body.querySelector<HTMLSelectElement>("#nac-select");
       const espWrap = body.querySelector("#esp-wrap") as HTMLElement | null;
-      const espOtraWrap = body.querySelector("#esp-otra-wrap") as HTMLElement | null;
       const espNote = body.querySelector("#esp-general-note") as HTMLElement | null;
       const mppsWrap = body.querySelector("#mpps-wrap") as HTMLElement | null;
       const mppsInput = body.querySelector<HTMLInputElement>("#mpps-input");
       const espSelect = body.querySelector<HTMLSelectElement>('select[name="especialidad"]');
-      if (tipo && espWrap && espOtraWrap) {
+      if (tipo && espWrap) {
         const syncEsp = (): void => {
           const esGeneral = tipo.value === "general";
           espWrap.hidden = esGeneral;
           if (espNote) espNote.hidden = !esGeneral;
-          if (esGeneral) {
-            espOtraWrap.hidden = true;
-            if (espSelect) espSelect.value = "";
-          } else {
-            espOtraWrap.hidden = espSelect?.value !== "Otra";
-          }
+          if (esGeneral && espSelect) espSelect.value = "";
         };
         const syncNac = (): void => {
           const ve = (nac?.value ?? "Venezuela") === "Venezuela";
@@ -182,7 +175,6 @@ function bindProfesionalPage(el: HTMLElement): void {
           }
         };
         tipo.addEventListener("change", syncEsp);
-        espSelect?.addEventListener("change", syncEsp);
         nac?.addEventListener("change", syncNac);
         syncEsp();
         syncNac();
@@ -226,10 +218,6 @@ function bindProfesionalPage(el: HTMLElement): void {
           let especialidad = String(fd.get("especialidad") ?? "").trim();
           if (!esGeneral) {
             if (!especialidad) throw new Error("Seleccione su especialidad");
-            if (especialidad === "Otra") {
-              especialidad = String(fd.get("especialidad_otra") ?? "").trim();
-              if (!especialidad) throw new Error("Escriba su especialidad");
-            }
           } else {
             especialidad = "Médico general";
           }

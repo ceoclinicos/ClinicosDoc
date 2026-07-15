@@ -37,5 +37,4 @@ export const ESPECIALIDADES_MEDICAS_VE: string[] = [
   "Reumatología",
   "Traumatología y ortopedia",
   "Urología",
-  "Otra",
 ];

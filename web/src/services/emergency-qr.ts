@@ -31,11 +31,11 @@ export async function buildEmergencyWallpaperBlob(ficha: FichaEmergencia): Promi
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  // Card blanca
+  // Card blanca (~10% menos altura vertical)
   const cardX = 64;
-  const cardY = 180;
+  const cardY = 220;
   const cardW = W - 128;
-  const cardH = 1480;
+  const cardH = Math.round(1480 * 0.9); // 1332
   roundRect(ctx, cardX, cardY, cardW, cardH, 28);
   ctx.fillStyle = "#ffffff";
   ctx.fill();
@@ -60,7 +60,7 @@ export async function buildEmergencyWallpaperBlob(ficha: FichaEmergencia): Promi
   const lines: [string, string][] = [
     ["Tipo de sangre", ficha.tipoSangre],
     ["Alergias", ficha.alergias],
-    ["Condiciones / Comorbilidades", ficha.condiciones],
+    ["Condiciones", ficha.condiciones],
     ["Medicamentos", ficha.medicamentos],
   ];
   for (const [label, value] of lines) {
@@ -70,7 +70,7 @@ export async function buildEmergencyWallpaperBlob(ficha: FichaEmergencia): Promi
     y += 40;
     ctx.fillStyle = "#0b1f33";
     ctx.font = "400 30px system-ui, Segoe UI, sans-serif";
-    y = wrapText(ctx, value, pad, y, cardW - 112, 38);
+    y = wrapText(ctx, value || "—", pad, y, cardW - 112, 38);
     y += 36;
   }
 
@@ -162,10 +162,10 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Tarjeta vertical ~6×9 cm a 300 dpi (709×1063 px), colores navy/teal de la app. */
+/** Tarjeta vertical elegante; altura ~10% menor que el formato base. */
 export async function buildEmergencyCardBlob(ficha: FichaEmergencia): Promise<Blob> {
   const W = 709;
-  const H = 1063;
+  const H = Math.round(1063 * 0.9); // 957 — solo −10% vertical
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -173,162 +173,109 @@ export async function buildEmergencyCardBlob(ficha: FichaEmergencia): Promise<Bl
   if (!ctx) throw new Error("No se pudo crear el canvas");
 
   const navy = "#0b1f33";
-  const navyLight = "#1a3a5c";
   const teal = "#0d9488";
-  const tealLight = "#14b8a6";
-  const surface = "#f4f7fa";
+  const red = "#dc2626";
+  const muted = "#64748b";
+  const footerGray = "#64748b";
 
-  const bg = ctx.createLinearGradient(0, 0, W, H);
-  bg.addColorStop(0, navy);
-  bg.addColorStop(0.55, navyLight);
-  bg.addColorStop(1, "#0a4a55");
+  // Mismo degradado que la referencia (navy → teal → navy)
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#0b1f33");
+  bg.addColorStop(0.45, "#0f766e");
+  bg.addColorStop(1, "#0b1f33");
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
 
-  const pad = 22;
-  const cardX = pad;
-  const cardY = pad;
-  const cardW = W - pad * 2;
-  const cardH = H - pad * 2;
-  const radius = 22;
+  const padX = 28;
+  const padY = 24;
+  const cardX = padX;
+  const cardY = padY;
+  const cardW = W - padX * 2;
+  const cardH = H - padY * 2 - 36; // deja aire para "Clínicos Doc · Ayudemos"
+  const radius = 26;
+  const contentL = cardX + 40;
+  const contentW = cardW - 80;
+  const cx = W / 2;
+
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.22)";
+  ctx.shadowBlur = 22;
+  ctx.shadowOffsetY = 8;
+  roundRect(ctx, cardX, cardY, cardW, cardH, radius);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+  ctx.restore();
 
   roundRect(ctx, cardX, cardY, cardW, cardH, radius);
   ctx.fillStyle = "#ffffff";
   ctx.fill();
 
-  // Barra superior navy
-  ctx.save();
-  roundRect(ctx, cardX, cardY, cardW, 72, radius);
-  ctx.clip();
-  ctx.fillStyle = navy;
-  ctx.fillRect(cardX, cardY, cardW, 72);
-  ctx.restore();
-  ctx.fillStyle = navy;
-  ctx.fillRect(cardX, cardY + 40, cardW, 32);
-
-  // Acento teal bajo el header
-  const accent = ctx.createLinearGradient(cardX, 0, cardX + cardW, 0);
-  accent.addColorStop(0, teal);
-  accent.addColorStop(1, tealLight);
-  ctx.fillStyle = accent;
-  ctx.fillRect(cardX, cardY + 72, cardW, 6);
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "700 18px system-ui, Segoe UI, sans-serif";
+  // Cabecera centrada (como la referencia)
+  let y = cardY + 48;
   ctx.textAlign = "center";
-  ctx.fillText("FICHA MÉDICA DE EMERGENCIA", W / 2, cardY + 44);
+  ctx.fillStyle = red;
+  ctx.font = "700 19px system-ui, Segoe UI, sans-serif";
+  ctx.fillText("FICHA MÉDICA DE EMERGENCIA", cx, y);
 
-  let y = cardY + 110;
-  const contentL = cardX + 28;
-  const contentW = cardW - 56;
-
+  y += 38;
   ctx.fillStyle = navy;
   ctx.font = "700 28px system-ui, Segoe UI, sans-serif";
-  ctx.textAlign = "left";
-  y = wrapText(ctx, ficha.nombre.slice(0, 40), contentL, y, contentW, 32);
+  y = wrapText(ctx, ficha.nombre.slice(0, 48), cx, y, contentW, 32);
 
-  // Badge sangre
-  y += 8;
-  const blood = ficha.tipoSangre || "—";
-  ctx.font = "700 16px system-ui, Segoe UI, sans-serif";
-  const bloodLabel = `Sangre ${blood}`;
-  const bloodW = Math.max(110, ctx.measureText(bloodLabel).width + 28);
-  roundRect(ctx, contentL, y - 18, bloodW, 32, 10);
-  ctx.fillStyle = "#fef2f2";
-  ctx.fill();
-  ctx.fillStyle = "#dc2626";
-  ctx.fillText(bloodLabel, contentL + 14, y + 4);
-
-  ctx.fillStyle = "#64748b";
+  y += 6;
+  ctx.fillStyle = muted;
   ctx.font = "500 16px system-ui, Segoe UI, sans-serif";
-  ctx.fillText(`C.I. ${ficha.patientCedula}`, contentL + bloodW + 16, y + 4);
+  ctx.fillText(`C.I. ${ficha.patientCedula}`, cx, y);
 
-  y += 36;
-  const panelTop = y - 8;
-  roundRect(ctx, contentL - 8, panelTop, contentW + 16, 230, 14);
-  ctx.fillStyle = surface;
-  ctx.fill();
-
-  y += 12;
+  y += 40;
+  ctx.textAlign = "left";
   const rows: [string, string][] = [
-    ["Alergias", ficha.alergias],
-    ["Condiciones / Comorbilidades", ficha.condiciones],
-    ["Medicamentos", ficha.medicamentos],
+    ["Tipo de sangre", ficha.tipoSangre || "—"],
+    ["Alergias", ficha.alergias || "—"],
+    ["Condiciones", ficha.condiciones || "—"],
+    ["Medicamentos", ficha.medicamentos || "—"],
   ];
+  if (ficha.contactos.length) {
+    rows.push([
+      "Contactos",
+      ficha.contactos
+        .slice(0, 2)
+        .map((c) => `${c.nombre} (${c.parentesco}): ${c.telefono}`)
+        .join("\n"),
+    ]);
+  }
+
   for (const [label, value] of rows) {
     ctx.fillStyle = teal;
-    ctx.font = "700 13px system-ui, Segoe UI, sans-serif";
+    ctx.font = "700 14px system-ui, Segoe UI, sans-serif";
     ctx.fillText(label.toUpperCase(), contentL, y);
-    y += 20;
+    y += 22;
     ctx.fillStyle = navy;
-    ctx.font = "400 15px system-ui, Segoe UI, sans-serif";
-    y = wrapText(ctx, value || "—", contentL, y, contentW, 20);
-    y += 10;
-  }
-
-  if (ficha.contactos.length) {
-    y += 6;
-    ctx.fillStyle = teal;
-    ctx.font = "700 13px system-ui, Segoe UI, sans-serif";
-    ctx.fillText("CONTACTOS", contentL, y);
-    y += 20;
-    ctx.fillStyle = navy;
-    ctx.font = "400 14px system-ui, Segoe UI, sans-serif";
-    for (const c of ficha.contactos.slice(0, 2)) {
-      y = wrapText(
-        ctx,
-        `${c.nombre} (${c.parentesco}): ${c.telefono}`.slice(0, 64),
-        contentL,
-        y,
-        contentW,
-        18,
-      );
-      y += 4;
+    ctx.font = "400 16px system-ui, Segoe UI, sans-serif";
+    for (const line of value.split("\n")) {
+      y = wrapText(ctx, line || "—", contentL, y, contentW, 20);
+      y += 2;
     }
+    y += 14;
   }
 
-  const footerH = 44;
-  const footerY = cardY + cardH - footerH;
-  const qrSize = 200;
+  const scanY = cardY + cardH - 28;
+  const qrSize = 190;
+  let qrY = Math.max(y + 10, scanY - qrSize - 28);
+  if (qrY + qrSize + 24 > scanY) qrY = scanY - qrSize - 24;
   const qrX = (W - qrSize) / 2;
-  const qrY = Math.min(y + 24, footerY - qrSize - 52);
   const qrDataUrl = await buildEmergencyQrDataUrl(ficha.publicId, qrSize);
   const qrImg = await loadImage(qrDataUrl);
-
-  // Marco suave del QR
-  roundRect(ctx, qrX - 12, qrY - 12, qrSize + 24, qrSize + 24, 14);
-  ctx.fillStyle = surface;
-  ctx.fill();
   ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
 
-  ctx.fillStyle = navyLight;
-  ctx.font = "600 15px system-ui, Segoe UI, sans-serif";
+  ctx.fillStyle = footerGray;
+  ctx.font = "500 14px system-ui, Segoe UI, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("Escanea en emergencia", W / 2, qrY + qrSize + 28);
+  ctx.fillText("Escanea en emergencia · clinicosdoc.com", cx, scanY);
 
-  // Pie: clinicosdoc.com en todo el borde inferior, levemente separado del borde
-  ctx.save();
-  roundRect(ctx, cardX, footerY - 8, cardW, footerH + 8, radius);
-  ctx.clip();
-  ctx.fillStyle = navy;
-  ctx.fillRect(cardX, footerY, cardW, footerH + 8);
-  ctx.restore();
-  ctx.fillStyle = navy;
-  ctx.fillRect(cardX, footerY, cardW, 12);
-
-  ctx.fillStyle = tealLight;
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.font = "600 15px system-ui, Segoe UI, sans-serif";
-  ctx.textAlign = "center";
-  // clinicosdoc.com repartido en todo el borde inferior
-  const brand = "clinicosdoc.com";
-  const chars = brand.split("");
-  const totalGap = cardW - 48;
-  const step = totalGap / (chars.length - 1);
-  const startX = cardX + 24;
-  ctx.fillStyle = "#e2e8f0";
-  chars.forEach((ch, i) => {
-    ctx.fillText(ch, startX + i * step, footerY + 28);
-  });
+  ctx.fillText("Clínicos Doc · Ayudemos", cx, H - 14);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("No se pudo generar la tarjeta"))), "image/png");
@@ -348,53 +295,41 @@ export async function printEmergencyCardPdf(ficha: FichaEmergencia): Promise<voi
   const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"/>
 <title>Tarjeta emergencia — ${esc(ficha.nombre)}</title>
 <style>
-  @page { size: 60mm 90mm; margin: 2mm; }
+  @page { size: 60mm 81mm; margin: 2mm; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  body { font-family: system-ui, Segoe UI, sans-serif; color: #0b1f33; background: #0b1f33; }
+  body {
+    font-family: system-ui, Segoe UI, sans-serif; color: #0b1f33;
+    background: linear-gradient(180deg, #0b1f33 0%, #0f766e 45%, #0b1f33 100%);
+  }
   .card {
-    width: 56mm; height: 86mm; border-radius: 2.5mm; overflow: hidden;
+    width: 56mm; height: 72mm; border-radius: 3mm; overflow: hidden;
     background: #fff; display: flex; flex-direction: column;
-    page-break-inside: avoid;
+    page-break-inside: avoid; padding: 3mm 4mm 2mm;
   }
-  .hdr {
-    background: linear-gradient(135deg, #0b1f33, #1a3a5c);
-    color: #fff; text-align: center; padding: 2.2mm 2mm 1.8mm;
-    font-size: 6.5pt; font-weight: 700; letter-spacing: 0.03em;
-  }
-  .accent { height: 1.2mm; background: linear-gradient(90deg, #0d9488, #14b8a6); }
-  .body { flex: 1; padding: 2.5mm 3mm 1mm; }
-  h1 { margin: 0 0 1mm; font-size: 11pt; line-height: 1.15; }
-  .meta { color: #64748b; font-size: 7pt; margin-bottom: 1.5mm; }
-  .blood { color: #dc2626; font-weight: 700; }
-  .label { color: #0d9488; font-size: 6pt; font-weight: 700; text-transform: uppercase; margin-top: 1mm; }
-  .val { font-size: 7pt; line-height: 1.2; }
-  .qr-wrap { text-align: center; padding: 1mm 0 2mm; }
+  .title { color: #dc2626; text-align: center; font-size: 7pt; font-weight: 700; letter-spacing: 0.02em; }
+  h1 { margin: 1.5mm 0 0.8mm; font-size: 11pt; line-height: 1.15; text-align: center; color: #0b1f33; }
+  .meta { color: #64748b; font-size: 7pt; text-align: center; margin-bottom: 2.5mm; }
+  .label { color: #0d9488; font-size: 6.5pt; font-weight: 700; text-transform: uppercase; margin-top: 1.4mm; }
+  .val { font-size: 7.5pt; line-height: 1.25; color: #0b1f33; }
+  .qr-wrap { text-align: center; margin-top: auto; padding: 1.5mm 0 1mm; }
   .qr-wrap img { width: 22mm; height: 22mm; }
-  .qr-caption { font-size: 6.5pt; color: #1a3a5c; font-weight: 600; margin-top: 0.8mm; }
-  .foot {
-    background: #0b1f33; color: #e2e8f0; text-align: center;
-    font-size: 6.5pt; font-weight: 600; letter-spacing: 0.28em;
-    padding: 2mm 1.5mm; margin-top: auto;
-  }
+  .foot { text-align: center; font-size: 5.5pt; color: #64748b; padding-top: 0.5mm; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
   <div class="card">
-    <div class="hdr">FICHA MÉDICA DE EMERGENCIA</div>
-    <div class="accent"></div>
-    <div class="body">
-      <h1>${esc(ficha.nombre)}</h1>
-      <div class="meta">C.I. ${esc(ficha.patientCedula)} · <span class="blood">Sangre ${esc(ficha.tipoSangre)}</span></div>
-      <div class="label">Alergias</div><div class="val">${esc(ficha.alergias)}</div>
-      <div class="label">Condiciones / Comorbilidades</div><div class="val">${esc(ficha.condiciones)}</div>
-      <div class="label">Medicamentos</div><div class="val">${esc(ficha.medicamentos)}</div>
-      ${contacts ? `<div class="label">Contactos</div><div class="val">${contacts}</div>` : ""}
-    </div>
+    <div class="title">FICHA MÉDICA DE EMERGENCIA</div>
+    <h1>${esc(ficha.nombre)}</h1>
+    <div class="meta">C.I. ${esc(ficha.patientCedula)}</div>
+    <div class="label">Tipo de sangre</div><div class="val">${esc(ficha.tipoSangre)}</div>
+    <div class="label">Alergias</div><div class="val">${esc(ficha.alergias)}</div>
+    <div class="label">Condiciones</div><div class="val">${esc(ficha.condiciones)}</div>
+    <div class="label">Medicamentos</div><div class="val">${esc(ficha.medicamentos)}</div>
+    ${contacts ? `<div class="label">Contactos</div><div class="val">${contacts}</div>` : ""}
     <div class="qr-wrap">
       <img src="${qr}" alt="QR" />
-      <div class="qr-caption">Escanea en emergencia</div>
     </div>
-    <div class="foot">clinicosdoc.com</div>
+    <div class="foot">Escanea en emergencia · clinicosdoc.com</div>
   </div>
 </body></html>`;
 
@@ -437,8 +372,8 @@ export async function downloadEmergencyCardPdf(ficha: FichaEmergencia): Promise<
     const jpeg = c.toDataURL("image/jpeg", 0.92);
     const b64 = jpeg.split(",")[1] ?? "";
     const jpegBytes = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
-    // Página PDF en puntos (1 mm ≈ 2.8346 pt) → 60×90 mm
-    const pdfBlob = buildJpegPdf(jpegBytes, W, H, 170.08, 255.12);
+    // Página PDF en puntos (1 mm ≈ 2.8346 pt) → 60×81 mm (−10% altura)
+    const pdfBlob = buildJpegPdf(jpegBytes, W, H, 170.08, 229.61);
     downloadBlob(pdfBlob, `tarjeta-emergencia-${ficha.publicId}.pdf`);
   } finally {
     URL.revokeObjectURL(imgUrl);

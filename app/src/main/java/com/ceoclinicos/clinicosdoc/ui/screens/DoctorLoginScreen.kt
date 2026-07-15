@@ -94,7 +94,6 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var sexo by remember { mutableStateOf<String?>(null) }
     var especialidad by remember { mutableStateOf<String?>(null) }
-    var especialidadOtra by remember { mutableStateOf("") }
     var esMedicoGeneral by remember { mutableStateOf(true) }
     var nacionalidad by remember { mutableStateOf("Venezuela") }
     var whatsapp by remember { mutableStateOf("") }
@@ -254,12 +253,9 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                         onEsGeneralChange = { general ->
                             esMedicoGeneral = general
                             especialidad = if (general) "Medicina general" else null
-                            especialidadOtra = ""
                         },
                         especialidad = especialidad,
                         onEspecialidadChange = { especialidad = it },
-                        especialidadOtra = especialidadOtra,
-                        onEspecialidadOtraChange = { especialidadOtra = it },
                         especialidades = especialidades,
                         mpps = mpps,
                         onMppsChange = { mpps = it.filter { c -> c.isDigit() } },
@@ -289,8 +285,8 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                                 password.length != 4 -> "El PIN debe tener 4 dígitos"
                                 else -> null
                             }
-                            if (!esMedicoGeneral && (especialidad.isNullOrBlank() || (especialidad == "Otra" && especialidadOtra.isBlank()))) {
-                                showToast("Selecciona o escribe tu especialidad")
+                            if (!esMedicoGeneral && especialidad.isNullOrBlank()) {
+                                showToast("Selecciona tu especialidad")
                                 return@RegistrationStep1
                             }
                             if (listOf(nombreError, cedulaError, correoError, mppsError, passwordError).any { it != null }) {
@@ -345,10 +341,6 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                             }
                             val especialidadFinal = when {
                                 esMedicoGeneral -> "Medicina general"
-                                especialidad == "Otra" -> especialidadOtra.trim().ifBlank {
-                                    showToast("Escribe tu especialidad")
-                                    return@RegistrationStep2
-                                }
                                 else -> especialidad?.takeIf { it.isNotBlank() } ?: run {
                                     showToast("Selecciona especialidad")
                                     return@RegistrationStep2
@@ -461,8 +453,6 @@ private fun RegistrationStep1(
     onEsGeneralChange: (Boolean) -> Unit,
     especialidad: String?,
     onEspecialidadChange: (String?) -> Unit,
-    especialidadOtra: String,
-    onEspecialidadOtraChange: (String) -> Unit,
     especialidades: List<String>,
     mpps: String,
     onMppsChange: (String) -> Unit,
@@ -611,17 +601,6 @@ private fun RegistrationStep1(
                     )
                 }
             }
-        }
-        if (especialidad == "Otra") {
-            Spacer(modifier = Modifier.height(12.dp))
-            PremiumTextField(
-                "Especifica tu especialidad",
-                especialidadOtra,
-                onEspecialidadOtraChange,
-                hint = "Ej. Traumatología",
-                prefixIcon = Icons.Outlined.MedicalServices,
-                keyboardOptions = keyboardCapitalizationWords(),
-            )
         }
     }
     if (esVenezuela) {

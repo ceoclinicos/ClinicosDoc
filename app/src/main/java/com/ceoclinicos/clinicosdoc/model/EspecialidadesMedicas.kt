@@ -40,6 +40,5 @@ object EspecialidadesMedicas {
         "Reumatología",
         "Traumatología y ortopedia",
         "Urología",
-        "Otra",
     )
 }
