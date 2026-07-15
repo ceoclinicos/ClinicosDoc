@@ -237,6 +237,9 @@ fun RedactarFlowScreen(
         enfermedadActualEjemplo = config.enfermedadActualEjemplo.ifBlank {
             EnfermedadActualStorage.load(context)
         }
+        if (enfermedadActualEjemplo.isNotBlank()) {
+            EnfermedadActualStorage.save(context, enfermedadActualEjemplo)
+        }
         activeSections = config.activeSections
         sectionLayoutOrder = config.sectionLayoutOrder
     }
@@ -258,6 +261,7 @@ fun RedactarFlowScreen(
                 sectionLayoutOrder = layout,
             ),
         )
+        EnfermedadActualStorage.save(context, ejemplo)
         if (updated == tpl) return
         template = TemplateStorage.upsert(context, updated)
     }

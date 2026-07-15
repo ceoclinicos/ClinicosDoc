@@ -1,6 +1,10 @@
 import { DocumentTypeLabels } from "../../shared/models";
 import type { DocumentTemplate, DocumentType, Patient } from "../../shared/models";
 import { SectionCatalog, defaultSectionsFor } from "../../shared/section-catalog";
+import {
+  enfermedadActualPromptBlock,
+  resolveEnfermedadActualEjemplo,
+} from "../../shared/enfermedad-actual";
 import { ensureTemplateSections } from "../ensure-sections";
 import { sendPrompt } from "./ai-service";
 import { sanitizeDocumentContent } from "./document-sanitizer";
@@ -104,6 +108,7 @@ function buildPrompt(
     "",
   ];
 
+  const ejemplo = resolveEnfermedadActualEjemplo(template.enfermedadActualEjemplo);
   const sectionList = [
     "Secciones de la plantilla (orden obligatorio — no omitas ninguna):",
     ...effective.map((s, i) => `${i + 1}. [[SECTION:${s}]]`),
@@ -116,6 +121,8 @@ function buildPrompt(
       "Formato: línea [[SECTION:Nombre exacto]] y contenido debajo. PROHIBIDO usar **.",
       "",
       ...sectionList,
+      enfermedadActualPromptBlock(ejemplo),
+      "",
       sectionDefaultsPromptBlock(effective),
     );
     if (physicalExamBlock) lines.push("", physicalExamBlock);
@@ -128,10 +135,12 @@ function buildPrompt(
       ...sectionList,
       "Guía de estilo:",
       MOTIVO_CONSULTA_STYLE,
-      `- Enfermedad actual: párrafo narrativo. Inicia "Se trata de paciente ${sexoTexto} de ${patient.edad} años de edad..."; motivo, síntomas y conducta SOLO según el dictado. DEBE ir bajo [[SECTION:Enfermedad actual]], NUNCA sin título.`,
+      `- Enfermedad actual: narrativa al estilo del ejemplo. Inicie con paciente ${sexoTexto} de ${patient.edad} años; natural/procedente, diagnóstico de base o sin patológicos, inicio con fecha, hechos del dictado y cierre en el centro. DEBE ir bajo [[SECTION:Enfermedad actual]].`,
       "- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto.",
       "- Primera línea del examen físico: TA: --- mmHg | FR: --- rpm | FC: --- lpm | SaTO2: ---%  (usa --- solo si no hay dato; no pongas corchetes).",
       "- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.",
+      "",
+      enfermedadActualPromptBlock(ejemplo),
       "",
       sectionDefaultsPromptBlock(effective),
     );

@@ -50,6 +50,7 @@ internal data class DocumentHeaderDto(
     val id: String,
     val name: String,
     val logoPath: String?,
+    val logoBase64: String? = null,
     val doctorName: String?,
     val subtitle: String?,
     val description: String?,

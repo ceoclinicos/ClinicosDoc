@@ -38,6 +38,8 @@ export interface DocumentTemplate {
   sections: string[];
   isDefault: boolean;
   enabledPhysicalExamSystemIds: string[];
+  /** Ejemplo de estilo editable para Enfermedad actual (IA). */
+  enfermedadActualEjemplo?: string;
 }
 
 export interface PhysicalExamSystem {
@@ -51,6 +53,8 @@ export interface DocumentHeader {
   id: string;
   name: string;
   logoPath?: string;
+  /** JPEG en base64 (sync Firestore, sin Storage). */
+  logoBase64?: string;
   doctorName?: string;
   subtitle?: string;
   description?: string;

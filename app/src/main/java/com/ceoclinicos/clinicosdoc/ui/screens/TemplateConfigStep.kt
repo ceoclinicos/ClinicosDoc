@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.dp
+import com.ceoclinicos.clinicosdoc.data.EnfermedadActualStorage
 import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
 import com.ceoclinicos.clinicosdoc.model.DocumentType
@@ -134,7 +135,8 @@ fun TemplateConfigStep(
             Spacer(modifier = Modifier.height(24.dp))
             Text("Enfermedad actual", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Ejemplo de cómo te gusta redactar la narrativa clínica. La IA lo usará como referencia de estilo.",
+                "Ejemplo de cómo redactar la enfermedad actual. La IA lo usa como estilo. " +
+                    "Puede editarlo a su gusto (natural/procedente, diagnósticos de base, fecha de inicio, etc.).",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
@@ -142,9 +144,11 @@ fun TemplateConfigStep(
             OutlinedTextField(
                 value = enfermedadActualEjemplo,
                 onValueChange = onEnfermedadActualEjemploChange,
-                modifier = Modifier.fillMaxWidth().height(140.dp),
-                placeholder = { Text("Escribe un ejemplo de enfermedad actual...") },
-                maxLines = 8,
+                modifier = Modifier.fillMaxWidth().height(160.dp),
+                placeholder = {
+                    Text(EnfermedadActualStorage.DEFAULT_EJEMPLO, maxLines = 6)
+                },
+                maxLines = 10,
             )
         }
 

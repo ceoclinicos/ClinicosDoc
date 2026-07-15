@@ -1,6 +1,7 @@
 /** Persistencia local de plantillas, encabezados y documentos (paridad con la app). */
 import { DocumentTypeLabels, type ClinicalDocument, type ClinicalDraft, type DocumentHeader, type DocumentTemplate, type DocumentType } from "../shared/models";
 import { catalogFor, defaultSectionsFor } from "../shared/section-catalog";
+import { ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT } from "../shared/enfermedad-actual";
 import { PhysicalExamDefaults } from "../shared/physical-exam-defaults";
 import { loadJson, saveJson } from "./local-store";
 import {
@@ -31,6 +32,8 @@ function makeDefaultTemplates(): DocumentTemplate[] {
     sections: defaultSectionsFor(type),
     isDefault: true,
     enabledPhysicalExamSystemIds: examIds,
+    enfermedadActualEjemplo:
+      type === "informe" || type === "historiaClinica" ? ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT : "",
   }));
 }
 

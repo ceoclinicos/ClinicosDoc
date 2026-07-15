@@ -649,10 +649,31 @@ dialog {
   margin-bottom: 0.65rem;
 }
 
+.doc-live-preview .print-header-logo {
+  display: block;
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  margin: 0 auto 8px;
+  border-radius: 8px;
+}
+
 .doc-live-preview .print-header-name {
   font-weight: 700;
   color: #111;
   font-size: 1.05rem;
+}
+
+.header-logo-preview {
+  margin: 0.5rem 0;
+}
+
+.header-logo-preview img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border, #c5ced8);
 }
 
 .doc-live-preview .print-header-sub,

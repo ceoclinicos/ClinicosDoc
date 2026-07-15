@@ -2,6 +2,7 @@ package com.ceoclinicos.clinicosdoc.service
 
 import android.content.Context
 import com.ceoclinicos.clinicosdoc.config.AiConfig
+import com.ceoclinicos.clinicosdoc.data.EnfermedadActualStorage
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
@@ -37,7 +38,10 @@ object DocumentAiService {
         val headerBlock = header?.toPlainTextBlock()
         val textOverrides = sessionConfig?.physicalExamTextOverrides.orEmpty()
         val physicalExamBlock = PhysicalExamPromptBuilder.buildBlock(context, effectiveTemplate, textOverrides)
-        val enfermedadEjemplo = sessionConfig?.enfermedadActualEjemplo.orEmpty()
+        val enfermedadEjemplo = EnfermedadActualStorage.resolved(
+            sessionConfig?.enfermedadActualEjemplo.orEmpty(),
+            context,
+        )
 
         val system = """
             Eres un asistente médico que redacta y mejora documentos clínicos en español.
@@ -136,7 +140,11 @@ object DocumentAiService {
                     appendLine()
                     appendLine("Guía de estilo:")
                     appendLine(SectionDefaults.MOTIVO_CONSULTA_STYLE)
-                    appendLine("- Enfermedad actual: párrafo narrativo. Inicia \"Se trata de paciente $sexoTexto de ${patient.edad} años de edad...\"; motivo, síntomas y conducta SOLO según el dictado.")
+                    appendLine(
+                        "- Enfermedad actual: narrativa al estilo del ejemplo. " +
+                            "Inicie con paciente $sexoTexto de ${patient.edad} años; " +
+                            "natural/procedente, diagnóstico de base o sin patológicos, inicio con fecha, hechos del dictado y cierre en el centro.",
+                    )
                     appendLine("- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto.")
                     appendLine("- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.")
                     appendLine()
@@ -184,7 +192,10 @@ object DocumentAiService {
         val normalizedTitle = normalizeSectionTitle(sectionTitle)
         val textOverrides = sessionConfig?.physicalExamTextOverrides.orEmpty()
         val physicalExamBlock = PhysicalExamPromptBuilder.buildBlock(context, effectiveTemplate, textOverrides)
-        val enfermedadEjemplo = sessionConfig?.enfermedadActualEjemplo.orEmpty()
+        val enfermedadEjemplo = EnfermedadActualStorage.resolved(
+            sessionConfig?.enfermedadActualEjemplo.orEmpty(),
+            context,
+        )
         val isPhysicalExam = normalizedTitle.equals(SectionCatalog.EXAMEN_FISICO, ignoreCase = true) ||
             Regex("""(?i)examen\s+f[ií]sico""").matches(normalizedTitle)
         val isDiagnostico = normalizedTitle.equals(SectionCatalog.DIAGNOSTICO, ignoreCase = true) ||
@@ -291,19 +302,23 @@ object DocumentAiService {
         documentType: DocumentType,
         sectionTitle: String = "",
     ) {
-        if (ejemplo.isBlank()) return
         val applies = when (documentType) {
             DocumentType.HISTORIA_CLINICA ->
                 sectionTitle.isBlank() ||
                     sectionTitle.equals(SectionCatalog.ENFERMEDAD_ACTUAL, ignoreCase = true)
-            DocumentType.INFORME -> sectionTitle.isBlank()
+            DocumentType.INFORME ->
+                sectionTitle.isBlank() ||
+                    sectionTitle.equals(SectionCatalog.ENFERMEDAD_ACTUAL, ignoreCase = true)
             else -> false
         }
         if (!applies) return
-        appendLine("EJEMPLO DE ESTILO para la narrativa clínica (referencia de redacción; adapta al dictado):")
+        val sample = ejemplo.trim().ifBlank { EnfermedadActualStorage.DEFAULT_EJEMPLO }
+        appendLine("ENFERMEDAD ACTUAL — ejemplo de estilo (referencia; adapta al dictado, sexo, edad y hechos reales):")
         appendLine("\"\"\"")
-        appendLine(ejemplo)
+        appendLine(sample)
         appendLine("\"\"\"")
+        appendLine("Reglas de estilo:")
+        appendLine(EnfermedadActualStorage.STYLE_RULES)
         appendLine()
     }
 

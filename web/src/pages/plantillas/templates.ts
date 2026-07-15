@@ -9,10 +9,20 @@ import {
 import type { DocumentHeader, DocumentTemplate, DocumentType } from "../../shared/models";
 import { DocumentTypeLabels } from "../../shared/models";
 import { catalogFor } from "../../shared/section-catalog";
+import {
+  ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT,
+  resolveEnfermedadActualEjemplo,
+  saveEnfermedadActualEjemplo,
+} from "../../shared/enfermedad-actual";
 import { loadPhysicalExamCatalog } from "../../services/ai/physical-exam-prompt";
+import { fileToLogoBase64, logoDataUrl } from "../../services/header-logo";
 import { bindNavButtons, page } from "../helpers";
 import { getProfessionalSession } from "../../registro/session";
 import { loadDoctorProfile } from "../../services/doctor-local";
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 registerRoute({
   path: "/plantillas/encabezados",
@@ -20,6 +30,7 @@ registerRoute({
   medicoOnly: true,
   render: () => {
     let headers = loadHeaders();
+    let draftLogoBase64: string | undefined;
     const el = page(
       "Encabezados",
       `
@@ -34,6 +45,12 @@ registerRoute({
           <label>Médico / clínica<input name="doctorName" /></label>
           <label>Subtítulo<input name="subtitle" placeholder="Ej. Medicina interna" /></label>
           <label>Descripción<textarea name="description" rows="3" placeholder="Dirección, teléfono…"></textarea></label>
+          <label>Logo (cuadrado 256×256 o 512×512 px)
+            <input type="file" name="logo" id="logo-input" accept="image/*" />
+          </label>
+          <p class="muted" id="logo-hint">Requisito: imagen cuadrada 256×256 o 512×512</p>
+          <div id="logo-preview" class="header-logo-preview" hidden></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-clear-logo" hidden>Quitar logo</button>
           <label class="check-row"><input type="checkbox" name="isDefault" /> Predeterminado</label>
           <div class="dialog-actions">
             <button type="button" class="btn btn-ghost" id="cancel-edit">Cancelar</button>
@@ -49,6 +66,23 @@ registerRoute({
     const dialog = el.querySelector("#edit-dialog") as HTMLDialogElement;
     const form = el.querySelector("#edit-form") as HTMLFormElement;
     const btnDelete = el.querySelector("#btn-delete") as HTMLButtonElement;
+    const logoInput = el.querySelector("#logo-input") as HTMLInputElement;
+    const logoPreview = el.querySelector("#logo-preview") as HTMLElement;
+    const btnClearLogo = el.querySelector("#btn-clear-logo") as HTMLButtonElement;
+
+    function setLogoPreview(base64?: string): void {
+      draftLogoBase64 = base64;
+      const src = logoDataUrl(base64);
+      if (src) {
+        logoPreview.innerHTML = `<img src="${src}" alt="Logo" width="64" height="64" />`;
+        logoPreview.hidden = false;
+        btnClearLogo.hidden = false;
+      } else {
+        logoPreview.innerHTML = "";
+        logoPreview.hidden = true;
+        btnClearLogo.hidden = true;
+      }
+    }
 
     function refresh(): void {
       headers = loadHeaders();
@@ -85,6 +119,8 @@ registerRoute({
       (form.elements.namedItem("subtitle") as HTMLInputElement).value = h.subtitle ?? "";
       (form.elements.namedItem("description") as HTMLTextAreaElement).value = h.description ?? "";
       (form.elements.namedItem("isDefault") as HTMLInputElement).checked = h.isDefault;
+      logoInput.value = "";
+      setLogoPreview(h.logoBase64);
       btnDelete.hidden = isNew || headers.length <= 1;
       dialog.showModal();
     }
@@ -103,6 +139,23 @@ registerRoute({
         },
         true,
       );
+    });
+
+    logoInput.addEventListener("change", async () => {
+      const file = logoInput.files?.[0];
+      if (!file) return;
+      try {
+        const base64 = await fileToLogoBase64(file);
+        setLogoPreview(base64);
+      } catch (err) {
+        logoInput.value = "";
+        alert(err instanceof Error ? err.message : "No se pudo cargar el logo");
+      }
+    });
+
+    btnClearLogo.addEventListener("click", () => {
+      logoInput.value = "";
+      setLogoPreview(undefined);
     });
 
     el.querySelector("#cancel-edit")?.addEventListener("click", () => dialog.close());
@@ -125,6 +178,7 @@ registerRoute({
         subtitle: String(fd.get("subtitle")).trim(),
         description: String(fd.get("description")).trim(),
         isDefault: (form.elements.namedItem("isDefault") as HTMLInputElement).checked,
+        logoBase64: draftLogoBase64,
       });
       dialog.close();
       refresh();
@@ -177,6 +231,8 @@ registerRoute({
     const catalog = catalogFor(tipo);
     const examSystems = loadPhysicalExamCatalog().sort((a, b) => a.sortOrder - b.sortOrder);
     const needsExam = tipo === "historiaClinica" || tipo === "informe";
+    const showEjemplo = tipo === "historiaClinica" || tipo === "informe";
+    const ejemploActual = resolveEnfermedadActualEjemplo(template.enfermedadActualEjemplo);
     const enabledExam = new Set(
       template.enabledPhysicalExamSystemIds?.length
         ? template.enabledPhysicalExamSystemIds
@@ -186,7 +242,7 @@ registerRoute({
       `Plantilla ${DocumentTypeLabels[tipo]}`,
       `
       <form class="form" id="tpl-form">
-        <label>Nombre<input name="name" required value="${template.name}" /></label>
+        <label>Nombre<input name="name" required value="${escapeHtml(template.name)}" /></label>
         <fieldset class="card-panel">
           <legend><strong>Secciones activas</strong></legend>
           <p class="muted">Marca las secciones que usarás al redactar.</p>
@@ -200,6 +256,16 @@ registerRoute({
               .join("")}
           </div>
         </fieldset>
+        ${
+          showEjemplo
+            ? `
+        <fieldset class="card-panel">
+          <legend><strong>Enfermedad actual — ejemplo de estilo</strong></legend>
+          <p class="muted">La IA usa este texto como referencia. Puede editarlo a su gusto (natural/procedente, diagnósticos de base, fecha de inicio, etc.).</p>
+          <textarea name="enfermedadEjemplo" rows="8">${escapeHtml(ejemploActual || ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT)}</textarea>
+        </fieldset>`
+            : ""
+        }
         ${
           needsExam
             ? `
@@ -234,11 +300,16 @@ registerRoute({
         alert("Seleccione al menos un sistema de examen físico.");
         return;
       }
+      const ejemplo = showEjemplo
+        ? String(fd.get("enfermedadEjemplo") ?? "").trim() || ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT
+        : "";
+      if (ejemplo) saveEnfermedadActualEjemplo(ejemplo);
       template = upsertTemplate({
         ...template,
         name: String(fd.get("name")).trim() || template.name,
         sections: ordered,
         enabledPhysicalExamSystemIds: examIds,
+        enfermedadActualEjemplo: ejemplo,
         isDefault: true,
       });
       alert("Plantilla guardada");

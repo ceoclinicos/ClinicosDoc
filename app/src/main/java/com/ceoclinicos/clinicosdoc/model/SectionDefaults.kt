@@ -11,7 +11,7 @@ object SectionDefaults {
         section.equals(SectionCatalog.MOTIVO_CONSULTA, ignoreCase = true) ->
             "Evaluación médica."
         section.equals(SectionCatalog.ENFERMEDAD_ACTUAL, ignoreCase = true) ->
-            "Paciente refiere cuadro clínico de evolución reciente. Sin mayores detalles aportados en la evaluación actual."
+            "Se trata de paciente referido para evaluación clínica. Sin mayores detalles aportados en la evaluación actual."
         section.equals(SectionCatalog.ANTECEDENTES_PERSONALES, ignoreCase = true) ->
             "Niega antecedentes patológicos personales de importancia. Niega quirúrgicos y traumáticos. Niega alergias medicamentosas conocidas."
         section.equals(SectionCatalog.ANTECEDENTES_FAMILIARES, ignoreCase = true) ->

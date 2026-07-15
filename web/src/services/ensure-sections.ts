@@ -5,7 +5,7 @@ import { SectionCatalog } from "../shared/section-catalog";
 const DEFAULT_BODY: Record<string, string> = {
   [SectionCatalog.MOTIVO_CONSULTA]: "Evaluación médica.",
   [SectionCatalog.ENFERMEDAD_ACTUAL]:
-    "Paciente refiere cuadro clínico de evolución reciente. Sin mayores detalles aportados en la evaluación actual.",
+    "Se trata de paciente referido para evaluación clínica. Sin mayores detalles aportados en la evaluación actual.",
   [SectionCatalog.EXAMEN_FISICO]:
     "TA: --- mmHg | FR: --- rpm | FC: --- lpm | SaTO2: ---%\nExamen físico según plantilla de sistemas activos.",
   [SectionCatalog.DIAGNOSTICO]: "1. Evaluación clínica.",

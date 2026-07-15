@@ -9,7 +9,7 @@ function textFor(section: string): string {
   const s = section.trim().toLowerCase();
   if (s === SectionCatalog.MOTIVO_CONSULTA.toLowerCase()) return "Evaluación médica.";
   if (s === SectionCatalog.ENFERMEDAD_ACTUAL.toLowerCase()) {
-    return "Paciente refiere cuadro clínico de evolución reciente. Sin mayores detalles aportados en la evaluación actual.";
+    return "Se trata de paciente referido para evaluación clínica. Sin mayores detalles aportados en la evaluación actual.";
   }
   if (s === SectionCatalog.ANTECEDENTES_PERSONALES.toLowerCase()) {
     return "Niega antecedentes patológicos personales de importancia. Niega quirúrgicos y traumáticos. Niega alergias medicamentosas conocidas.";

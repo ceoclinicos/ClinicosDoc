@@ -9,6 +9,8 @@ data class DocumentHeader(
     val id: String,
     val name: String,
     val logoPath: String? = null,
+    /** JPEG en base64 para sync Firestore (sin Storage). */
+    val logoBase64: String? = null,
     val doctorName: String,
     val subtitle: String,
     val description: String,

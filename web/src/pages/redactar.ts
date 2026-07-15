@@ -39,6 +39,11 @@ import type {
 } from "../shared/models";
 import { DocumentReportTitles, DocumentTypeLabels } from "../shared/models";
 import { catalogFor } from "../shared/section-catalog";
+import {
+  ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT,
+  resolveEnfermedadActualEjemplo,
+  saveEnfermedadActualEjemplo,
+} from "../shared/enfermedad-actual";
 import { bindNavButtons, page } from "./helpers";
 
 function hashQuery(): URLSearchParams {
@@ -185,6 +190,8 @@ function mountRedactar(root: HTMLElement): void {
         : examSystems.map((s) => s.id),
     );
     const needsExam = docType === "historiaClinica" || docType === "informe";
+    const showEjemplo = needsExam;
+    const ejemploActual = resolveEnfermedadActualEjemplo(workingTemplate.enfermedadActualEjemplo);
 
     root.innerHTML = `
       <p class="step-badge">2 / 4 · Plantilla</p>
@@ -205,6 +212,16 @@ function mountRedactar(root: HTMLElement): void {
               .join("")}
           </div>
         </fieldset>
+        ${
+          showEjemplo
+            ? `
+        <fieldset class="card-panel">
+          <legend><strong>Enfermedad actual — ejemplo</strong></legend>
+          <p class="muted">Estilo que seguirá la IA. Editable a su gusto.</p>
+          <textarea name="enfermedadEjemplo" rows="7">${escapeHtml(ejemploActual || ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT)}</textarea>
+        </fieldset>`
+            : ""
+        }
         ${
           needsExam
             ? `
@@ -245,11 +262,16 @@ function mountRedactar(root: HTMLElement): void {
         alert("Seleccione al menos un sistema de examen físico.");
         return;
       }
+      const ejemplo = showEjemplo
+        ? String(fd.get("enfermedadEjemplo") ?? "").trim() || ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT
+        : "";
+      if (ejemplo) saveEnfermedadActualEjemplo(ejemplo);
       workingTemplate = {
         ...workingTemplate,
         name: String(fd.get("name")).trim() || workingTemplate.name,
         sections: ordered,
         enabledPhysicalExamSystemIds: examIds,
+        enfermedadActualEjemplo: ejemplo,
         isDefault: true,
       };
       if (fd.get("saveTpl")) {

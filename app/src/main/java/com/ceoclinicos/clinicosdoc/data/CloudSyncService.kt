@@ -187,8 +187,9 @@ object CloudSyncService {
 
     suspend fun pushHeader(context: Context, userId: String, header: DocumentHeader) {
         if (!DoctorAuthService.isConfigured(context)) return
+        val ready = HeaderStorage.ensureLogoBase64(header)
         headersRef(userId).document(header.id)
-            .set(header.toSyncDto().toMap())
+            .set(ready.toSyncDto().toMap())
             .await()
     }
 
@@ -307,8 +308,14 @@ object CloudSyncService {
     private fun mergeHeaderLogos(context: Context, cloudHeaders: List<DocumentHeader>): List<DocumentHeader> {
         val localById = HeaderStorage.loadAll(context).associateBy { it.id }
         return cloudHeaders.map { cloud ->
+            val withFile = HeaderStorage.withMaterializedLogo(context, cloud)
+            if (withFile.logoPath != null) return@map withFile
             val localLogo = localById[cloud.id]?.logoPath?.takeIf { path -> File(path).exists() }
-            cloud.copy(logoPath = localLogo)
+            val localB64 = localById[cloud.id]?.logoBase64
+            cloud.copy(
+                logoPath = localLogo,
+                logoBase64 = cloud.logoBase64 ?: localB64,
+            )
         }
     }
 
@@ -481,6 +488,7 @@ object CloudSyncService {
         id = id,
         name = name,
         logoPath = null,
+        logoBase64 = logoBase64,
         doctorName = doctorName,
         subtitle = subtitle,
         description = description,
@@ -569,6 +577,7 @@ object CloudSyncService {
             id = id,
             name = name,
             logoPath = null,
+            logoBase64 = logoBase64,
             doctorName = doctorName ?: "",
             subtitle = subtitle ?: "",
             description = description ?: "",

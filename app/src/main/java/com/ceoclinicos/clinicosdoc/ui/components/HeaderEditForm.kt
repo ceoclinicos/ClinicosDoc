@@ -61,6 +61,7 @@ fun HeaderEditForm(
     var subtitle by remember(headerId) { mutableStateOf("") }
     var description by remember(headerId) { mutableStateOf("") }
     var logoPath by remember(headerId) { mutableStateOf<String?>(null) }
+    var logoBase64 by remember(headerId) { mutableStateOf<String?>(null) }
     var isDefault by remember(headerId) { mutableStateOf(false) }
     var savingLogo by remember { mutableStateOf(false) }
 
@@ -73,9 +74,16 @@ fun HeaderEditForm(
                     HeaderStorage.persistLogo(context, uri, headerId)
                 }
             }.fold(
-                onSuccess = { path -> logoPath = path },
-                onFailure = {
-                    Toast.makeText(context, "No se pudo cargar la imagen", Toast.LENGTH_SHORT).show()
+                onSuccess = { result ->
+                    logoPath = result.path
+                    logoBase64 = result.base64
+                },
+                onFailure = { e ->
+                    Toast.makeText(
+                        context,
+                        e.message ?: "No se pudo cargar la imagen",
+                        Toast.LENGTH_LONG,
+                    ).show()
                 },
             )
             savingLogo = false
@@ -90,6 +98,7 @@ fun HeaderEditForm(
         subtitle = h.subtitle
         description = h.description
         logoPath = h.logoPath
+        logoBase64 = h.logoBase64
         isDefault = h.isDefault
     }
 
@@ -104,6 +113,7 @@ fun HeaderEditForm(
         subtitle = subtitle.trim(),
         description = description.trim(),
         logoPath = logoPath,
+        logoBase64 = logoBase64,
         isDefault = isDefault,
         infoLines = emptyList(),
     )
@@ -151,8 +161,17 @@ fun HeaderEditForm(
                 },
             )
         }
-        if (logoPath != null) {
-            TextButton(onClick = { logoPath = null }) { Text("Quitar logo") }
+        Text(
+            "Requisito: imagen cuadrada 256×256 o 512×512 px",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        if (logoPath != null || logoBase64 != null) {
+            TextButton(onClick = {
+                logoPath = null
+                logoBase64 = null
+            }) { Text("Quitar logo") }
         }
         Spacer(modifier = Modifier.height(16.dp))
         PremiumTextField(

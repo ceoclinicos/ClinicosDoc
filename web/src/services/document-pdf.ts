@@ -35,8 +35,17 @@ export function buildMembreteFromPatient(p: {
 
 export function renderHeaderHtml(header?: DocumentHeader | null): string {
   if (!header) return "";
+  const logoSrc = header.logoBase64
+    ? header.logoBase64.startsWith("data:")
+      ? header.logoBase64
+      : `data:image/jpeg;base64,${header.logoBase64}`
+    : null;
+  const logo = logoSrc
+    ? `<img class="print-header-logo" src="${logoSrc}" alt="" width="72" height="72" />`
+    : "";
   return `
     <header class="print-header">
+      ${logo}
       <div class="print-header-name">${escapeHtml(header.doctorName || header.name)}</div>
       ${header.subtitle ? `<div class="print-header-sub">${escapeHtml(header.subtitle)}</div>` : ""}
       ${header.description ? `<div class="print-header-desc">${escapeHtml(header.description)}</div>` : ""}
@@ -47,13 +56,18 @@ export function renderHeaderHtml(header?: DocumentHeader | null): string {
 export function renderMembreteHtml(m?: PatientMembrete | null): string {
   if (!m) return "";
   return `
-    <div class="print-date-row">${escapeHtml(m.fecha || "")}</div>
     <section class="print-membrete">
       <div><strong>Paciente:</strong> ${escapeHtml(m.nombre)}</div>
       <div><strong>Edad:</strong> ${escapeHtml(m.edad)} años · <strong>Sexo:</strong> ${escapeHtml(m.sexo)}</div>
       <div><strong>Fecha de nacimiento:</strong> ${escapeHtml(m.fechaNacimiento)}</div>
     </section>
   `;
+}
+
+export function renderReportDateHtml(m?: PatientMembrete | null): string {
+  const fecha = m?.fecha?.trim();
+  if (!fecha) return "";
+  return `<div class="print-date-row">${escapeHtml(fecha)}</div>`;
 }
 
 export function renderContentHtml(content: string): string {
@@ -78,6 +92,7 @@ export function buildFullDocumentHtml(options: {
   const title = DocumentReportTitles[options.type] || DocumentTypeLabels[options.type];
   return `
     <div class="print-doc">
+      ${renderReportDateHtml(options.membrete)}
       ${renderHeaderHtml(options.header)}
       <h1 class="print-title">${escapeHtml(title)}</h1>
       ${renderMembreteHtml(options.membrete)}
@@ -87,7 +102,7 @@ export function buildFullDocumentHtml(options: {
   `;
 }
 
-/** Abre ventana de impresión / Guardar como PDF del navegador. */
+/** Abre diálogo de impresión / Guardar como PDF del navegador. */
 export function printClinicalDocument(doc: {
   type: DocumentType;
   content: string;
@@ -95,22 +110,19 @@ export function printClinicalDocument(doc: {
   membrete?: PatientMembrete | null;
   patientNombre?: string;
 }): void {
-  const html = buildFullDocumentHtml(doc);
-  const w = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
-  if (!w) {
-    alert("Permita ventanas emergentes para imprimir o guardar PDF.");
-    return;
-  }
-  w.document.write(`<!DOCTYPE html>
+  const bodyHtml = buildFullDocumentHtml(doc);
+  const fullHtml = `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>${DocumentReportTitles[doc.type]} — ${doc.patientNombre || "Clínicos Doc"}</title>
+  <title>${escapeHtml(DocumentReportTitles[doc.type])} — ${escapeHtml(doc.patientNombre || "Clínicos Doc")}</title>
   <style>
     @page { size: A4; margin: 16mm; }
-    body { font-family: "Times New Roman", Times, Georgia, serif; color: #111; margin: 0; line-height: 1.45; background: #fff; }
+    html, body { background: #fff; }
+    body { font-family: "Times New Roman", Times, Georgia, serif; color: #111; margin: 0; line-height: 1.45; }
     .print-doc { max-width: 180mm; margin: 0 auto; padding: 12mm 14mm; }
     .print-header { text-align: center; margin-bottom: 0.75rem; }
+    .print-header-logo { display: block; width: 72px; height: 72px; object-fit: cover; margin: 0 auto 8px; border-radius: 8px; }
     .print-header-name { font-size: 13pt; font-weight: 700; color: #111; }
     .print-header-sub { font-size: 11pt; color: #222; }
     .print-header-desc { font-size: 10pt; color: #444; white-space: pre-wrap; }
@@ -120,13 +132,83 @@ export function printClinicalDocument(doc: {
     .print-rule { border: 0; border-top: 1px solid #999; margin: 0.75rem 0 1rem; }
     .print-section h3 { font-size: 11pt; margin: 0.9rem 0 0.25rem; color: #111; font-weight: 700; }
     .print-body { white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 11pt; }
-    @media print { body { margin: 0; } .print-doc { padding: 0; max-width: none; } }
+    @media print {
+      body { margin: 0; }
+      .print-doc { padding: 0; max-width: none; }
+    }
   </style>
 </head>
-<body>${html}
-<script>window.onload = function(){ window.print(); }</script>
-</body></html>`);
-  w.document.close();
+<body>${bodyHtml}</body>
+</html>`;
+
+  // iframe oculto: evita ventana en blanco por noopener/document.write
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("title", "Impresión");
+  iframe.style.cssText =
+    "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;";
+  document.body.appendChild(iframe);
+
+  const cleanup = () => {
+    setTimeout(() => {
+      try {
+        iframe.remove();
+      } catch {
+        /* ignore */
+      }
+    }, 1500);
+  };
+
+  const runPrint = () => {
+    try {
+      const win = iframe.contentWindow;
+      if (!win) throw new Error("Sin ventana de impresión");
+      win.focus();
+      win.print();
+    } catch {
+      // Fallback: blob URL en pestaña nueva
+      try {
+        const blob = new Blob([fullHtml], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const w = window.open(url, "_blank");
+        if (!w) {
+          alert("Permita ventanas emergentes o use Vista previa e Imprimir del navegador (Ctrl+P).");
+        } else {
+          const onLoad = () => {
+            try {
+              w.focus();
+              w.print();
+            } finally {
+              setTimeout(() => URL.revokeObjectURL(url), 60_000);
+            }
+          };
+          w.addEventListener("load", onLoad);
+          // Por si ya cargó
+          setTimeout(onLoad, 400);
+        }
+      } catch {
+        alert("No se pudo abrir la impresión. Pruebe Vista previa y Ctrl+P.");
+      }
+    } finally {
+      cleanup();
+    }
+  };
+
+  iframe.onload = () => {
+    // Dar un frame para pintar el contenido antes de print()
+    requestAnimationFrame(() => setTimeout(runPrint, 50));
+  };
+
+  try {
+    const docFrame = iframe.contentDocument;
+    if (!docFrame) throw new Error("Sin document");
+    docFrame.open();
+    docFrame.write(fullHtml);
+    docFrame.close();
+  } catch {
+    // srcdoc como alternativa
+    iframe.onload = () => requestAnimationFrame(() => setTimeout(runPrint, 50));
+    iframe.srcdoc = fullHtml;
+  }
 }
 
 export function printFromClinicalDocument(doc: ClinicalDocument): void {

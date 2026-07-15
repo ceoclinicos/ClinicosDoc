@@ -49,6 +49,9 @@ function parseTemplate(data: DocumentData, id: string): DocumentTemplate | null 
     enabledPhysicalExamSystemIds: Array.isArray(data.enabledPhysicalExamSystemIds)
       ? data.enabledPhysicalExamSystemIds.map(String)
       : [],
+    enfermedadActualEjemplo: data.enfermedadActualEjemplo
+      ? String(data.enfermedadActualEjemplo)
+      : undefined,
   };
 }
 
@@ -57,6 +60,7 @@ function parseHeader(data: DocumentData, id: string): DocumentHeader | null {
     id: String(data.id ?? id),
     name: String(data.name ?? "Encabezado"),
     logoPath: data.logoPath ? String(data.logoPath) : undefined,
+    logoBase64: data.logoBase64 ? String(data.logoBase64) : undefined,
     doctorName: data.doctorName ? String(data.doctorName) : "",
     subtitle: data.subtitle ? String(data.subtitle) : "",
     description: data.description ? String(data.description) : "",
@@ -192,7 +196,7 @@ export async function pushTemplate(t: DocumentTemplate, userId = userIdOrThrow()
     isDefault: t.isDefault,
     enabledPhysicalExamSystemIds: t.enabledPhysicalExamSystemIds ?? [],
     physicalExamTextOverrides: {},
-    enfermedadActualEjemplo: "",
+    enfermedadActualEjemplo: t.enfermedadActualEjemplo ?? "",
     sectionLayoutOrder: t.sections,
   });
 }
@@ -202,6 +206,7 @@ export async function pushHeader(h: DocumentHeader, userId = userIdOrThrow()): P
     id: h.id,
     name: h.name,
     logoPath: null,
+    logoBase64: h.logoBase64 ?? null,
     doctorName: h.doctorName ?? "",
     subtitle: h.subtitle ?? "",
     description: h.description ?? "",
