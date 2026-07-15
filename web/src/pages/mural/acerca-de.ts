@@ -12,19 +12,17 @@ registerRoute({
       `
       <div class="card-panel stack acerca-prose">
         <p>
-          Nos interesa que las personas afectadas por lo ocurrido en <strong>La Guaira</strong> tengan
-          un registro de salud lo más <strong>eficiente y útil</strong> posible, y que este sitio sirva
-          también como portal de <strong>difusión humanitaria</strong> y herramienta <strong>logística
-          para el personal de salud</strong>.
+          Nos interesa que las personas afectadas por lo ocurrido en La Guaira tengan un registro de
+          salud lo más eficiente y útil posible, y que este sitio sirva también como portal de
+          difusión humanitaria y herramienta logística para el personal de salud.
         </p>
         <p>
-          Creamos Clínicos Doc como utilidad para médicos y brigadas, con la idea de un
-          <strong>nuevo nivel de registro en salud</strong> que mejore la atención y el seguimiento
-          en la nación.
+          Creamos Clínicos Doc como utilidad para médicos y brigadas, con la idea de un nuevo nivel
+          de registro en salud que mejore la atención y el seguimiento en la nación.
         </p>
         <p>
-          Quien crea que esta herramienta debe seguir adelante puede apoyarla económicamente
-          y ayudarnos a cubrir servidores, servicios de API y otros gastos del desarrollo.
+          Quien crea que esta herramienta debe seguir adelante puede apoyarla económicamente y
+          ayudarnos a cubrir servidores, servicios de API y otros gastos del desarrollo.
         </p>
         <div class="apoyo-box">
           <p class="apoyo-titulo"><strong>Pago móvil</strong></p>
