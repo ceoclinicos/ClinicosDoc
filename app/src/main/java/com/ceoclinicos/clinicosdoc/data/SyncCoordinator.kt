@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.ceoclinicos.clinicosdoc.model.Appointment
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
+import com.ceoclinicos.clinicosdoc.model.ClinicalDraft
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
@@ -168,6 +169,19 @@ object SyncCoordinator {
             PhysicalExamCatalogStorage.loadAll(appContext).forEach { system ->
                 CloudSyncService.pushPhysicalExamSystem(appContext, userId, system)
             }
+        }
+    }
+
+    fun afterDraftSaved(context: Context, draft: ClinicalDraft) {
+        scheduleDebounced(context, "draft:${draft.id}") { userId, appContext ->
+            val latest = DraftStorage.findById(appContext, draft.id) ?: return@scheduleDebounced
+            CloudSyncService.pushDraft(appContext, userId, latest)
+        }
+    }
+
+    fun afterDraftDeleted(context: Context, draftId: String) {
+        launchImmediate(context) { userId ->
+            CloudSyncService.deleteDraft(context.applicationContext, userId, draftId)
         }
     }
 }

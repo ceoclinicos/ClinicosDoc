@@ -2,12 +2,17 @@ import { registerRoute } from "../../app/router";
 import { loadJson, saveJson } from "../../services/local-store";
 import type { PhysicalExamSystem } from "../../shared/models";
 import { PhysicalExamDefaults } from "../../shared/physical-exam-defaults";
+import { canSync, pushPhysicalExam, syncQuiet } from "../../services/cloud-sync";
 import { page } from "../helpers";
 
 const KEY = "physical_exam";
 
 function loadCatalog(): PhysicalExamSystem[] {
   return loadJson(KEY, PhysicalExamDefaults);
+}
+
+function persist(systems: PhysicalExamSystem[]): void {
+  saveJson(KEY, systems);
 }
 
 registerRoute({
@@ -94,7 +99,8 @@ registerRoute({
       const idx = systems.findIndex((s) => s.id === id);
       if (idx >= 0) systems[idx] = updated;
       else systems.push(updated);
-      saveJson(KEY, systems);
+      persist(systems);
+      if (canSync()) syncQuiet(() => pushPhysicalExam(updated));
       dialog.close();
       renderList();
     });

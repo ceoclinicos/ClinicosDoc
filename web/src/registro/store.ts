@@ -9,6 +9,7 @@ import {
   type DocumentData,
 } from "firebase/firestore";
 import { normalizeCedula, cedulaLookupKeys } from "../services/cedula";
+import { createCloudUser, findCloudUserByCedula, resolveCloudAccount } from "../services/app-account";
 import { getDb } from "./firebase";
 import type {
   AtencionRegistro,
@@ -96,26 +97,49 @@ export async function registerProfesional(input: {
   mpps: string;
   correo: string;
   pin: string;
+  sexo: string;
+  nacionalidad: string;
 }): Promise<ProfesionalRegistro> {
   const cedula = normalizeCedula(input.cedula);
   assertPin4(input.pin);
   const correo = input.correo.trim();
   if (!correo || !correo.includes("@")) throw new Error("Correo electrónico requerido");
+  if (input.sexo !== "Masculino" && input.sexo !== "Femenino") {
+    throw new Error("Seleccione el sexo");
+  }
+  const nacionalidad = input.nacionalidad === "Otros" ? "Otros" : "Venezuela";
   const existing = await getProfesional(cedula);
   if (existing) throw new Error("Ya existe un profesional con esa cédula");
+  if (await findCloudUserByCedula(cedula)) {
+    throw new Error("Esta cédula ya tiene cuenta en la app. Use Ingresar.");
+  }
 
   const data: ProfesionalRegistro = {
     cedula,
     nombre: input.nombre.trim(),
     especialidad: input.esMedicoGeneral ? "Médico general" : input.especialidad.trim(),
     esMedicoGeneral: input.esMedicoGeneral,
-    mpps: input.mpps.trim(),
+    mpps: nacionalidad === "Venezuela" ? input.mpps.trim() : "",
     correo,
     pinHash: await hashPin(cedula, input.pin),
     activo: true,
     createdAt: new Date().toISOString(),
+    sexo: input.sexo,
+    nacionalidad,
   };
   await setDoc(professionalRef(cedula), data as DocumentData);
+
+  await createCloudUser({
+    cedula,
+    nombre: data.nombre,
+    especialidad: data.especialidad,
+    mpps: data.mpps,
+    correo: data.correo,
+    pin: input.pin,
+    sexo: data.sexo,
+    nacionalidad: data.nacionalidad,
+  });
+
   return data;
 }
 
@@ -140,20 +164,39 @@ export async function loginProfesional(
   pin: string,
   mpps: string,
 ): Promise<ProfesionalSession> {
-  const p = await getProfesional(cedula);
-  if (!p) throw new Error("No hay profesional registrado con esa cédula");
-  if (!p.activo) throw new Error("Cuenta pendiente de activación");
   assertPin4(pin);
-  if (normalizeMpps(p.mpps) !== normalizeMpps(mpps)) throw new Error("Código MPPS incorrecto");
-  const pinHash = await hashPin(p.cedula, pin);
-  if (p.pinHash !== pinHash) throw new Error("PIN incorrecto");
-  return {
-    cedula: p.cedula,
-    nombre: p.nombre,
-    especialidad: p.especialidad,
-    esMedicoGeneral: p.esMedicoGeneral,
-    mpps: p.mpps,
-  };
+  const cedNorm = normalizeCedula(cedula);
+  const p = await getProfesional(cedNorm);
+
+  if (p) {
+    if (!p.activo) throw new Error("Cuenta pendiente de activación");
+    const storedMpps = normalizeMpps(p.mpps || "");
+    const inputMpps = normalizeMpps(mpps || "");
+    // Solo exigir MPPS si la cuenta lo tiene (venezolanos)
+    if (storedMpps) {
+      if (!inputMpps) throw new Error("Código MPPS requerido");
+      if (storedMpps !== inputMpps) throw new Error("Código MPPS incorrecto");
+    }
+    const pinHash = await hashPin(p.cedula, pin);
+    if (p.pinHash !== pinHash) throw new Error("PIN incorrecto");
+  }
+
+  try {
+    const { session } = await resolveCloudAccount({
+      cedula: cedNorm,
+      pin,
+      mpps,
+      profesional: p,
+    });
+    return {
+      ...session,
+      sexo: p?.sexo ?? session.sexo,
+      nacionalidad: p?.nacionalidad ?? session.nacionalidad,
+    };
+  } catch (err) {
+    if (!p) throw new Error("No hay profesional registrado con esa cédula");
+    throw err instanceof Error ? err : new Error("No se pudo vincular la cuenta de consultorio");
+  }
 }
 
 export async function upsertPacienteMinimo(input: {

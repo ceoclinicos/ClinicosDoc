@@ -1,30 +1,33 @@
 package com.ceoclinicos.clinicosdoc.ui.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Badge
-import androidx.compose.material.icons.outlined.Cake
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,8 +46,8 @@ import com.ceoclinicos.clinicosdoc.ui.components.BirthDateSelector
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumTextField
 import com.ceoclinicos.clinicosdoc.ui.components.keyboardCapitalizationWords
-import com.ceoclinicos.clinicosdoc.ui.components.keyboardDigits
 import com.ceoclinicos.clinicosdoc.ui.components.keyboardPhone
+import com.ceoclinicos.clinicosdoc.ui.theme.DividerColor
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
@@ -66,7 +69,7 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
     var edad by remember { mutableStateOf("") }
     var whatsapp by remember { mutableStateOf("") }
     var sexo by remember { mutableStateOf<String?>(null) }
-    val sexos = listOf("Masculino", "Femenino", "Otro")
+    val sexos = listOf("Masculino", "Femenino")
     var fechaNacimiento by remember { mutableStateOf<Instant?>(null) }
     var saving by remember { mutableStateOf(false) }
     var searching by remember { mutableStateOf(false) }
@@ -78,8 +81,6 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
         nombre.isBlank() -> "Ingresa el nombre completo"
         cedula.isBlank() -> "Ingresa la cédula"
         fechaNacimiento == null -> "Selecciona la fecha de nacimiento"
-        edad.isBlank() -> "Ingresa la edad"
-        edad.toIntOrNull() == null -> "La edad debe ser un número válido"
         sexo == null -> "Selecciona el sexo"
         whatsapp.isBlank() -> "Ingresa el número de WhatsApp"
         whatsapp.length < 10 -> "El WhatsApp debe tener al menos 10 dígitos"
@@ -218,7 +219,7 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
                                 nombre = patient.nombre
                                 edad = patient.edad.toString()
                                 fechaNacimiento = patient.fechaNacimiento
-                                sexo = patient.sexo.ifBlank { null }
+                                sexo = patient.sexo.takeIf { it == "Masculino" || it == "Femenino" }
                                 whatsapp = patient.whatsapp
                                 step = AddPatientStep.FORMULARIO
                             },
@@ -242,17 +243,6 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
                     errorMessage = if (nombre.isBlank()) "Requerido" else null,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                PremiumTextField(
-                    label = "Edad *",
-                    value = edad,
-                    onValueChange = { edad = it.filter { c -> c.isDigit() } },
-                    hint = "Se calcula con la fecha de nacimiento",
-                    prefixIcon = Icons.Outlined.Cake,
-                    keyboardOptions = keyboardDigits(),
-                    isError = edad.isBlank(),
-                    errorMessage = if (edad.isBlank()) "Requerido" else null,
-                )
-                Spacer(modifier = Modifier.height(16.dp))
                 Text("Fecha de nacimiento *", style = MaterialTheme.typography.labelLarge.copy(color = TextSecondary))
                 Spacer(modifier = Modifier.height(8.dp))
                 BirthDateSelector(
@@ -266,23 +256,20 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
                 fechaNacimiento?.let { birth ->
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Seleccionado: ${dateFormatter.format(PatientUtils.toLocalDate(birth))}",
+                        "Seleccionado: ${dateFormatter.format(PatientUtils.toLocalDate(birth))} · ${edad.ifBlank { "—" }} años",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary,
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Sexo *", style = MaterialTheme.typography.labelLarge.copy(color = TextSecondary))
-                if (sexo == null) {
-                    Text(
-                        "Requerido",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
                 Spacer(modifier = Modifier.height(8.dp))
-                SexoSelector(sexos = sexos, sexo = sexo, onSexoChange = { sexo = it })
+                SexoDropdown(
+                    sexos = sexos,
+                    sexo = sexo,
+                    onSexoChange = { sexo = it },
+                    isError = sexo == null,
+                )
                 Spacer(modifier = Modifier.height(16.dp))
                 PremiumTextField(
                     label = "WhatsApp *",
@@ -334,19 +321,59 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SexoSelector(
+private fun SexoDropdown(
     sexos: List<String>,
     sexo: String?,
     onSexoChange: (String) -> Unit,
+    isError: Boolean,
 ) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(sexos) { option ->
-            FilterChip(
-                selected = sexo == option,
-                onClick = { onSexoChange(option) },
-                label = { Text(option) },
+    var expanded by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        if (isError) {
+            Text(
+                "Requerido",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(bottom = 4.dp),
             )
+        }
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedTextField(
+                value = sexo.orEmpty().ifBlank { "Seleccione…" },
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                isError = isError,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Teal,
+                    unfocusedBorderColor = DividerColor,
+                    focusedTrailingIconColor = Teal,
+                ),
+            )
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                sexos.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            onSexoChange(option)
+                            expanded = false
+                        },
+                    )
+                }
+            }
         }
     }
 }

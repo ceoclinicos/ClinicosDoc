@@ -41,7 +41,7 @@ private val MONTH_NAMES = listOf(
 
 /**
  * Selector de fecha de nacimiento: tres desplegables (Día, Mes, Año).
- * Solo permite fechas desde hoy hacia atrás, hasta [maxYearsBack] años.
+ * Años desde [yearMax] (p. ej. 2026) hasta [yearMin] (1910).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,18 +49,20 @@ fun BirthDateSelector(
     selected: Instant?,
     onDateChange: (Instant) -> Unit,
     modifier: Modifier = Modifier,
-    maxYearsBack: Int = 120,
+    yearMax: Int = 2026,
+    yearMin: Int = 1910,
 ) {
     val zone = remember { ZoneId.systemDefault() }
     val today = remember { LocalDate.now(zone) }
-    val minYear = today.year - maxYearsBack
+    val maxYear = yearMax.coerceAtMost(today.year)
+    val minYear = yearMin
 
     val initial = remember(selected, today) {
         selected?.let { PatientUtils.toLocalDate(it, zone) }
-            ?: LocalDate.of(today.year - 30, today.monthValue.coerceAtMost(12), 1)
+            ?: LocalDate.of((maxYear - 30).coerceIn(minYear, maxYear), today.monthValue.coerceAtMost(12), 1)
     }
 
-    var year by remember(initial) { mutableIntStateOf(initial.year.coerceIn(minYear, today.year)) }
+    var year by remember(initial) { mutableIntStateOf(initial.year.coerceIn(minYear, maxYear)) }
     var month by remember(initial) { mutableIntStateOf(initial.monthValue) }
     var day by remember(initial) { mutableIntStateOf(initial.dayOfMonth) }
 
@@ -76,7 +78,7 @@ fun BirthDateSelector(
     }
 
     fun applyDate(y: Int, m: Int, d: Int) {
-        val clampedYear = y.coerceIn(minYear, today.year)
+        val clampedYear = y.coerceIn(minYear, maxYear)
         val clampedMonth = m.coerceIn(1, maxMonthForYear(clampedYear))
         val clampedDay = d.coerceIn(1, maxDayForYearMonth(clampedYear, clampedMonth))
         year = clampedYear
@@ -92,7 +94,7 @@ fun BirthDateSelector(
         }
     }
 
-    val years = remember(today, minYear) { (today.year downTo minYear).map { it.toString() } }
+    val years = remember(maxYear, minYear) { (maxYear downTo minYear).map { it.toString() } }
     val months = remember(year, today) {
         (1..maxMonthForYear(year)).map { MONTH_NAMES[it - 1] }
     }
@@ -131,7 +133,7 @@ fun BirthDateSelector(
             )
         }
         Text(
-            text = "Toca cada campo para desplegar · hasta ${minYear}",
+            text = "Toca cada campo para desplegar · $maxYear – $minYear",
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary,
             modifier = Modifier.padding(top = 8.dp),

@@ -1,14 +1,22 @@
 import { PhysicalExamDefaults } from "../../shared/physical-exam-defaults";
-import type { DocumentTemplate } from "../../shared/models";
+import type { DocumentTemplate, PhysicalExamSystem } from "../../shared/models";
+import { loadJson } from "../local-store";
 
+function loadCatalog(): PhysicalExamSystem[] {
+  const stored = loadJson<PhysicalExamSystem[]>("physical_exam", []);
+  return stored.length ? stored : PhysicalExamDefaults;
+}
+
+/** Bloque de examen físico para el prompt de IA (misma lógica que la app). */
 export function buildPhysicalExamBlock(template: DocumentTemplate): string {
+  const catalog = loadCatalog();
   const ids = template.enabledPhysicalExamSystemIds?.length
     ? template.enabledPhysicalExamSystemIds
-    : PhysicalExamDefaults.map((s) => s.id);
+    : catalog.map((s) => s.id);
 
-  const systems = PhysicalExamDefaults.filter((s) => ids.includes(s.id)).sort(
-    (a, b) => a.sortOrder - b.sortOrder,
-  );
+  const systems = catalog
+    .filter((s) => ids.includes(s.id))
+    .sort((a, b) => a.sortOrder - b.sortOrder);
   if (!systems.length) return "";
 
   const lines = [
@@ -23,4 +31,8 @@ export function buildPhysicalExamBlock(template: DocumentTemplate): string {
     "- Sistemas activos sin datos en el dictado conservan el texto base normal.",
   ];
   return lines.join("\n");
+}
+
+export function loadPhysicalExamCatalog(): PhysicalExamSystem[] {
+  return loadCatalog();
 }

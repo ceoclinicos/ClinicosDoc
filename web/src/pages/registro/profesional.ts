@@ -20,6 +20,8 @@ import type { AtencionRegistro, PacienteRegistro, ProfesionalSession } from "../
 import { validarMpps } from "../../services/mpps-validation";
 import { ESPECIALIDADES_MEDICAS_VE } from "../../registro/especialidades";
 import { loadDoctorProfile, saveDoctorProfile } from "../../services/doctor-local";
+import { syncOnLogin } from "../../services/cloud-sync";
+import { bindBirthDateSelects, birthDateFieldsHtml, parseBirthFromForm } from "../../services/birth-date";
 import { bindNavButtons, page } from "../helpers";
 
 function seedDoctorFromSession(s: ProfesionalSession): void {
@@ -51,7 +53,8 @@ function loginForm(): string {
     <form class="form" id="prof-login">
       <label>Cédula<input name="cedula" required autocomplete="username" /></label>
       <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required autocomplete="current-password" /></label>
-      <label>Código MPPS<input name="mpps" required autocomplete="off" /></label>
+      <label>Código MPPS<input name="mpps" autocomplete="off" placeholder="Si tu cuenta lo tiene" /></label>
+      <p class="muted">MPPS obligatorio solo si te registraste como venezolano (SACS).</p>
       <p class="muted"><a href="#/olvide-pin?tipo=profesional">Olvidé mi PIN (contraseña)</a></p>
       <button type="submit" class="btn btn-primary">Ingresar</button>
     </form>
@@ -65,13 +68,27 @@ function registerForm(): string {
       <label>Nombre completo<input name="nombre" required /></label>
       <label>Cédula<input name="cedula" required /></label>
       <label>Correo electrónico<input name="correo" type="email" required placeholder="para recuperar PIN (contraseña)" /></label>
+      <label>Sexo
+        <select name="sexo" required>
+          <option value="">Seleccione…</option>
+          <option value="Masculino">Masculino</option>
+          <option value="Femenino">Femenino</option>
+        </select>
+      </label>
+      <label>Nacionalidad
+        <select name="nacionalidad" id="nac-select" required>
+          <option value="Venezuela">Venezuela</option>
+          <option value="Otros">Otros</option>
+        </select>
+      </label>
       <label>
         <span>Tipo</span>
-        <select name="tipo">
+        <select name="tipo" id="tipo-select">
           <option value="general">Médico general</option>
           <option value="especialista">Especialista</option>
         </select>
       </label>
+      <p class="muted" id="esp-general-note">Especialidad: Médico general</p>
       <label id="esp-wrap" hidden>
         Especialidad
         <select name="especialidad">
@@ -80,8 +97,10 @@ function registerForm(): string {
         </select>
       </label>
       <label id="esp-otra-wrap" hidden>Otra especialidad<input name="especialidad_otra" placeholder="Escriba su especialidad" /></label>
-      <label>Código MPPS<input name="mpps" required placeholder="Ej. 154472" /></label>
-      <p class="muted">Se valida en vivo contra SACS (cédula + MPPS deben coincidir).</p>
+      <div id="mpps-wrap">
+        <label>Código MPPS<input name="mpps" id="mpps-input" placeholder="Ej. 154472" /></label>
+        <p class="muted">Se valida en vivo contra SACS (cédula + MPPS deben coincidir).</p>
+      </div>
       <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
       <button type="submit" class="btn btn-primary">Registrar profesional</button>
     </form>
@@ -137,13 +156,18 @@ function bindProfesionalPage(el: HTMLElement): void {
       });
 
       const tipo = body.querySelector<HTMLSelectElement>('select[name="tipo"]');
+      const nac = body.querySelector<HTMLSelectElement>("#nac-select");
       const espWrap = body.querySelector("#esp-wrap") as HTMLElement | null;
       const espOtraWrap = body.querySelector("#esp-otra-wrap") as HTMLElement | null;
+      const espNote = body.querySelector("#esp-general-note") as HTMLElement | null;
+      const mppsWrap = body.querySelector("#mpps-wrap") as HTMLElement | null;
+      const mppsInput = body.querySelector<HTMLInputElement>("#mpps-input");
       const espSelect = body.querySelector<HTMLSelectElement>('select[name="especialidad"]');
       if (tipo && espWrap && espOtraWrap) {
         const syncEsp = (): void => {
           const esGeneral = tipo.value === "general";
           espWrap.hidden = esGeneral;
+          if (espNote) espNote.hidden = !esGeneral;
           if (esGeneral) {
             espOtraWrap.hidden = true;
             if (espSelect) espSelect.value = "";
@@ -151,9 +175,19 @@ function bindProfesionalPage(el: HTMLElement): void {
             espOtraWrap.hidden = espSelect?.value !== "Otra";
           }
         };
+        const syncNac = (): void => {
+          const ve = (nac?.value ?? "Venezuela") === "Venezuela";
+          if (mppsWrap) mppsWrap.hidden = !ve;
+          if (mppsInput) {
+            mppsInput.required = ve;
+            if (!ve) mppsInput.value = "";
+          }
+        };
         tipo.addEventListener("change", syncEsp);
         espSelect?.addEventListener("change", syncEsp);
+        nac?.addEventListener("change", syncNac);
         syncEsp();
+        syncNac();
       }
 
       body.querySelector("#prof-login")?.addEventListener("submit", async (e) => {
@@ -167,6 +201,11 @@ function bindProfesionalPage(el: HTMLElement): void {
           );
           setProfessionalSession(s);
           seedDoctorFromSession(s);
+          try {
+            await syncOnLogin();
+          } catch (syncErr) {
+            console.warn("Sync cloud:", syncErr);
+          }
           navigate("/");
         } catch (err) {
           alert(err instanceof Error ? err.message : "Error al ingresar");
@@ -178,11 +217,15 @@ function bindProfesionalPage(el: HTMLElement): void {
         const form = e.target as HTMLFormElement;
         const fd = new FormData(form);
         const esGeneral = fd.get("tipo") === "general";
+        const nacionalidad = String(fd.get("nacionalidad") || "Venezuela");
+        const esVe = nacionalidad === "Venezuela";
+        const sexo = String(fd.get("sexo") ?? "").trim();
         const btn = form.querySelector('[type="submit"]') as HTMLButtonElement | null;
         if (btn) btn.disabled = true;
         try {
+          if (sexo !== "Masculino" && sexo !== "Femenino") throw new Error("Seleccione el sexo");
           const cedula = String(fd.get("cedula"));
-          const mpps = String(fd.get("mpps"));
+          let mpps = String(fd.get("mpps") ?? "").trim();
           let especialidad = String(fd.get("especialidad") ?? "").trim();
           if (!esGeneral) {
             if (!especialidad) throw new Error("Seleccione su especialidad");
@@ -190,26 +233,41 @@ function bindProfesionalPage(el: HTMLElement): void {
               especialidad = String(fd.get("especialidad_otra") ?? "").trim();
               if (!especialidad) throw new Error("Escriba su especialidad");
             }
+          } else {
+            especialidad = "Médico general";
           }
-          const check = await validarMpps(cedula, mpps);
           let nombre = String(fd.get("nombre")).trim();
-          if (!nombre && check.medico.nombreCompleto) {
-            nombre = check.medico.nombreCompleto;
-            const nombreInput = form.querySelector<HTMLInputElement>('input[name="nombre"]');
-            if (nombreInput) nombreInput.value = nombre;
+          if (esVe) {
+            if (!mpps) throw new Error("Código MPPS requerido");
+            const check = await validarMpps(cedula, mpps);
+            mpps = check.medico.mpps || mpps;
+            if (!nombre && check.medico.nombreCompleto) {
+              nombre = check.medico.nombreCompleto;
+              const nombreInput = form.querySelector<HTMLInputElement>('input[name="nombre"]');
+              if (nombreInput) nombreInput.value = nombre;
+            }
+          } else {
+            mpps = "";
           }
           await registerProfesional({
             cedula,
             nombre,
             especialidad,
             esMedicoGeneral: esGeneral,
-            mpps: check.medico.mpps || mpps,
+            mpps,
             correo: String(fd.get("correo")),
             pin: String(fd.get("pin")),
+            sexo,
+            nacionalidad: esVe ? "Venezuela" : "Otros",
           });
-          const s = await loginProfesional(cedula, String(fd.get("pin")), check.medico.mpps || mpps);
+          const s = await loginProfesional(cedula, String(fd.get("pin")), mpps);
           setProfessionalSession(s);
           seedDoctorFromSession(s);
+          try {
+            await syncOnLogin();
+          } catch (syncErr) {
+            console.warn("Sync cloud:", syncErr);
+          }
           navigate("/");
         } catch (err) {
           alert(err instanceof Error ? err.message : "Error al registrar");
@@ -242,27 +300,44 @@ function bindProfesionalPage(el: HTMLElement): void {
           <form class="form" id="crear-paciente">
             <p class="muted">Cree una ficha mínima para registrar la atención:</p>
             <label>Nombre<input name="nombre" required /></label>
-            <label>Edad<input name="edad" type="number" min="0" max="120" required /></label>
-            <label>Fecha de nacimiento<input name="fechaNacimiento" type="date" required /></label>
+            <label>Sexo
+              <select name="sexo" required>
+                <option value="">Seleccione…</option>
+                <option value="Masculino">Masculino</option>
+                <option value="Femenino">Femenino</option>
+              </select>
+            </label>
+            ${birthDateFieldsHtml("nac")}
             <input type="hidden" name="cedula" value="${cedula}" />
             <button type="submit" class="btn btn-secondary">Crear ficha y continuar</button>
           </form>
         `;
+        bindBirthDateSelects(result, "nac");
         result.querySelector("#crear-paciente")?.addEventListener("submit", async (ev) => {
           ev.preventDefault();
           const fd = new FormData(ev.target as HTMLFormElement);
-          const p = await upsertPacienteMinimo({
-            cedula: String(fd.get("cedula")),
-            nombre: String(fd.get("nombre")),
-            edad: Number(fd.get("edad")),
-            fechaNacimiento: String(fd.get("fechaNacimiento")),
-          });
-          const atenciones = await listAtenciones(p.cedula);
-          result.innerHTML = patientCard(p, atenciones);
-          result.querySelector("#btn-nueva-atencion")?.addEventListener("click", () => {
-            setAtencionCedula(p.cedula);
-            navigate("/profesional/atencion");
-          });
+          try {
+            const sexo = String(fd.get("sexo") ?? "").trim();
+            if (sexo !== "Masculino" && sexo !== "Femenino") {
+              throw new Error("Seleccione el sexo");
+            }
+            const birth = parseBirthFromForm(fd, "nac");
+            const p = await upsertPacienteMinimo({
+              cedula: String(fd.get("cedula")),
+              nombre: String(fd.get("nombre")),
+              edad: birth.age,
+              fechaNacimiento: birth.iso.slice(0, 10),
+              sexo,
+            });
+            const atenciones = await listAtenciones(p.cedula);
+            result.innerHTML = patientCard(p, atenciones);
+            result.querySelector("#btn-nueva-atencion")?.addEventListener("click", () => {
+              setAtencionCedula(p.cedula);
+              navigate("/profesional/atencion");
+            });
+          } catch (err) {
+            alert(err instanceof Error ? err.message : "No se pudo crear la ficha");
+          }
         });
         return;
       }

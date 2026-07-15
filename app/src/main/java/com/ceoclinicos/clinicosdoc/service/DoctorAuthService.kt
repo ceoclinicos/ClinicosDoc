@@ -48,8 +48,10 @@ object DoctorAuthService {
             }
             val storedMpps = doc.getString("mpps").orEmpty().filter { it.isDigit() }
             val inputMpps = mpps.filter { it.isDigit() }
-            if (storedMpps.isNotEmpty() && inputMpps.isNotEmpty() && storedMpps != inputMpps) {
-                error("Código MPPS incorrecto")
+            // Solo exigir MPPS si la cuenta lo tiene (venezolanos)
+            if (storedMpps.isNotEmpty()) {
+                if (inputMpps.isEmpty()) error("Código MPPS requerido")
+                if (storedMpps != inputMpps) error("Código MPPS incorrecto")
             }
             val profile = doc.toDoctorProfile()
             DoctorStorage.saveSession(context, profile, doc.id)
@@ -69,26 +71,42 @@ object DoctorAuthService {
         if (!CedulaNormalizer.isValid(profile.cedula)) {
             return Result.failure(IllegalStateException("Cédula inválida"))
         }
-        if (profile.mpps.isBlank()) {
-            return Result.failure(IllegalStateException("Código MPPS requerido"))
-        }
         if (profile.correo.isBlank() || !profile.correo.contains("@")) {
             return Result.failure(IllegalStateException("Correo electrónico requerido"))
         }
         if (!password.matches(Regex("^\\d{4}$"))) {
             return Result.failure(IllegalStateException("El PIN debe tener exactamente 4 dígitos"))
         }
-        val mppsCheck = MppsValidationService.validate(profile.cedula, profile.mpps)
-        if (mppsCheck.isFailure) {
-            return Result.failure(
-                mppsCheck.exceptionOrNull() ?: IllegalStateException("No se pudo validar MPPS"),
-            )
+        if (profile.sexo !in listOf("Masculino", "Femenino")) {
+            return Result.failure(IllegalStateException("Seleccione el sexo"))
         }
-        val validated = mppsCheck.getOrThrow()
-        val profileValidated = profile.copy(
-            mpps = validated.mpps.ifBlank { profile.mpps },
-            nombre = profile.nombre.ifBlank { validated.nombreCompleto },
-        )
+
+        val esVe = profile.esVenezolano
+        var profileValidated = profile
+        var profesionSacs = ""
+        var mppsValidado = false
+
+        if (esVe) {
+            if (profile.mpps.isBlank()) {
+                return Result.failure(IllegalStateException("Código MPPS requerido"))
+            }
+            val mppsCheck = MppsValidationService.validate(profile.cedula, profile.mpps)
+            if (mppsCheck.isFailure) {
+                return Result.failure(
+                    mppsCheck.exceptionOrNull() ?: IllegalStateException("No se pudo validar MPPS"),
+                )
+            }
+            val validated = mppsCheck.getOrThrow()
+            profesionSacs = validated.profesion
+            mppsValidado = true
+            profileValidated = profile.copy(
+                mpps = validated.mpps.ifBlank { profile.mpps },
+                nombre = profile.nombre.ifBlank { validated.nombreCompleto },
+            )
+        } else {
+            profileValidated = profile.copy(mpps = profile.mpps.trim())
+        }
+
         return runCatching {
             if (cedulaExists(profileValidated.cedula)) {
                 error("Esta cédula ya está registrada. Usa Login")
@@ -106,9 +124,10 @@ object DoctorAuthService {
                     "especialidad" to profileValidated.especialidad,
                     "whatsapp" to profileValidated.whatsapp,
                     "correo" to profileValidated.correo.trim(),
+                    "nacionalidad" to profileValidated.nacionalidad,
                     "passwordHash" to hashPassword(password),
-                    "mppsValidado" to true,
-                    "profesionSacs" to validated.profesion,
+                    "mppsValidado" to mppsValidado,
+                    "profesionSacs" to profesionSacs,
                 ),
             ).await()
             DoctorStorage.saveSession(context, profileValidated, docRef.id)
@@ -171,5 +190,6 @@ object DoctorAuthService {
         especialidad = getString("especialidad").orEmpty(),
         whatsapp = getString("whatsapp").orEmpty(),
         correo = getString("correo").orEmpty().ifBlank { getString("email").orEmpty() },
+        nacionalidad = getString("nacionalidad").orEmpty().ifBlank { "Venezuela" },
     )
 }

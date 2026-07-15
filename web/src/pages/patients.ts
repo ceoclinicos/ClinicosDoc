@@ -1,6 +1,13 @@
 import { registerRoute } from "../app/router";
+import {
+  bindBirthDateSelects,
+  birthDateFieldsHtml,
+  parseBirthFromForm,
+  sexOptionsHtml,
+} from "../services/birth-date";
 import { findPatientByCedula, matchesCedula } from "../services/cedula";
 import { loadJson, saveJson } from "../services/local-store";
+import { canSync, pushPatient, syncQuiet } from "../services/cloud-sync";
 import type { Patient } from "../shared/models";
 import { bindNavButtons, emptyState, page } from "./helpers";
 
@@ -8,6 +15,16 @@ const KEY = "patients";
 
 function loadPatients(): Patient[] {
   return loadJson<Patient[]>(KEY, []);
+}
+
+function formatNac(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+    return d.toLocaleDateString("es-VE");
+  } catch {
+    return iso.slice(0, 10);
+  }
 }
 
 function renderPatientList(patients: Patient[], highlightCedula?: string): string {
@@ -18,9 +35,8 @@ function renderPatientList(patients: Patient[], highlightCedula?: string): strin
   return `<ul class="list" id="patient-list">${patients
     .map((p) => {
       const isMatch =
-        highlight &&
-        findPatientByCedula([p], highlight)?.cedula === p.cedula;
-      return `<li class="list-item${isMatch ? " list-item-highlight" : ""}"><strong>${p.nombre}</strong><span>C.I. ${p.cedula} · ${p.edad} años · ${p.sexo || "—"}</span></li>`;
+        highlight && findPatientByCedula([p], highlight)?.cedula === p.cedula;
+      return `<li class="list-item${isMatch ? " list-item-highlight" : ""}"><strong>${p.nombre}</strong><span>C.I. ${p.cedula} · ${p.edad} años · ${p.sexo || "—"} · Nac. ${formatNac(p.fechaNacimiento)}</span></li>`;
     })
     .join("")}</ul>`;
 }
@@ -106,27 +122,45 @@ registerRoute({
       <form class="form" id="patient-form">
         <label>Nombre<input name="nombre" required /></label>
         <label>Cédula<input name="cedula" required /></label>
-        <label>Edad<input name="edad" type="number" min="0" required /></label>
-        <label>Sexo<input name="sexo" placeholder="Masculino / Femenino" /></label>
+        <label>Sexo
+          <select name="sexo" required>
+            ${sexOptionsHtml()}
+          </select>
+        </label>
+        ${birthDateFieldsHtml("nac")}
+        <p class="muted" id="edad-hint">La edad se calcula automáticamente con la fecha de nacimiento.</p>
         <button type="submit" class="btn btn-primary">Guardar</button>
       </form>
       `,
     );
+
+    bindBirthDateSelects(el, "nac");
+
     el.querySelector("#patient-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
       const fd = new FormData(e.target as HTMLFormElement);
-      const patient: Patient = {
-        id: crypto.randomUUID(),
-        nombre: String(fd.get("nombre")),
-        cedula: String(fd.get("cedula")),
-        edad: Number(fd.get("edad")),
-        sexo: String(fd.get("sexo") ?? ""),
-        fechaNacimiento: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-      };
-      const all = loadPatients();
-      saveJson(KEY, [patient, ...all]);
-      window.location.hash = "/pacientes";
+      try {
+        const sexo = String(fd.get("sexo") ?? "").trim();
+        if (sexo !== "Masculino" && sexo !== "Femenino") {
+          throw new Error("Seleccione el sexo");
+        }
+        const birth = parseBirthFromForm(fd, "nac");
+        const patient: Patient = {
+          id: crypto.randomUUID(),
+          nombre: String(fd.get("nombre")).trim(),
+          cedula: String(fd.get("cedula")).trim(),
+          edad: birth.age,
+          sexo,
+          fechaNacimiento: birth.iso,
+          createdAt: new Date().toISOString(),
+        };
+        const all = loadPatients();
+        saveJson(KEY, [patient, ...all]);
+        if (canSync()) syncQuiet(() => pushPatient(patient));
+        window.location.hash = "/pacientes";
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Datos incompletos");
+      }
     });
     return el;
   },

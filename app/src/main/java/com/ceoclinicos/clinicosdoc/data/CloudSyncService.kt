@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.ceoclinicos.clinicosdoc.model.Appointment
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
+import com.ceoclinicos.clinicosdoc.model.ClinicalDraft
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
 import com.ceoclinicos.clinicosdoc.model.DocumentType
@@ -49,13 +50,15 @@ object CloudSyncService {
         val headers = fetchHeaders(userId)
         val appointments = fetchAppointments(userId)
         val physicalExam = fetchPhysicalExamSystems(userId)
+        val drafts = fetchDrafts(userId)
 
         val hasCloudData = patients.isNotEmpty() ||
             documents.isNotEmpty() ||
             templates.isNotEmpty() ||
             headers.isNotEmpty() ||
             appointments.isNotEmpty() ||
-            physicalExam.isNotEmpty()
+            physicalExam.isNotEmpty() ||
+            drafts.isNotEmpty()
 
         if (!hasCloudData) return false
 
@@ -68,6 +71,7 @@ object CloudSyncService {
             }
             if (appointments.isNotEmpty()) AppointmentStorage.saveAllLocal(context, appointments)
             if (physicalExam.isNotEmpty()) PhysicalExamCatalogStorage.saveAllLocal(context, physicalExam)
+            if (drafts.isNotEmpty()) DraftStorage.saveAllLocal(context, drafts)
         }
         return true
     }
@@ -79,6 +83,7 @@ object CloudSyncService {
         HeaderStorage.loadAll(context).forEach { pushHeader(context, userId, it) }
         AppointmentStorage.loadAll(context).forEach { pushAppointment(context, userId, it) }
         PhysicalExamCatalogStorage.loadAll(context).forEach { pushPhysicalExamSystem(context, userId, it) }
+        DraftStorage.loadAll(context).forEach { pushDraft(context, userId, it) }
     }
 
     suspend fun pushPatient(context: Context, userId: String, patient: Patient) {
@@ -214,6 +219,16 @@ object CloudSyncService {
         physicalExamRef(userId).document(systemId).delete().await()
     }
 
+    suspend fun pushDraft(context: Context, userId: String, draft: ClinicalDraft) {
+        if (!DoctorAuthService.isConfigured(context)) return
+        draftsRef(userId).document(draft.id).set(draft.toSyncDto().toMap()).await()
+    }
+
+    suspend fun deleteDraft(context: Context, userId: String, draftId: String) {
+        if (!DoctorAuthService.isConfigured(context)) return
+        draftsRef(userId).document(draftId).delete().await()
+    }
+
     suspend fun pushProfile(context: Context, userId: String, profile: DoctorProfile) {
         if (!DoctorAuthService.isConfigured(context)) return
         FirebaseFirestore.getInstance()
@@ -227,6 +242,8 @@ object CloudSyncService {
                     "sexo" to profile.sexo,
                     "especialidad" to profile.especialidad,
                     "whatsapp" to profile.whatsapp,
+                    "correo" to profile.correo,
+                    "nacionalidad" to profile.nacionalidad,
                 ),
                 SetOptions.merge(),
             )
@@ -251,6 +268,9 @@ object CloudSyncService {
     private suspend fun fetchPhysicalExamSystems(userId: String): List<PhysicalExamSystem> =
         physicalExamRef(userId).get().await().documents.mapNotNull { it.toPhysicalExamSystem() }
 
+    private suspend fun fetchDrafts(userId: String): List<ClinicalDraft> =
+        draftsRef(userId).get().await().documents.mapNotNull { it.toClinicalDraft() }
+
     private fun globalPatientDocumentsRef(patientKey: String): CollectionReference =
         FirebaseFirestore.getInstance()
             .collection(FirestorePaths.GLOBAL_PATIENTS)
@@ -274,6 +294,9 @@ object CloudSyncService {
 
     private fun physicalExamRef(userId: String): CollectionReference =
         userSubcollection(userId, FirestorePaths.SUB_PHYSICAL_EXAM)
+
+    private fun draftsRef(userId: String): CollectionReference =
+        userSubcollection(userId, FirestorePaths.SUB_DRAFTS)
 
     private fun userSubcollection(userId: String, sub: String): CollectionReference =
         FirebaseFirestore.getInstance()
@@ -353,6 +376,41 @@ object CloudSyncService {
             name = dto.name,
             defaultText = dto.defaultText,
             sortOrder = dto.sortOrder,
+        )
+    }
+
+    private fun com.google.firebase.firestore.DocumentSnapshot.toClinicalDraft(): ClinicalDraft? {
+        val dto = toMapData()?.toDto<ClinicalDraftDto>() ?: return null
+        return ClinicalDraft(
+            id = dto.id,
+            patientId = dto.patientId,
+            patientNombre = dto.patientNombre,
+            patientCedula = dto.patientCedula,
+            documentType = DocumentType.fromName(dto.documentType),
+            dictation = dto.dictation,
+            templateId = dto.templateId,
+            templateName = dto.templateName,
+            headerId = dto.headerId,
+            generatedContent = dto.generatedContent,
+            membrete = if (
+                dto.membreteNombre != null ||
+                dto.membreteEdad != null ||
+                dto.membreteSexo != null ||
+                dto.membreteFechaNacimiento != null ||
+                dto.membreteFecha != null
+            ) {
+                PatientMembrete(
+                    nombre = dto.membreteNombre.orEmpty(),
+                    edad = dto.membreteEdad.orEmpty(),
+                    sexo = dto.membreteSexo.orEmpty(),
+                    fechaNacimiento = dto.membreteFechaNacimiento.orEmpty(),
+                    fecha = dto.membreteFecha.orEmpty(),
+                )
+            } else {
+                null
+            },
+            createdAt = Instant.parse(dto.createdAt),
+            updatedAt = Instant.parse(dto.updatedAt),
         )
     }
 
@@ -450,6 +508,26 @@ object CloudSyncService {
         name = name,
         defaultText = defaultText,
         sortOrder = sortOrder,
+    )
+
+    private fun ClinicalDraft.toSyncDto() = ClinicalDraftDto(
+        id = id,
+        patientId = patientId,
+        patientNombre = patientNombre,
+        patientCedula = patientCedula,
+        documentType = DocumentType.storageName(documentType),
+        dictation = dictation,
+        templateId = templateId,
+        templateName = templateName,
+        headerId = headerId,
+        generatedContent = generatedContent,
+        membreteNombre = membrete?.nombre,
+        membreteEdad = membrete?.edad,
+        membreteSexo = membrete?.sexo,
+        membreteFechaNacimiento = membrete?.fechaNacimiento,
+        membreteFecha = membrete?.fecha,
+        createdAt = createdAt.toString(),
+        updatedAt = updatedAt.toString(),
     )
 
     private fun Appointment.toDto() = AppointmentDto(

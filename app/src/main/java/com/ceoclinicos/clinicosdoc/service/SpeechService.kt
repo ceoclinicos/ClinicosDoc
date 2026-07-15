@@ -10,6 +10,11 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import java.util.Locale
 
+/**
+ * Dictado clínico continuo.
+ * Mejoras: locale VE preferido, silencios más largos (frases médicas),
+ * anti-duplicado al unir parcial/final, reinicio robusto tras cortes.
+ */
 class SpeechService(context: Context) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -64,7 +69,10 @@ class SpeechService(context: Context) {
         mainHandler.removeCallbacksAndMessages(null)
         currentPartial = ""
         onResultCallback = null
-        speechRecognizer?.cancel()
+        try {
+            speechRecognizer?.cancel()
+        } catch (_: Exception) {
+        }
         speechRecognizer?.destroy()
         speechRecognizer = null
     }
@@ -75,19 +83,27 @@ class SpeechService(context: Context) {
         sessionBase = committedText
         currentPartial = ""
 
-        speechRecognizer?.destroy()
+        try {
+            speechRecognizer?.destroy()
+        } catch (_: Exception) {
+        }
         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).apply {
             setRecognitionListener(recognitionListener)
         }
 
+        val langTag = spanishLocale?.toLanguageTag() ?: "es-ES"
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4_000L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3_000L)
-            spanishLocale?.let { putExtra(RecognizerIntent.EXTRA_LANGUAGE, it.toLanguageTag()) }
-                ?: putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-ES")
+            // Frases clínicas: esperar más silencio antes de cortar
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 5_500L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4_000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1_500L)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, langTag)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langTag)
+            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, appContext.packageName)
         }
 
         return try {
@@ -100,11 +116,12 @@ class SpeechService(context: Context) {
         }
     }
 
-    private fun scheduleRestart() {
+    private fun scheduleRestart(delayMs: Long = 250L) {
         if (!active) return
+        mainHandler.removeCallbacksAndMessages(null)
         mainHandler.postDelayed({
             if (active) beginSession()
-        }, 200L)
+        }, delayMs)
     }
 
     private fun emitDisplay(isFinal: Boolean) {
@@ -125,21 +142,22 @@ class SpeechService(context: Context) {
             when (error) {
                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
                 SpeechRecognizer.ERROR_NO_MATCH,
-                -> scheduleRestart()
+                -> scheduleRestart(200L)
 
                 SpeechRecognizer.ERROR_CLIENT -> Unit
+
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> scheduleRestart(600L)
 
                 else -> {
                     lastError = when (error) {
                         SpeechRecognizer.ERROR_AUDIO -> "Error de audio"
                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Permiso de micrófono requerido"
-                        SpeechRecognizer.ERROR_NETWORK -> "Error de red"
+                        SpeechRecognizer.ERROR_NETWORK -> "Error de red — revisa conexión"
                         SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Tiempo de red agotado"
-                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Reconocedor ocupado"
-                        SpeechRecognizer.ERROR_SERVER -> "Error del servidor"
+                        SpeechRecognizer.ERROR_SERVER -> "Error del servidor de voz"
                         else -> "Error de reconocimiento ($error)"
                     }
-                    scheduleRestart()
+                    scheduleRestart(350L)
                 }
             }
         }
@@ -154,7 +172,7 @@ class SpeechService(context: Context) {
                 currentPartial = ""
                 onResultCallback?.invoke(committedText, true)
             }
-            scheduleRestart()
+            scheduleRestart(200L)
         }
 
         override fun onPartialResults(partialResults: Bundle?) {
@@ -162,6 +180,8 @@ class SpeechService(context: Context) {
             val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 ?.firstOrNull()
                 .orEmpty()
+            // Ignorar parcial vacío o idéntico al anterior (ruido de callbacks)
+            if (text.isBlank() || text == currentPartial) return
             currentPartial = text
             emitDisplay(isFinal = false)
         }
@@ -172,11 +192,28 @@ class SpeechService(context: Context) {
         val right = addition.trim()
         if (left.isEmpty()) return right
         if (right.isEmpty()) return left
+        val leftL = left.lowercase()
+        val rightL = right.lowercase()
+        // El motor a veces devuelve el texto completo ya incluido en base
+        if (rightL.startsWith(leftL)) return right
+        if (leftL.endsWith(rightL)) return left
+        // Evitar "frase frase" cuando el final repite el último tramo parcial
+        val lastWords = leftL.split(Regex("\\s+")).takeLast(8).joinToString(" ")
+        if (lastWords.isNotBlank() && rightL.startsWith(lastWords)) {
+            return left + right.substring(lastWords.length)
+        }
         return "$left $right"
     }
 
-    private fun resolveSpanishLocale(): Locale? =
-        listOf("es-VE", "es-ES", "es-MX", "es-CO", "es-US", "es")
+    private fun resolveSpanishLocale(): Locale? {
+        val preferred = listOf("es-VE", "es-ES", "es-MX", "es-CO", "es-US", "es")
             .map { Locale.forLanguageTag(it) }
-            .firstOrNull()
+        val available = Locale.getAvailableLocales().toSet()
+        return preferred.firstOrNull { loc ->
+            available.any {
+                it.language.equals(loc.language, ignoreCase = true) &&
+                    (loc.country.isEmpty() || it.country.equals(loc.country, ignoreCase = true))
+            }
+        } ?: preferred.firstOrNull()
+    }
 }

@@ -33,14 +33,16 @@ object DraftStorage {
         val idx = all.indexOfFirst { it.id == draft.id }
         if (idx >= 0) all[idx] = draft else all.add(0, draft)
         saveAllLocal(context, all)
+        SyncCoordinator.afterDraftSaved(context, draft)
         return draft
     }
 
     fun delete(context: Context, id: String) {
         saveAllLocal(context, loadAll(context).filterNot { it.id == id })
+        SyncCoordinator.afterDraftDeleted(context, id)
     }
 
-    private fun saveAllLocal(context: Context, drafts: List<ClinicalDraft>) {
+    fun saveAllLocal(context: Context, drafts: List<ClinicalDraft>) {
         prefs(context).edit().putString(KEY, gson.toJson(drafts.map { it.toDto() })).persist()
     }
 

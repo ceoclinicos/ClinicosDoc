@@ -96,6 +96,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
     var especialidad by remember { mutableStateOf<String?>(null) }
     var especialidadOtra by remember { mutableStateOf("") }
     var esMedicoGeneral by remember { mutableStateOf(true) }
+    var nacionalidad by remember { mutableStateOf("Venezuela") }
     var whatsapp by remember { mutableStateOf("") }
 
     var nombreError by remember { mutableStateOf<String?>(null) }
@@ -106,8 +107,10 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
     var whatsappError by remember { mutableStateOf<String?>(null) }
 
     val firebaseReady = remember(context) { DoctorAuthService.isConfigured(context) }
-    val sexos = listOf("Masculino", "Femenino", "Otro")
+    val sexos = listOf("Masculino", "Femenino")
+    val nacionalidades = listOf("Venezuela", "Otros")
     val especialidades = EspecialidadesMedicas.LISTA
+    val esVenezolano = nacionalidad == "Venezuela"
 
     fun showToast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
 
@@ -197,8 +200,8 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                             password.length != 4 -> "El PIN debe tener 4 dígitos"
                             else -> null
                         }
-                        mppsError = if (mpps.isBlank()) "Ingresa tu MPPS" else null
-                        if (cedulaError != null || passwordError != null || mppsError != null) return@LoginForm
+                        mppsError = null
+                        if (cedulaError != null || passwordError != null) return@LoginForm
 
                         if (!firebaseReady) {
                             showToast("Necesitas internet para iniciar sesión")
@@ -242,6 +245,15 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                         onCedulaChange = { cedula = it },
                         correo = correo,
                         onCorreoChange = { correo = it.trim() },
+                        nacionalidad = nacionalidad,
+                        onNacionalidadChange = { value ->
+                            nacionalidad = value
+                            if (value == "Otros") {
+                                mpps = ""
+                                mppsError = null
+                            }
+                        },
+                        nacionalidades = nacionalidades,
                         esGeneral = esMedicoGeneral,
                         onEsGeneralChange = { general ->
                             esMedicoGeneral = general
@@ -275,7 +287,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                                 !correo.contains("@") -> "Correo inválido"
                                 else -> null
                             }
-                            mppsError = if (mpps.isBlank()) "Ingresa tu MPPS" else null
+                            mppsError = if (esVenezolano && mpps.isBlank()) "Ingresa tu MPPS" else null
                             passwordError = when {
                                 password.isBlank() -> "Ingresa tu PIN (contraseña)"
                                 password.length != 4 -> "El PIN debe tener 4 dígitos"
@@ -289,6 +301,10 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                                 return@RegistrationStep1
                             }
                             if (esMedicoGeneral) especialidad = "Medicina general"
+                            if (!esVenezolano) {
+                                step = 1
+                                return@RegistrationStep1
+                            }
                             loading = true
                             scope.launch {
                                 val result = MppsValidationService.validate(cedula, mpps)
@@ -351,6 +367,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                                 especialidad = especialidadFinal,
                                 whatsapp = whatsapp.trim(),
                                 correo = correo.trim(),
+                                nacionalidad = nacionalidad,
                             )
 
                             loading = true
@@ -363,11 +380,13 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                                         onFailure = { showToast(it.message ?: "Error al registrar") },
                                     )
                                 } else {
-                                    val check = MppsValidationService.validate(profile.cedula, profile.mpps)
-                                    if (check.isFailure) {
-                                        loading = false
-                                        showToast(check.exceptionOrNull()?.message ?: "No se pudo validar MPPS")
-                                        return@launch
+                                    if (esVenezolano) {
+                                        val check = MppsValidationService.validate(profile.cedula, profile.mpps)
+                                        if (check.isFailure) {
+                                            loading = false
+                                            showToast(check.exceptionOrNull()?.message ?: "No se pudo validar MPPS")
+                                            return@launch
+                                        }
                                     }
                                     DoctorStorage.saveProfileLocal(context, profile)
                                     loading = false
@@ -425,7 +444,7 @@ private fun LoginForm(
         "Código MPPS",
         mpps,
         onMppsChange,
-        hint = "Ej. 154472",
+        hint = "Requerido si eres venezolano / registrado con MPPS",
         prefixIcon = Icons.Outlined.Verified,
         keyboardOptions = keyboardDigits(),
         isError = mppsError != null,
@@ -453,6 +472,9 @@ private fun RegistrationStep1(
     onCedulaChange: (String) -> Unit,
     correo: String,
     onCorreoChange: (String) -> Unit,
+    nacionalidad: String,
+    onNacionalidadChange: (String) -> Unit,
+    nacionalidades: List<String>,
     esGeneral: Boolean,
     onEsGeneralChange: (Boolean) -> Unit,
     especialidad: String?,
@@ -473,6 +495,8 @@ private fun RegistrationStep1(
     onNext: () -> Unit,
 ) {
     var especialidadExpanded by remember { mutableStateOf(false) }
+    var nacionalidadExpanded by remember { mutableStateOf(false) }
+    val esVenezuela = nacionalidad == "Venezuela"
 
     PremiumTextField(
         "Nombre completo",
@@ -505,6 +529,41 @@ private fun RegistrationStep1(
         errorMessage = correoError,
     )
     Spacer(modifier = Modifier.height(20.dp))
+    ExposedDropdownMenuBox(
+        expanded = nacionalidadExpanded,
+        onExpandedChange = { nacionalidadExpanded = !nacionalidadExpanded },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        OutlinedTextField(
+            value = nacionalidad,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Nacionalidad") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = nacionalidadExpanded) },
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Teal,
+                cursorColor = Teal,
+            ),
+        )
+        DropdownMenu(
+            expanded = nacionalidadExpanded,
+            onDismissRequest = { nacionalidadExpanded = false },
+        ) {
+            nacionalidades.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onNacionalidadChange(option)
+                        nacionalidadExpanded = false
+                    },
+                )
+            }
+        }
+    }
+    Spacer(modifier = Modifier.height(20.dp))
     Text("Tipo", style = MaterialTheme.typography.labelLarge.copy(color = TextSecondary))
     Spacer(modifier = Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -527,7 +586,14 @@ private fun RegistrationStep1(
             ),
         )
     }
-    if (!esGeneral) {
+    if (esGeneral) {
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            "Especialidad: Médico general",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary,
+        )
+    } else {
         Spacer(modifier = Modifier.height(16.dp))
         ExposedDropdownMenuBox(
             expanded = especialidadExpanded,
@@ -576,23 +642,25 @@ private fun RegistrationStep1(
             )
         }
     }
-    Spacer(modifier = Modifier.height(20.dp))
-    PremiumTextField(
-        "Código MPPS",
-        mpps,
-        onMppsChange,
-        hint = "Ej. 154472 — se valida con SACS",
-        prefixIcon = Icons.Outlined.Verified,
-        keyboardOptions = keyboardDigits(),
-        isError = mppsError != null,
-        errorMessage = mppsError,
-    )
-    Text(
-        "Se valida contra el registro SACS (cédula + MPPS deben coincidir).",
-        style = MaterialTheme.typography.bodySmall,
-        color = TextSecondary,
-        modifier = Modifier.padding(top = 6.dp),
-    )
+    if (esVenezuela) {
+        Spacer(modifier = Modifier.height(20.dp))
+        PremiumTextField(
+            "Código MPPS",
+            mpps,
+            onMppsChange,
+            hint = "Ej. 154472 — se valida con SACS",
+            prefixIcon = Icons.Outlined.Verified,
+            keyboardOptions = keyboardDigits(),
+            isError = mppsError != null,
+            errorMessage = mppsError,
+        )
+        Text(
+            "Se valida contra el registro SACS (cédula + MPPS deben coincidir).",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+    }
     Spacer(modifier = Modifier.height(20.dp))
     PremiumTextField(
         "PIN (contraseña, 4 dígitos)",
@@ -607,7 +675,7 @@ private fun RegistrationStep1(
     )
     Spacer(modifier = Modifier.height(32.dp))
     PremiumPrimaryButton(
-        label = if (loading) "Validando MPPS…" else "Siguiente",
+        label = if (loading && esVenezuela) "Validando MPPS…" else "Siguiente",
         onClick = onNext,
         loading = loading,
         icon = Icons.AutoMirrored.Filled.ArrowForward,
@@ -627,22 +695,41 @@ private fun RegistrationStep2(
     onBack: () -> Unit,
     onFinish: () -> Unit,
 ) {
-    Text("Sexo", style = MaterialTheme.typography.labelLarge.copy(color = TextSecondary))
-    Spacer(modifier = Modifier.height(10.dp))
-    Row(
+    var sexoExpanded by remember { mutableStateOf(false) }
+
+    ExposedDropdownMenuBox(
+        expanded = sexoExpanded,
+        onExpandedChange = { sexoExpanded = !sexoExpanded },
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        sexos.forEach { option ->
-            FilterChip(
-                selected = sexo == option,
-                onClick = { onSexoChange(option) },
-                label = { Text(option) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = Teal.copy(alpha = 0.15f),
-                    selectedLabelColor = Teal,
-                ),
-            )
+        OutlinedTextField(
+            value = sexo.orEmpty(),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Sexo") },
+            placeholder = { Text("Selecciona") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = sexoExpanded) },
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Teal,
+                cursorColor = Teal,
+            ),
+        )
+        DropdownMenu(
+            expanded = sexoExpanded,
+            onDismissRequest = { sexoExpanded = false },
+        ) {
+            sexos.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onSexoChange(option)
+                        sexoExpanded = false
+                    },
+                )
+            }
         }
     }
     Spacer(modifier = Modifier.height(20.dp))

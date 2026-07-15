@@ -1,7 +1,18 @@
 /** Persistencia local de plantillas, encabezados y documentos (paridad con la app). */
 import { DocumentTypeLabels, type ClinicalDocument, type ClinicalDraft, type DocumentHeader, type DocumentTemplate, type DocumentType } from "../shared/models";
 import { defaultSectionsFor } from "../shared/section-catalog";
+import { PhysicalExamDefaults } from "../shared/physical-exam-defaults";
 import { loadJson, saveJson } from "./local-store";
+import {
+  canSync,
+  deleteDraftCloud,
+  deleteHeaderCloud,
+  pushDocument,
+  pushDraft,
+  pushHeader,
+  pushTemplate,
+  syncQuiet,
+} from "./cloud-sync";
 
 const KEY_TEMPLATES = "templates";
 const KEY_HEADERS = "headers";
@@ -11,13 +22,15 @@ const KEY_DRAFTS = "drafts";
 const DOC_TYPES: DocumentType[] = ["historiaClinica", "informe", "reposo"];
 
 function makeDefaultTemplates(): DocumentTemplate[] {
+  const stored = loadJson<{ id: string }[]>("physical_exam", []);
+  const examIds = (stored.length ? stored : PhysicalExamDefaults).map((s) => s.id);
   return DOC_TYPES.map((type) => ({
     id: crypto.randomUUID(),
     name: `Plantilla ${DocumentTypeLabels[type]}`,
     documentType: type,
     sections: defaultSectionsFor(type),
     isDefault: true,
-    enabledPhysicalExamSystemIds: [],
+    enabledPhysicalExamSystemIds: examIds,
   }));
 }
 
@@ -48,6 +61,7 @@ export function upsertTemplate(template: DocumentTemplate): DocumentTemplate {
   const next = all.map((t) => (t.documentType === template.documentType ? { ...template, isDefault: true } : t));
   if (!next.some((t) => t.documentType === template.documentType)) next.push(template);
   saveTemplates(next);
+  if (canSync()) syncQuiet(() => pushTemplate(template));
   return template;
 }
 
@@ -91,6 +105,7 @@ export function upsertHeader(header: DocumentHeader): DocumentHeader {
     next = next.map((h) => ({ ...h, isDefault: h.id === header.id }));
   }
   saveHeaders(next);
+  if (canSync()) syncQuiet(() => pushHeader(header));
   return header;
 }
 
@@ -111,6 +126,7 @@ export function deleteHeader(id: string): void {
     next = next.map((h, i) => ({ ...h, isDefault: i === 0 }));
   }
   saveHeaders(next);
+  if (canSync()) syncQuiet(() => deleteHeaderCloud(id));
 }
 
 export function defaultHeader(): DocumentHeader | undefined {
@@ -125,6 +141,7 @@ export function loadDocuments(): ClinicalDocument[] {
 export function saveDocument(doc: ClinicalDocument): ClinicalDocument {
   const all = loadDocuments().filter((d) => d.id !== doc.id);
   saveJson(KEY_DOCUMENTS, [doc, ...all]);
+  if (canSync()) syncQuiet(() => pushDocument(doc));
   return doc;
 }
 
@@ -146,6 +163,7 @@ export function loadDrafts(): ClinicalDraft[] {
 export function upsertDraft(draft: ClinicalDraft): ClinicalDraft {
   const all = loadDrafts().filter((d) => d.id !== draft.id);
   saveJson(KEY_DRAFTS, [draft, ...all]);
+  if (canSync()) syncQuiet(() => pushDraft(draft));
   return draft;
 }
 
@@ -158,4 +176,5 @@ export function deleteDraft(id: string): void {
     KEY_DRAFTS,
     loadDrafts().filter((d) => d.id !== id),
   );
+  if (canSync()) syncQuiet(() => deleteDraftCloud(id));
 }

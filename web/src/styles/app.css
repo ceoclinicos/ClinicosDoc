@@ -422,6 +422,31 @@ dialog {
   margin-top: 0;
 }
 
+.birth-date-fieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem 1rem;
+  margin: 0;
+}
+
+.birth-date-fieldset legend {
+  padding: 0 0.35rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.birth-date-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 1.2fr;
+  gap: 0.65rem;
+}
+
+@media (max-width: 520px) {
+  .birth-date-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .consultorio-details {
   margin-top: 1.5rem;
   padding: 0.75rem;
@@ -556,6 +581,68 @@ dialog {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.95rem;
+}
+
+.step-badge {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--teal);
+  margin: 0 0 0.5rem;
+}
+
+.doc-live-preview {
+  margin: 0.75rem 0 1rem;
+  background: #fff;
+  color: #0b1f33;
+}
+
+.doc-live-preview .print-header {
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.doc-live-preview .print-header-name {
+  font-weight: 700;
+  color: var(--teal);
+  font-size: 1.1rem;
+}
+
+.doc-live-preview .print-header-sub,
+.doc-live-preview .print-header-desc {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.doc-live-preview .print-title {
+  text-align: center;
+  font-size: 1.05rem;
+  letter-spacing: 0.03em;
+  margin: 0.75rem 0;
+}
+
+.doc-live-preview .print-membrete {
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+}
+
+.doc-live-preview .print-rule {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 0.75rem 0;
+}
+
+.doc-live-preview .print-section h3 {
+  font-size: 0.95rem;
+  color: var(--teal);
+  margin: 0.85rem 0 0.25rem;
+}
+
+.doc-live-preview .print-body {
+  white-space: pre-wrap;
+  font-family: inherit;
+  margin: 0;
+  font-size: 0.9rem;
 }
 
 @media (max-width: 520px) {

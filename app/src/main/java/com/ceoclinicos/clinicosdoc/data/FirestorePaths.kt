@@ -16,6 +16,8 @@ object FirestorePaths {
     const val SUB_TEMPLATES = "templates"
     const val SUB_HEADERS = "headers"
     const val SUB_PHYSICAL_EXAM = "physical_exam_systems"
+    /** Borradores de Redactar (sync app ↔ web). */
+    const val SUB_DRAFTS = "drafts"
 
     /**
      * Registro global de pacientes (compartido entre médicos).

@@ -53,6 +53,9 @@ export interface ProfesionalRegistro {
   pinHash: string;
   activo: boolean;
   createdAt: string;
+  sexo?: string;
+  /** "Venezuela" | "Otros" */
+  nacionalidad?: string;
 }
 
 export interface AtencionRegistro {
@@ -76,6 +79,10 @@ export interface ProfesionalSession {
   especialidad: string;
   esMedicoGeneral: boolean;
   mpps: string;
+  /** Mismo document id que la app en `clinicosdoc_user/{id}` */
+  cloudUserId?: string;
+  sexo?: string;
+  nacionalidad?: string;
 }
 
 export interface PacienteSession {

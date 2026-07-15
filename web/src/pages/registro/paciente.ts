@@ -5,6 +5,11 @@ import {
   getPatientSession,
   setPatientSession,
 } from "../../registro/session";
+import {
+  bindBirthDateSelects,
+  birthDateFieldsHtml,
+  parseBirthFromForm,
+} from "../../services/birth-date";
 import { page } from "../helpers";
 
 function tabs(active: "consultar" | "registro"): string {
@@ -39,15 +44,15 @@ function bindPacientePage(el: HTMLElement): void {
           <form class="form" id="pac-registro">
             <label>Nombre completo<input name="nombre" required /></label>
             <label>Cédula<input name="cedula" required /></label>
-            <label>Edad<input name="edad" type="number" min="0" max="120" required /></label>
-            <label>Fecha de nacimiento<input name="fechaNacimiento" type="date" required /></label>
             <label>Sexo
               <select name="sexo" required>
                 <option value="">Seleccione…</option>
-                <option value="Femenino">Femenino</option>
                 <option value="Masculino">Masculino</option>
+                <option value="Femenino">Femenino</option>
               </select>
             </label>
+            ${birthDateFieldsHtml("nac")}
+            <p class="muted">La edad se calcula con la fecha de nacimiento.</p>
             <label>Teléfono<input name="telefono" type="tel" required placeholder="0412…" /></label>
             <label>Correo<input name="correo" type="email" required /></label>
             <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
@@ -61,6 +66,8 @@ function bindPacientePage(el: HTMLElement): void {
           renderAuth();
         });
       });
+
+      if (mode === "registro") bindBirthDateSelects(body, "nac");
 
       body.querySelector("#pac-login")?.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -78,11 +85,12 @@ function bindPacientePage(el: HTMLElement): void {
         e.preventDefault();
         const fd = new FormData(e.target as HTMLFormElement);
         try {
+          const birth = parseBirthFromForm(fd, "nac");
           const p = await registerPaciente({
             cedula: String(fd.get("cedula")),
             nombre: String(fd.get("nombre")),
-            edad: Number(fd.get("edad")),
-            fechaNacimiento: String(fd.get("fechaNacimiento")),
+            edad: birth.age,
+            fechaNacimiento: birth.iso.slice(0, 10),
             sexo: String(fd.get("sexo")),
             telefono: String(fd.get("telefono")),
             correo: String(fd.get("correo")),

@@ -1,21 +1,35 @@
 import { registerRoute, navigate } from "../app/router";
 import { generateDocument } from "../services/ai/document-ai-service";
 import { getAiProvider } from "../services/ai/ai-service";
+import { loadPhysicalExamCatalog } from "../services/ai/physical-exam-prompt";
 import {
   defaultHeader,
   deleteDraft,
   getDraft,
+  loadHeaders,
   saveDocument,
   templateForType,
   upsertDraft,
+  upsertTemplate,
 } from "../services/clinical-store";
 import { loadDoctorProfile, saveDoctorProfile, type DoctorProfileLocal } from "../services/doctor-local";
+import {
+  buildFullDocumentHtml,
+  buildMembreteFromPatient,
+  printClinicalDocument,
+} from "../services/document-pdf";
 import { loadJson } from "../services/local-store";
-import { parseDocumentSections } from "../services/document-parser";
 import { isSpeechSupported, startDictation } from "../services/speech";
 import { getProfessionalSession } from "../registro/session";
-import type { ClinicalDraft, DocumentType, Patient } from "../shared/models";
-import { DocumentTypeLabels } from "../shared/models";
+import type {
+  ClinicalDraft,
+  DocumentHeader,
+  DocumentTemplate,
+  DocumentType,
+  Patient,
+} from "../shared/models";
+import { DocumentReportTitles, DocumentTypeLabels } from "../shared/models";
+import { catalogFor } from "../shared/section-catalog";
 import { bindNavButtons, page } from "./helpers";
 
 function hashQuery(): URLSearchParams {
@@ -45,7 +59,8 @@ function mountRedactar(root: HTMLElement): void {
   const tipoQ = q.get("tipo") as DocumentType | null;
   const existingDraft = draftId ? getDraft(draftId) : undefined;
 
-  let step: "setup" | "dictado" | "resultado" = existingDraft?.generatedContent ? "resultado" : "setup";
+  let step: "paciente" | "plantilla" | "dictado" | "resultado" =
+    existingDraft?.generatedContent ? "resultado" : "paciente";
   let dictation = existingDraft?.dictation ?? "";
   let generatedContent = existingDraft?.generatedContent ?? "";
   let processing = false;
@@ -61,6 +76,10 @@ function mountRedactar(root: HTMLElement): void {
     existingDraft?.documentType ??
     (tipoQ && ["historiaClinica", "informe", "reposo"].includes(tipoQ) ? tipoQ : "informe");
 
+  let workingTemplate: DocumentTemplate = structuredClone(templateForType(docType));
+  let selectedHeader: DocumentHeader | undefined =
+    loadHeaders().find((h) => h.id === existingDraft?.headerId) ?? defaultHeader();
+
   const session = getProfessionalSession();
   let doctor = loadDoctorProfile() ?? {
     nombre: session?.nombre ?? "",
@@ -69,15 +88,18 @@ function mountRedactar(root: HTMLElement): void {
     mpps: session?.mpps ?? "",
   };
 
-  if (existingDraft && !existingDraft.generatedContent) step = "dictado";
+  if (existingDraft && !existingDraft.generatedContent) {
+    step = existingDraft.dictation ? "dictado" : "paciente";
+  }
 
   function render(): void {
-    if (step === "setup") renderSetup();
+    if (step === "paciente") renderPaciente();
+    else if (step === "plantilla") renderPlantilla();
     else if (step === "dictado") renderDictado();
     else renderResultado();
   }
 
-  function renderSetup(): void {
+  function renderPaciente(): void {
     const patientOptions = patients
       .map(
         (p) =>
@@ -93,6 +115,7 @@ function mountRedactar(root: HTMLElement): void {
       .join("");
 
     root.innerHTML = `
+      <p class="step-badge">1 / 4 · Paciente</p>
       <p class="lead">¿Para qué paciente es este ${DocumentTypeLabels[docType].toLowerCase()}?</p>
       <div class="grid-2" style="margin-bottom:1rem">${typeBtns}</div>
       <form class="form" id="setup-form">
@@ -105,13 +128,12 @@ function mountRedactar(root: HTMLElement): void {
         ${patients.length === 0 ? `<p class="muted"><a href="#/pacientes/nuevo">Registrar paciente</a></p>` : ""}
         <fieldset class="card-panel">
           <legend><strong>Datos del médico</strong></legend>
-          <label>Nombre<input name="docNombre" required value="${doctor?.nombre ?? ""}" /></label>
-          <label>Cédula<input name="docCedula" value="${doctor?.cedula ?? ""}" /></label>
-          <label>Especialidad<input name="docEsp" required value="${doctor?.especialidad ?? "Médico general"}" /></label>
-          <label>MPPS<input name="docMpps" value="${doctor?.mpps ?? ""}" /></label>
+          <label>Nombre<input name="docNombre" required value="${escapeHtml(doctor?.nombre ?? "")}" /></label>
+          <label>Cédula<input name="docCedula" value="${escapeHtml(doctor?.cedula ?? "")}" /></label>
+          <label>Especialidad<input name="docEsp" required value="${escapeHtml(doctor?.especialidad ?? "Médico general")}" /></label>
+          <label>MPPS<input name="docMpps" value="${escapeHtml(doctor?.mpps ?? "")}" /></label>
         </fieldset>
-        <p class="muted">Plantilla: ${templateForType(docType).name} · IA: ${getAiProvider()} · ${isSpeechSupported() ? "Dictado por voz disponible" : "Dictado solo texto"}</p>
-        <button type="submit" class="btn btn-primary" ${patients.length ? "" : "disabled"}>Continuar al dictado</button>
+        <button type="submit" class="btn btn-primary" ${patients.length ? "" : "disabled"}>Continuar a plantilla</button>
         <button type="button" class="btn btn-ghost" data-nav="/">Cancelar</button>
       </form>
     `;
@@ -119,7 +141,8 @@ function mountRedactar(root: HTMLElement): void {
     root.querySelectorAll("[data-pick-type]").forEach((btn) => {
       btn.addEventListener("click", () => {
         docType = btn.getAttribute("data-pick-type") as DocumentType;
-        renderSetup();
+        workingTemplate = structuredClone(templateForType(docType));
+        renderPaciente();
       });
     });
 
@@ -136,16 +159,102 @@ function mountRedactar(root: HTMLElement): void {
         mpps: String(fd.get("docMpps")),
       };
       saveDoctorProfile(doctor as DoctorProfileLocal);
-      step = "dictado";
+      workingTemplate = structuredClone(templateForType(docType));
+      step = "plantilla";
       render();
     });
 
     bindNavButtons(root);
   }
 
+  function renderPlantilla(): void {
+    const catalog = catalogFor(docType);
+    const examSystems = loadPhysicalExamCatalog().sort((a, b) => a.sortOrder - b.sortOrder);
+    const enabled = new Set(
+      workingTemplate.enabledPhysicalExamSystemIds?.length
+        ? workingTemplate.enabledPhysicalExamSystemIds
+        : examSystems.map((s) => s.id),
+    );
+    const needsExam = docType === "historiaClinica" || docType === "informe";
+
+    root.innerHTML = `
+      <p class="step-badge">2 / 4 · Plantilla</p>
+      <p class="lead">Configura secciones${needsExam ? " y examen físico" : ""} para este documento.</p>
+      <form class="form" id="tpl-step-form">
+        <label>Nombre de plantilla
+          <input name="name" required value="${escapeHtml(workingTemplate.name)}" />
+        </label>
+        <fieldset class="card-panel">
+          <legend><strong>Secciones</strong></legend>
+          <div class="stack">
+            ${catalog
+              .map((sec) => {
+                const checked = workingTemplate.sections.includes(sec) ? "checked" : "";
+                const locked = sec === "Datos del paciente" ? "disabled" : "";
+                return `<label class="check-row"><input type="checkbox" name="section" value="${escapeHtml(sec)}" ${checked} ${locked} /> ${escapeHtml(sec)}</label>`;
+              })
+              .join("")}
+          </div>
+        </fieldset>
+        ${
+          needsExam
+            ? `
+        <fieldset class="card-panel">
+          <legend><strong>Examen físico (sistemas activos)</strong></legend>
+          <p class="muted">Marca los sistemas que la IA debe incluir. Al menos uno.</p>
+          <div class="stack">
+            ${examSystems
+              .map(
+                (s) =>
+                  `<label class="check-row"><input type="checkbox" name="examId" value="${escapeHtml(s.id)}" ${enabled.has(s.id) ? "checked" : ""} /> <strong>${escapeHtml(s.name)}</strong></label>`,
+              )
+              .join("")}
+          </div>
+        </fieldset>`
+            : ""
+        }
+        <p class="muted">IA: ${getAiProvider()} · ${isSpeechSupported() ? "Dictado por voz disponible" : "Dictado solo texto"}</p>
+        <label class="check-row"><input type="checkbox" name="saveTpl" /> Guardar esta configuración como plantilla por defecto</label>
+        <button type="submit" class="btn btn-primary">Continuar al dictado</button>
+        <button type="button" class="btn btn-ghost" id="btn-back-pac">Volver</button>
+      </form>
+    `;
+
+    root.querySelector("#btn-back-pac")?.addEventListener("click", () => {
+      step = "paciente";
+      render();
+    });
+
+    root.querySelector("#tpl-step-form")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target as HTMLFormElement);
+      const sections = Array.from(fd.getAll("section")).map(String);
+      if (!sections.includes("Datos del paciente")) sections.unshift("Datos del paciente");
+      const ordered = catalog.filter((s) => sections.includes(s));
+      const examIds = Array.from(fd.getAll("examId")).map(String);
+      if (needsExam && examIds.length === 0) {
+        alert("Seleccione al menos un sistema de examen físico.");
+        return;
+      }
+      workingTemplate = {
+        ...workingTemplate,
+        name: String(fd.get("name")).trim() || workingTemplate.name,
+        sections: ordered,
+        enabledPhysicalExamSystemIds: examIds,
+        isDefault: true,
+      };
+      if (fd.get("saveTpl")) {
+        upsertTemplate(workingTemplate);
+      }
+      step = "dictado";
+      render();
+    });
+  }
+
   function renderDictado(): void {
     root.innerHTML = `
-      <p class="muted"><strong>${selectedPatient?.nombre}</strong> · ${DocumentTypeLabels[docType]}</p>
+      <p class="step-badge">3 / 4 · Dictado</p>
+      <p class="muted"><strong>${escapeHtml(selectedPatient?.nombre ?? "")}</strong> · ${DocumentTypeLabels[docType]} · ${escapeHtml(workingTemplate.name)}</p>
       <div class="dictado-toolbar">
         <button type="button" class="mic-btn ${listening ? "mic-active" : ""}" id="mic-btn">
           ${listening ? "⏹ Detener" : "🎤 Dictar"}
@@ -161,6 +270,7 @@ function mountRedactar(root: HTMLElement): void {
           ${processing ? "Procesando con IA…" : "Procesar con IA"}
         </button>
         <button type="button" class="btn btn-secondary" id="btn-draft">Guardar borrador</button>
+        <button type="button" class="btn btn-ghost" id="btn-cfg-tpl">Configurar plantilla</button>
         <button type="button" class="btn btn-ghost" id="btn-back">Volver</button>
       </div>
     `;
@@ -204,7 +314,13 @@ function mountRedactar(root: HTMLElement): void {
     root.querySelector("#btn-back")?.addEventListener("click", () => {
       stopSpeech?.();
       listening = false;
-      step = "setup";
+      step = "plantilla";
+      render();
+    });
+    root.querySelector("#btn-cfg-tpl")?.addEventListener("click", () => {
+      stopSpeech?.();
+      listening = false;
+      step = "plantilla";
       render();
     });
 
@@ -230,9 +346,8 @@ function mountRedactar(root: HTMLElement): void {
       renderDictado();
 
       try {
-        const template = templateForType(docType);
         generatedContent = await generateDocument({
-          template,
+          template: workingTemplate,
           patient: selectedPatient,
           doctor,
           dictation,
@@ -250,46 +365,98 @@ function mountRedactar(root: HTMLElement): void {
   }
 
   function renderResultado(): void {
-    const sections = parseDocumentSections(generatedContent);
-    const body = sections
-      .map((s) => {
-        const title = s.title ? `<h3>${escapeHtml(s.title)}</h3>` : "";
-        return `<article class="doc-section">${title}<pre class="doc-pre">${escapeHtml(s.body)}</pre></article>`;
-      })
+    const headers = loadHeaders();
+    if (!selectedHeader) selectedHeader = defaultHeader();
+    const membrete = selectedPatient
+      ? buildMembreteFromPatient(selectedPatient)
+      : undefined;
+    const preview = buildFullDocumentHtml({
+      type: docType,
+      content: generatedContent,
+      header: selectedHeader,
+      membrete,
+    });
+
+    const headerOpts = headers
+      .map(
+        (h) =>
+          `<option value="${h.id}" ${selectedHeader?.id === h.id ? "selected" : ""}>${escapeHtml(h.name)}</option>`,
+      )
       .join("");
 
     root.innerHTML = `
-      <p class="status-badge status-ok">Documento generado · ${DocumentTypeLabels[docType]}</p>
-      <p class="muted">${selectedPatient?.nombre} · ${selectedPatient?.cedula}</p>
-      <label class="search-label">Contenido (editable)
-        <textarea id="content-edit" rows="14">${escapeHtml(generatedContent)}</textarea>
+      <p class="step-badge">4 / 4 · Resultado</p>
+      <p class="status-badge status-ok">${DocumentReportTitles[docType]} generado</p>
+      <p class="muted">${escapeHtml(selectedPatient?.nombre ?? "")} · ${escapeHtml(selectedPatient?.cedula ?? "")}</p>
+
+      <label>Encabezado
+        <select id="header-select">${headerOpts || `<option value="">Sin encabezados — cree uno en Plantillas</option>`}</select>
       </label>
-      <div class="doc-preview" style="display:none">${body}</div>
+
+      <div class="card-panel doc-live-preview" id="live-preview">${preview}</div>
+
+      <label class="search-label">Contenido clínico (editable)
+        <textarea id="content-edit" rows="12">${escapeHtml(generatedContent)}</textarea>
+      </label>
+
       <div class="stack" style="margin-top:1rem">
         <button type="button" class="btn btn-primary" id="btn-save">Guardar documento</button>
+        <button type="button" class="btn btn-secondary" id="btn-print">Imprimir / PDF</button>
         <button type="button" class="btn btn-secondary" id="btn-copy">Copiar texto</button>
         <button type="button" class="btn btn-ghost" id="btn-edit">Editar dictado y regenerar</button>
         <button type="button" class="btn btn-ghost" data-nav="/informes">Ver informes</button>
       </div>
     `;
 
-    root.querySelector("#btn-copy")?.addEventListener("click", async () => {
+    const refreshPreview = () => {
       generatedContent = (root.querySelector("#content-edit") as HTMLTextAreaElement).value;
+      const box = root.querySelector("#live-preview") as HTMLElement;
+      if (box) {
+        box.innerHTML = buildFullDocumentHtml({
+          type: docType,
+          content: generatedContent,
+          header: selectedHeader,
+          membrete: selectedPatient ? buildMembreteFromPatient(selectedPatient) : undefined,
+        });
+      }
+    };
+
+    root.querySelector("#header-select")?.addEventListener("change", (e) => {
+      const id = (e.target as HTMLSelectElement).value;
+      selectedHeader = headers.find((h) => h.id === id) ?? defaultHeader();
+      refreshPreview();
+    });
+
+    root.querySelector("#content-edit")?.addEventListener("input", () => refreshPreview());
+
+    root.querySelector("#btn-copy")?.addEventListener("click", async () => {
+      refreshPreview();
       await navigator.clipboard.writeText(generatedContent);
       alert("Copiado al portapapeles");
     });
 
     root.querySelector("#btn-edit")?.addEventListener("click", () => {
-      generatedContent = (root.querySelector("#content-edit") as HTMLTextAreaElement).value;
+      refreshPreview();
       step = "dictado";
       render();
     });
 
+    root.querySelector("#btn-print")?.addEventListener("click", () => {
+      refreshPreview();
+      if (!selectedPatient) return;
+      printClinicalDocument({
+        type: docType,
+        content: generatedContent,
+        header: selectedHeader,
+        membrete: buildMembreteFromPatient(selectedPatient),
+        patientNombre: selectedPatient.nombre,
+      });
+    });
+
     root.querySelector("#btn-save")?.addEventListener("click", () => {
       if (!selectedPatient) return;
-      generatedContent = (root.querySelector("#content-edit") as HTMLTextAreaElement).value;
-      const template = templateForType(docType);
-      const header = defaultHeader();
+      refreshPreview();
+      const membreteData = buildMembreteFromPatient(selectedPatient);
       const doc = saveDocument({
         id: crypto.randomUUID(),
         patientId: selectedPatient.id,
@@ -299,9 +466,11 @@ function mountRedactar(root: HTMLElement): void {
         content: generatedContent,
         rawDictation: dictation,
         createdAt: new Date().toISOString(),
-        templateId: template.id,
-        templateName: template.name,
-        headerId: header?.id,
+        templateId: workingTemplate.id,
+        templateName: workingTemplate.name,
+        headerId: selectedHeader?.id,
+        headerSnapshot: selectedHeader ? { ...selectedHeader } : undefined,
+        membrete: membreteData,
       });
       deleteDraft(currentDraftId);
       alert("Documento guardado");
@@ -313,7 +482,6 @@ function mountRedactar(root: HTMLElement): void {
 
   function persistDraft(): void {
     if (!selectedPatient) return;
-    const template = templateForType(docType);
     const draft: ClinicalDraft = {
       id: currentDraftId,
       patientId: selectedPatient.id,
@@ -321,9 +489,9 @@ function mountRedactar(root: HTMLElement): void {
       patientCedula: selectedPatient.cedula,
       documentType: docType,
       dictation,
-      templateId: template.id,
-      templateName: template.name,
-      headerId: defaultHeader()?.id,
+      templateId: workingTemplate.id,
+      templateName: workingTemplate.name,
+      headerId: selectedHeader?.id,
       generatedContent: generatedContent || undefined,
       createdAt: existingDraft?.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),

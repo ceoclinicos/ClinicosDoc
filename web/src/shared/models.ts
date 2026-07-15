@@ -9,6 +9,7 @@ export const FirestorePaths = {
   SUB_TEMPLATES: "templates",
   SUB_HEADERS: "headers",
   SUB_PHYSICAL_EXAM: "physical_exam_systems",
+  SUB_DRAFTS: "drafts",
 } as const;
 
 export type DocumentType = "historiaClinica" | "informe" | "reposo";
@@ -56,6 +57,14 @@ export interface DocumentHeader {
   isDefault: boolean;
 }
 
+export interface PatientMembrete {
+  nombre: string;
+  edad: string;
+  sexo: string;
+  fechaNacimiento: string;
+  fecha: string;
+}
+
 export interface ClinicalDocument {
   id: string;
   patientId: string;
@@ -68,7 +77,15 @@ export interface ClinicalDocument {
   templateId?: string;
   templateName?: string;
   headerId?: string;
+  headerSnapshot?: DocumentHeader;
+  membrete?: PatientMembrete;
 }
+
+export const DocumentReportTitles: Record<DocumentType, string> = {
+  historiaClinica: "HISTORIA CLÍNICA",
+  informe: "INFORME MÉDICO",
+  reposo: "REPOSO MÉDICO",
+};
 
 export interface ClinicalDraft {
   id: string;

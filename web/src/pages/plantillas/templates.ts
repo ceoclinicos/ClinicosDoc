@@ -9,6 +9,7 @@ import {
 import type { DocumentHeader, DocumentTemplate, DocumentType } from "../../shared/models";
 import { DocumentTypeLabels } from "../../shared/models";
 import { catalogFor } from "../../shared/section-catalog";
+import { loadPhysicalExamCatalog } from "../../services/ai/physical-exam-prompt";
 import { bindNavButtons, page } from "../helpers";
 import { getProfessionalSession } from "../../registro/session";
 import { loadDoctorProfile } from "../../services/doctor-local";
@@ -174,6 +175,13 @@ registerRoute({
 
     let template: DocumentTemplate = loadTemplates().find((t) => t.documentType === tipo)!;
     const catalog = catalogFor(tipo);
+    const examSystems = loadPhysicalExamCatalog().sort((a, b) => a.sortOrder - b.sortOrder);
+    const needsExam = tipo === "historiaClinica" || tipo === "informe";
+    const enabledExam = new Set(
+      template.enabledPhysicalExamSystemIds?.length
+        ? template.enabledPhysicalExamSystemIds
+        : examSystems.map((s) => s.id),
+    );
     const el = page(
       `Plantilla ${DocumentTypeLabels[tipo]}`,
       `
@@ -192,6 +200,23 @@ registerRoute({
               .join("")}
           </div>
         </fieldset>
+        ${
+          needsExam
+            ? `
+        <fieldset class="card-panel">
+          <legend><strong>Examen físico</strong></legend>
+          <p class="muted">Sistemas que la IA incluirá por defecto.</p>
+          <div class="stack">
+            ${examSystems
+              .map(
+                (s) =>
+                  `<label class="check-row"><input type="checkbox" name="examId" value="${s.id}" ${enabledExam.has(s.id) ? "checked" : ""} /> ${s.name}</label>`,
+              )
+              .join("")}
+          </div>
+        </fieldset>`
+            : ""
+        }
         <button type="submit" class="btn btn-primary">Guardar plantilla</button>
         <button type="button" class="btn btn-ghost" data-nav="/plantillas/documentos">Volver</button>
       </form>
@@ -203,12 +228,17 @@ registerRoute({
       const fd = new FormData(e.target as HTMLFormElement);
       const sections = Array.from(fd.getAll("section")).map(String);
       if (!sections.includes("Datos del paciente")) sections.unshift("Datos del paciente");
-      // Mantener orden del catálogo
       const ordered = catalog.filter((s) => sections.includes(s));
+      const examIds = Array.from(fd.getAll("examId")).map(String);
+      if (needsExam && examIds.length === 0) {
+        alert("Seleccione al menos un sistema de examen físico.");
+        return;
+      }
       template = upsertTemplate({
         ...template,
         name: String(fd.get("name")).trim() || template.name,
         sections: ordered,
+        enabledPhysicalExamSystemIds: examIds,
         isDefault: true,
       });
       alert("Plantilla guardada");
