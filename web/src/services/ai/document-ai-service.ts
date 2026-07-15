@@ -7,8 +7,8 @@ import {
 } from "../../shared/enfermedad-actual";
 import { ensureTemplateSections } from "../ensure-sections";
 import { sendPrompt } from "./ai-service";
-import { sanitizeDocumentContent } from "./document-sanitizer";
-import { buildPhysicalExamBlock } from "./physical-exam-prompt";
+import { sanitizeDocumentContent, ensurePhysicalExamSystems } from "./document-sanitizer";
+import { buildPhysicalExamBlock, resolveSystemsForReport } from "./physical-exam-prompt";
 import { MOTIVO_CONSULTA_STYLE, sectionDefaultsPromptBlock } from "./section-defaults";
 
 export interface DoctorInfo {
@@ -61,6 +61,8 @@ Tu trabajo es transformar el dictado del médico en un texto profesional, claro 
 Corrige ortografía, gramática y puntuación.
 Convierte expresiones coloquiales a terminología médica equivalente, sin cambiar el significado clínico.
 Organiza el contenido en párrafos fluidos y coherentes.
+En INFORME MÉDICO / HISTORIA: el examen físico DEBE incluir TODOS los sistemas activos de la plantilla.
+Si el dictado solo menciona un sistema (ej. Extremidades), ese se adapta y LOS DEMÁS se copian con su texto base normal sin omitirlos.
 No inventes hallazgos clínicos patológicos que contradigan el dictado.
 OBLIGATORIO: cada sección empieza con una línea exacta [[SECTION:Nombre]] (sin excepciones).
 PROHIBIDO empezar con un párrafo sin marcador [[SECTION:]].
@@ -69,7 +71,8 @@ Usa terminología médica apropiada para Venezuela/Latinoamérica.`.trim();
   const prompt = buildPrompt(template, patient, doctor, dictation, physicalExamBlock, effective);
   const raw = await sendPrompt({ prompt, systemMessage: system, maxTokens: 4096 });
   const sanitized = sanitizeDocumentContent(raw);
-  return ensureTemplateSections(sanitized, effective);
+  const withExam = ensurePhysicalExamSystems(sanitized, resolveSystemsForReport(template));
+  return ensureTemplateSections(withExam, effective);
 }
 
 function buildPrompt(
@@ -136,8 +139,8 @@ function buildPrompt(
       "Guía de estilo:",
       MOTIVO_CONSULTA_STYLE,
       `- Enfermedad actual: narrativa al estilo del ejemplo. Inicie con paciente ${sexoTexto} de ${patient.edad} años; natural/procedente, diagnóstico de base o sin patológicos, inicio con fecha, hechos del dictado y cierre en el centro. DEBE ir bajo [[SECTION:Enfermedad actual]].`,
-      "- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto.",
-      "- Primera línea del examen físico: TA: --- mmHg | FR: --- rpm | FC: --- lpm | SaTO2: ---%  (usa --- solo si no hay dato; no pongas corchetes).",
+      "- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto. PROHIBIDO omitir sistemas activos no mencionados en el dictado.",
+      "- Signos vitales: solo si hay valores dictados; si no, omitir esa línea.",
       "- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.",
       "",
       enfermedadActualPromptBlock(ejemplo),
