@@ -1,5 +1,5 @@
 import { getNavRoutes, isMedicoLoggedIn, matchRoute, navigate, onRouteChange } from "./router";
-import { isUserLoggedIn, logoutAllSessions } from "../registro/session";
+import { getPatientSession, isUserLoggedIn, logoutAllSessions } from "../registro/session";
 
 function linksHtml(
   items: { path: string; title: string; navLabel?: string }[],
@@ -21,6 +21,11 @@ function linksHtml(
 /** Bottom bar tipo app: Home | Paciente | Informe */
 function bottomNavItems() {
   if (!isMedicoLoggedIn()) {
+    const patient = getPatientSession();
+    if (patient) {
+      // Paciente logueado: no “Inicio”, solo su portal / ficha
+      return [{ path: "/paciente", title: "Mi ficha", navLabel: "Mi ficha" }];
+    }
     return getNavRoutes().filter((r) => !r.medicoOnly);
   }
   const all = getNavRoutes();
@@ -28,6 +33,16 @@ function bottomNavItems() {
   return order
     .map((p) => all.find((r) => r.path === p))
     .filter((r): r is NonNullable<typeof r> => !!r);
+}
+
+function topNavItems() {
+  if (getPatientSession() && !isMedicoLoggedIn()) {
+    return [
+      { path: "/paciente", title: "Mi ficha", navLabel: "Mi ficha" },
+      { path: "/ayudemos", title: "Ayudemos", navLabel: "Ayudemos" },
+    ];
+  }
+  return getNavRoutes();
 }
 
 function bindLogout(root: HTMLElement): void {
@@ -41,7 +56,7 @@ export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => v
   root.innerHTML = `
     <div class="shell">
       <header class="topbar">
-        <a href="#/" class="brand-row">
+        <a href="#/" class="brand-row" id="brand-home">
           <img src="/img/logo.png" alt="Clínicos Doc" class="brand-logo" width="40" height="40" />
           <span class="brand">Clínicos Doc</span>
           <img src="/img/bandera_venezuela.png" alt="Bandera de Venezuela" class="brand-flag" width="48" height="32" />
@@ -57,19 +72,35 @@ export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => v
   const topnav = root.querySelector("#topnav") as HTMLElement;
   const bottomnav = root.querySelector("#bottomnav") as HTMLElement;
 
+  root.querySelector("#brand-home")?.addEventListener("click", (e) => {
+    if (getPatientSession() && !isMedicoLoggedIn()) {
+      e.preventDefault();
+      navigate("/paciente");
+    }
+  });
+
   function renderNav(): void {
-    topnav.innerHTML = linksHtml(getNavRoutes(), true);
+    topnav.innerHTML = linksHtml(topNavItems(), true);
     bottomnav.innerHTML = linksHtml(bottomNavItems(), false);
     bindLogout(topnav);
     bindLogout(bottomnav);
 
     const current = matchRoute(window.location.hash)?.path ?? "/";
+    const activePath =
+      getPatientSession() && !isMedicoLoggedIn() && (current === "/" || current === "/paciente")
+        ? "/paciente"
+        : current;
     root.querySelectorAll(".nav-link[data-path]").forEach((a) => {
-      a.classList.toggle("active", a.getAttribute("data-path") === current);
+      a.classList.toggle("active", a.getAttribute("data-path") === activePath);
     });
   }
 
   function render(): void {
+    const raw = (window.location.hash.replace(/^#/, "").split("?")[0] || "/") || "/";
+    if ((raw === "/" || raw === "") && getPatientSession() && !isMedicoLoggedIn()) {
+      navigate("/paciente");
+      return;
+    }
     renderNav();
     main.innerHTML = "";
     renderPage(main);

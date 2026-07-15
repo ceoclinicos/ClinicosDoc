@@ -1,5 +1,5 @@
 import { registerRoute, isMedicoLoggedIn, navigate } from "../app/router";
-import { getProfessionalSession } from "../registro/session";
+import { getPatientSession, getProfessionalSession } from "../registro/session";
 import { loadDocuments, loadDrafts } from "../services/clinical-store";
 import { DocumentTypeLabels } from "../shared/models";
 import { bindNavButtons, page } from "./helpers";
@@ -123,5 +123,13 @@ registerRoute({
   title: "Inicio",
   nav: true,
   navLabel: "Inicio",
-  render: () => (isMedicoLoggedIn() ? medicoHome() : publicHome()),
+  render: () => {
+    if (isMedicoLoggedIn()) return medicoHome();
+    // Paciente logueado: no mostrar inicio público → portal + ficha
+    if (getPatientSession() && !getProfessionalSession()) {
+      navigate("/paciente");
+      return page("Mi ficha", `<p class="muted">Abriendo su ficha de emergencia…</p>`);
+    }
+    return publicHome();
+  },
 });
