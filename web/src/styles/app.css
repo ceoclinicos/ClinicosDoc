@@ -1391,8 +1391,8 @@ fieldset.card-panel legend {
 .share-card-preview {
   display: block;
   width: auto;
-  max-width: 280px;
-  max-height: 420px;
+  max-width: 320px;
+  max-height: 520px;
   margin: 0.75rem auto;
   border-radius: 12px;
   border: 1px solid var(--border, #c5ced8);

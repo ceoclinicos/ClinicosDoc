@@ -162,15 +162,19 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Tarjeta vertical elegante; altura ~10% menor que el formato base. */
+/** Tarjeta vertical elegante; altura base −10%, luego +40% tamaño total. */
 export async function buildEmergencyCardBlob(ficha: FichaEmergencia): Promise<Blob> {
-  const W = 709;
-  const H = Math.round(1063 * 0.9); // 957 — solo −10% vertical
+  const BASE_W = 709;
+  const BASE_H = Math.round(1063 * 0.9); // 957
+  const S = 1.4; // +40% tamaño total de la imagen
+  const W = Math.round(BASE_W * S);
+  const H = Math.round(BASE_H * S);
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("No se pudo crear el canvas");
+  ctx.scale(S, S);
 
   const navy = "#0b1f33";
   const teal = "#0d9488";
@@ -179,23 +183,23 @@ export async function buildEmergencyCardBlob(ficha: FichaEmergencia): Promise<Bl
   const footerGray = "#64748b";
 
   // Mismo degradado que la referencia (navy → teal → navy)
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  const bg = ctx.createLinearGradient(0, 0, 0, BASE_H);
   bg.addColorStop(0, "#0b1f33");
   bg.addColorStop(0.45, "#0f766e");
   bg.addColorStop(1, "#0b1f33");
   ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(0, 0, BASE_W, BASE_H);
 
   const padX = 28;
   const padY = 24;
   const cardX = padX;
   const cardY = padY;
-  const cardW = W - padX * 2;
-  const cardH = H - padY * 2 - 36; // deja aire para "Clínicos Doc · Ayudemos"
+  const cardW = BASE_W - padX * 2;
+  const cardH = BASE_H - padY * 2 - 36; // deja aire para "Clínicos Doc · Ayudemos"
   const radius = 26;
   const contentL = cardX + 40;
   const contentW = cardW - 80;
-  const cx = W / 2;
+  const cx = BASE_W / 2;
 
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,0.22)";
@@ -263,8 +267,8 @@ export async function buildEmergencyCardBlob(ficha: FichaEmergencia): Promise<Bl
   const qrSize = 190;
   let qrY = Math.max(y + 10, scanY - qrSize - 28);
   if (qrY + qrSize + 24 > scanY) qrY = scanY - qrSize - 24;
-  const qrX = (W - qrSize) / 2;
-  const qrDataUrl = await buildEmergencyQrDataUrl(ficha.publicId, qrSize);
+  const qrX = (BASE_W - qrSize) / 2;
+  const qrDataUrl = await buildEmergencyQrDataUrl(ficha.publicId, Math.round(qrSize * S));
   const qrImg = await loadImage(qrDataUrl);
   ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
 
@@ -275,7 +279,7 @@ export async function buildEmergencyCardBlob(ficha: FichaEmergencia): Promise<Bl
 
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.font = "600 15px system-ui, Segoe UI, sans-serif";
-  ctx.fillText("Clínicos Doc · Ayudemos", cx, H - 14);
+  ctx.fillText("Clínicos Doc · Ayudemos", cx, BASE_H - 14);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("No se pudo generar la tarjeta"))), "image/png");
