@@ -23,9 +23,9 @@ import {
   buildEmergencyWallpaperBlob,
   buildEmergencyCardBlob,
   downloadBlob,
+  downloadEmergencyCardPdf,
   printEmergencyCardPdf,
   shareEmergencyCard,
-  shareTextWhatsApp,
 } from "../../services/emergency-qr";
 import { bindNavButtons, page } from "../helpers";
 
@@ -77,7 +77,7 @@ async function mountFichaEditor(root: HTMLElement, cedula: string, nombre: strin
   root.innerHTML = `
     <div class="card-panel emergency-intro">
       <h2>Ficha Médica de Emergencia</h2>
-      <p class="muted">Responda las preguntas médicas. Al guardar podrá compartir la tarjeta (tamaño cédula ~9×6 cm) como publicación en Instagram o WhatsApp.</p>
+      <p class="muted">Responda las preguntas médicas. Al guardar podrá compartir la tarjeta vertical (~6×9 cm) como publicación en Instagram o WhatsApp.</p>
     </div>
     <form class="form" id="ficha-form">
       <label>Nombre<input name="nombre" required value="${escapeAttr(ficha?.nombre || nombre)}" /></label>
@@ -106,7 +106,7 @@ async function mountFichaEditor(root: HTMLElement, cedula: string, nombre: strin
       <p class="status-badge status-ok">Ficha lista</p>
       <p class="muted" id="ficha-url"></p>
       <img id="ficha-qr" alt="Código QR de emergencia" class="emergency-qr-img" width="220" height="220" />
-      <button type="button" class="btn btn-primary" id="btn-dl-pdf">Imprimir / PDF tarjeta (9×6 cm)</button>
+      <button type="button" class="btn btn-primary" id="btn-dl-pdf">Imprimir / PDF tarjeta (6×9 cm)</button>
       <button type="button" class="btn btn-secondary" id="btn-dl-card">Descargar tarjeta PNG</button>
       <button type="button" class="btn btn-ghost" id="btn-dl-qr">Descargar QR</button>
       <button type="button" class="btn btn-ghost" id="btn-dl-wallpaper">Fondo de pantalla</button>
@@ -115,15 +115,14 @@ async function mountFichaEditor(root: HTMLElement, cedula: string, nombre: strin
     <dialog id="share-dialog">
       <div class="form share-ficha-dialog">
         <h2>¡Ficha guardada!</h2>
-        <p><strong>Compártela como publicación principal</strong> en Instagram o WhatsApp para que tu familia sepa escanear el QR en una emergencia.</p>
+        <p>Elige cómo continuar con tu tarjeta médica de emergencia.</p>
         <img id="share-card-preview" alt="Vista previa tarjeta" class="share-card-preview" hidden />
         <div class="stack">
-          <button type="button" class="btn btn-primary" id="btn-share-wa">Compartir en WhatsApp</button>
-          <button type="button" class="btn btn-secondary" id="btn-share-native">Compartir (Instagram / otras apps)</button>
-          <button type="button" class="btn btn-ghost" id="btn-share-pdf">Imprimir / PDF (9×6 cm)</button>
+          <button type="button" class="btn btn-primary" id="btn-share-native">Compartir</button>
+          <button type="button" class="btn btn-secondary" id="btn-share-pdf-dl">Descargar PDF</button>
+          <button type="button" class="btn btn-secondary" id="btn-share-print">Imprimir</button>
           <button type="button" class="btn btn-ghost" id="btn-share-close">Cerrar</button>
         </div>
-        <p class="muted" style="margin-top:0.75rem">En Instagram: descarga la tarjeta PNG y publícala como post principal o historia.</p>
       </div>
     </dialog>
   `;
@@ -208,38 +207,36 @@ async function mountFichaEditor(root: HTMLElement, cedula: string, nombre: strin
     }
   });
 
-  root.querySelector("#btn-share-wa")?.addEventListener("click", async () => {
-    if (!lastSaved) return;
-    const url = emergenciaPublicUrl(lastSaved.publicId);
-    const text =
-      `Mi tarjeta médica de emergencia (Clínicos Doc)\n` +
-      `${url}\n` +
-      `Compártela también como publicación principal en Instagram.`;
-    if (lastCardBlob) {
-      downloadBlob(lastCardBlob, `tarjeta-emergencia-${lastSaved.publicId}.png`);
-    }
-    shareTextWhatsApp(text);
-  });
-
   root.querySelector("#btn-share-native")?.addEventListener("click", async () => {
     if (!lastSaved) return;
     try {
       const blob = lastCardBlob ?? (await prepareCard(lastSaved));
       const result = await shareEmergencyCard(lastSaved, blob);
       if (result === "copied") {
-        alert("Texto copiado. En Instagram: descarga la tarjeta PNG y publícala como post principal.");
+        alert("Enlace copiado. Usa Compartir en el dispositivo o pega el enlace en la app que quieras.");
+      } else if (result === "manual") {
+        alert("No se pudo abrir el menú de compartir. Descarga el PDF o copia el enlace de la ficha.");
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : "No se pudo compartir");
     }
   });
 
-  root.querySelector("#btn-share-pdf")?.addEventListener("click", async () => {
+  root.querySelector("#btn-share-pdf-dl")?.addEventListener("click", async () => {
+    if (!lastSaved) return;
+    try {
+      await downloadEmergencyCardPdf(lastSaved);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "No se pudo descargar el PDF");
+    }
+  });
+
+  root.querySelector("#btn-share-print")?.addEventListener("click", async () => {
     if (!lastSaved) return;
     try {
       await printEmergencyCardPdf(lastSaved);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "No se pudo abrir el PDF");
+      alert(err instanceof Error ? err.message : "No se pudo imprimir");
     }
   });
 
