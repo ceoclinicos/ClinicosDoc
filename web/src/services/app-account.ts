@@ -7,11 +7,12 @@ import {
   limit,
   query,
   setDoc,
+  updateDoc,
   where,
   type DocumentData,
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
-import { normalizeCedula } from "./cedula";
+import { cedulaLookupKeys, normalizeCedula } from "./cedula";
 import { getDb } from "../registro/firebase";
 import { FirestorePaths } from "../shared/models";
 import { hashPin } from "../registro/session";
@@ -50,15 +51,9 @@ async function queryUserByField(field: string, value: string): Promise<QueryDocu
   return snap.docs[0] ?? null;
 }
 
-export async function findCloudUserByCedula(cedulaInput: string): Promise<CloudUserDoc | null> {
-  const norm = normalizeCedula(cedulaInput);
-  const raw = cedulaInput.trim();
-  const hit =
-    (await queryUserByField("cedulaNormalizada", norm)) ||
-    (await queryUserByField("cedula", norm)) ||
-    (raw !== norm ? await queryUserByField("cedula", raw) : null);
-  if (!hit) return null;
+function mapCloudUser(hit: QueryDocumentSnapshot, fallbackCedula: string): CloudUserDoc {
   const d = hit.data();
+  const norm = normalizeCedula(String(d.cedulaNormalizada || d.cedula || fallbackCedula));
   return {
     id: hit.id,
     nombre: String(d.nombre ?? ""),
@@ -73,8 +68,21 @@ export async function findCloudUserByCedula(cedulaInput: string): Promise<CloudU
   };
 }
 
-function normalizeMpps(mpps: string): string {
-  return mpps.replace(/\D/g, "");
+export async function findCloudUserByCedula(cedulaInput: string): Promise<CloudUserDoc | null> {
+  const keys = cedulaLookupKeys(cedulaInput);
+  for (const key of keys) {
+    const hit =
+      (await queryUserByField("cedulaNormalizada", key)) ||
+      (await queryUserByField("cedula", key));
+    if (hit) return mapCloudUser(hit, key);
+  }
+  // Cuentas antiguas de la app pueden tener solo dígitos en `cedula`
+  const digits = cedulaInput.replace(/\D/g, "");
+  if (digits && !keys.includes(digits)) {
+    const hit = await queryUserByField("cedula", digits);
+    if (hit) return mapCloudUser(hit, digits);
+  }
+  return null;
 }
 
 export async function createCloudUser(input: {
@@ -155,24 +163,29 @@ export async function ensureProfesionalMirror(
 export async function resolveCloudAccount(input: {
   cedula: string;
   pin: string;
-  mpps: string;
+  mpps?: string;
   /** Datos de `profesionales` si el login web ya los validó */
   profesional?: ProfesionalRegistro | null;
 }): Promise<{ cloud: CloudUserDoc; session: ProfesionalSession }> {
   const cedula = normalizeCedula(input.cedula);
   const pinHashApp = await hashAppPin(input.pin);
-  const inputMpps = normalizeMpps(input.mpps);
 
   let cloud = await findCloudUserByCedula(cedula);
+  /** Si `profesionales` ya validó cédula+PIN, sincronizamos el hash de la app. */
+  const profesionalOk = Boolean(input.profesional);
 
   if (cloud) {
-    if (!cloud.passwordHash || cloud.passwordHash !== pinHashApp) {
-      throw new Error("PIN incorrecto (no coincide con la cuenta de la app)");
-    }
-    const storedMpps = normalizeMpps(cloud.mpps);
-    if (storedMpps) {
-      if (!inputMpps) throw new Error("Código MPPS requerido");
-      if (storedMpps !== inputMpps) throw new Error("Código MPPS incorrecto");
+    const pinOk = Boolean(cloud.passwordHash) && cloud.passwordHash === pinHashApp;
+    if (!pinOk) {
+      if (!profesionalOk) {
+        throw new Error("PIN incorrecto (no coincide con la cuenta de la app)");
+      }
+      // Web/profesional ya validó el PIN: alinear hash de clinicosdoc_user
+      await updateDoc(doc(getDb(), FirestorePaths.USERS, cloud.id), {
+        passwordHash: pinHashApp,
+        cedulaNormalizada: normalizeCedula(cloud.cedula || cedula),
+      });
+      cloud = { ...cloud, passwordHash: pinHashApp };
     }
   } else if (input.profesional) {
     const existingCloud = await findCloudUserByCedula(cedula);
@@ -203,7 +216,7 @@ export async function resolveCloudAccount(input: {
     nombre: cloud.nombre || input.profesional?.nombre || "Médico",
     especialidad: cloud.especialidad || input.profesional?.especialidad || "Médico general",
     esMedicoGeneral: input.profesional?.esMedicoGeneral ?? /general/i.test(cloud.especialidad || ""),
-    mpps: cloud.mpps || input.mpps,
+    mpps: cloud.mpps || input.profesional?.mpps || "",
     cloudUserId: cloud.id,
   };
 

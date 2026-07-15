@@ -160,7 +160,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 when {
-                    authMode == AuthMode.LOGIN -> "Usa tu cédula, PIN y MPPS"
+                    authMode == AuthMode.LOGIN -> "Usa tu cédula y PIN"
                     step == 0 -> "Igual que en la web: nombre, cédula, correo, MPPS y PIN"
                     else -> "Sexo y WhatsApp de contacto"
                 },
@@ -183,11 +183,8 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                     onCedulaChange = { cedula = it },
                     password = password,
                     onPasswordChange = { password = it.filter { c -> c.isDigit() }.take(4) },
-                    mpps = mpps,
-                    onMppsChange = { mpps = it.filter { c -> c.isDigit() } },
                     cedulaError = cedulaError,
                     passwordError = passwordError,
-                    mppsError = mppsError,
                     loading = loading,
                     onLogin = {
                         cedulaError = when {
@@ -200,7 +197,6 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                             password.length != 4 -> "El PIN debe tener 4 dígitos"
                             else -> null
                         }
-                        mppsError = null
                         if (cedulaError != null || passwordError != null) return@LoginForm
 
                         if (!firebaseReady) {
@@ -210,7 +206,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
 
                         loading = true
                         scope.launch {
-                            val result = DoctorAuthService.signIn(context, cedula, password, mpps)
+                            val result = DoctorAuthService.signIn(context, cedula, password)
                             loading = false
                             result.fold(
                                 onSuccess = { onRegistered() },
@@ -409,11 +405,8 @@ private fun LoginForm(
     onCedulaChange: (String) -> Unit,
     password: String,
     onPasswordChange: (String) -> Unit,
-    mpps: String,
-    onMppsChange: (String) -> Unit,
     cedulaError: String?,
     passwordError: String?,
-    mppsError: String?,
     loading: Boolean,
     onLogin: () -> Unit,
     onForgotPassword: () -> Unit,
@@ -438,17 +431,6 @@ private fun LoginForm(
         visualTransformation = PasswordVisualTransformation(),
         isError = passwordError != null,
         errorMessage = passwordError,
-    )
-    Spacer(modifier = Modifier.height(20.dp))
-    PremiumTextField(
-        "Código MPPS",
-        mpps,
-        onMppsChange,
-        hint = "Requerido si eres venezolano / registrado con MPPS",
-        prefixIcon = Icons.Outlined.Verified,
-        keyboardOptions = keyboardDigits(),
-        isError = mppsError != null,
-        errorMessage = mppsError,
     )
     Spacer(modifier = Modifier.height(8.dp))
     TextButton(onClick = onForgotPassword, enabled = !loading) {

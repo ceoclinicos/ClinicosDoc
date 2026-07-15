@@ -25,8 +25,9 @@ function assertPin4(pin: string): void {
   if (!/^\d{4}$/.test(pin)) throw new Error("El PIN debe tener exactamente 4 dígitos");
 }
 
+/** Solo dígitos — igual que la app y app-account (acepta "MPPS-164775" o "164775"). */
 function normalizeMpps(mpps: string): string {
-  return mpps.trim().toUpperCase();
+  return mpps.replace(/\D/g, "");
 }
 
 function patientRef(cedula: string) {
@@ -119,7 +120,7 @@ export async function registerProfesional(input: {
     nombre: input.nombre.trim(),
     especialidad: input.esMedicoGeneral ? "Médico general" : input.especialidad.trim(),
     esMedicoGeneral: input.esMedicoGeneral,
-    mpps: nacionalidad === "Venezuela" ? input.mpps.trim() : "",
+    mpps: nacionalidad === "Venezuela" ? normalizeMpps(input.mpps) : "",
     correo,
     pinHash: await hashPin(cedula, input.pin),
     activo: true,
@@ -162,7 +163,7 @@ export async function loginPaciente(cedula: string, pin: string): Promise<Pacien
 export async function loginProfesional(
   cedula: string,
   pin: string,
-  mpps: string,
+  _mpps = "",
 ): Promise<ProfesionalSession> {
   assertPin4(pin);
   const cedNorm = normalizeCedula(cedula);
@@ -170,13 +171,6 @@ export async function loginProfesional(
 
   if (p) {
     if (!p.activo) throw new Error("Cuenta pendiente de activación");
-    const storedMpps = normalizeMpps(p.mpps || "");
-    const inputMpps = normalizeMpps(mpps || "");
-    // Solo exigir MPPS si la cuenta lo tiene (venezolanos)
-    if (storedMpps) {
-      if (!inputMpps) throw new Error("Código MPPS requerido");
-      if (storedMpps !== inputMpps) throw new Error("Código MPPS incorrecto");
-    }
     const pinHash = await hashPin(p.cedula, pin);
     if (p.pinHash !== pinHash) throw new Error("PIN incorrecto");
   }
@@ -185,7 +179,6 @@ export async function loginProfesional(
     const { session } = await resolveCloudAccount({
       cedula: cedNorm,
       pin,
-      mpps,
       profesional: p,
     });
     return {

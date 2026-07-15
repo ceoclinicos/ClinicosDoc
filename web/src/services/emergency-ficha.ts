@@ -1,19 +1,15 @@
-/** Ficha médica de emergencia — pública vía QR. */
+/** Ficha médica de emergencia — pública vía QR.
+ * Usa `pacientes/{cedula}` (ya permitido en reglas) + copia pública en `users/emg_{publicId}`.
+ */
 import {
-  collection,
   doc,
   getDoc,
-  getDocs,
-  limit,
-  query,
   setDoc,
-  where,
   type DocumentData,
 } from "firebase/firestore";
 import { getDb } from "../registro/firebase";
-import { normalizeCedula } from "./cedula";
-
-export const FICHAS_PATH = "fichas_emergencia";
+import { cedulaLookupKeys, normalizeCedula } from "./cedula";
+import { RegistroPaths } from "../registro/models";
 
 export type EmergencyContact = {
   nombre: string;
@@ -36,10 +32,6 @@ export type FichaEmergencia = {
 
 export const TIPOS_SANGRE = ["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-", "Desconocido"] as const;
 
-function col() {
-  return collection(getDb(), FICHAS_PATH);
-}
-
 function randomPublicId(): string {
   const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
   let id = "";
@@ -48,19 +40,43 @@ function randomPublicId(): string {
   return id;
 }
 
+function publicDocId(publicId: string): string {
+  return `emg_${publicId}`;
+}
+
+function asFicha(raw: unknown): FichaEmergencia | null {
+  if (!raw || typeof raw !== "object") return null;
+  const d = raw as Partial<FichaEmergencia>;
+  if (!d.publicId || d.activo === false) return null;
+  return {
+    publicId: String(d.publicId),
+    patientCedula: String(d.patientCedula ?? ""),
+    nombre: String(d.nombre ?? ""),
+    tipoSangre: String(d.tipoSangre ?? "Desconocido"),
+    alergias: String(d.alergias ?? ""),
+    condiciones: String(d.condiciones ?? ""),
+    medicamentos: String(d.medicamentos ?? ""),
+    contactos: Array.isArray(d.contactos) ? (d.contactos as EmergencyContact[]) : [],
+    updatedAt: String(d.updatedAt ?? ""),
+    activo: true,
+  };
+}
+
 export async function getFichaByCedula(cedula: string): Promise<FichaEmergencia | null> {
-  const key = normalizeCedula(cedula);
-  const snap = await getDocs(query(col(), where("patientCedula", "==", key), limit(1)));
-  if (snap.empty) return null;
-  return snap.docs[0].data() as FichaEmergencia;
+  const db = getDb();
+  for (const key of cedulaLookupKeys(cedula)) {
+    const snap = await getDoc(doc(db, RegistroPaths.PACIENTES, key));
+    if (!snap.exists()) continue;
+    const ficha = asFicha(snap.data()?.fichaEmergencia);
+    if (ficha) return ficha;
+  }
+  return null;
 }
 
 export async function getFichaByPublicId(publicId: string): Promise<FichaEmergencia | null> {
-  const snap = await getDoc(doc(getDb(), FICHAS_PATH, publicId));
+  const snap = await getDoc(doc(getDb(), "users", publicDocId(publicId)));
   if (!snap.exists()) return null;
-  const data = snap.data() as FichaEmergencia;
-  if (data.activo === false) return null;
-  return data;
+  return asFicha(snap.data()?.fichaEmergencia ?? snap.data());
 }
 
 export async function upsertFichaEmergencia(input: {
@@ -99,7 +115,36 @@ export async function upsertFichaEmergencia(input: {
     activo: true,
   };
 
-  await setDoc(doc(getDb(), FICHAS_PATH, publicId), data as DocumentData);
+  const db = getDb();
+  // Guardar en ficha del paciente (reglas abiertas en producción)
+  const pacienteRef = doc(db, RegistroPaths.PACIENTES, cedula);
+  const pacienteSnap = await getDoc(pacienteRef);
+  if (pacienteSnap.exists()) {
+    await setDoc(pacienteRef, { fichaEmergencia: data, updatedAt: data.updatedAt } as DocumentData, {
+      merge: true,
+    });
+  } else {
+    // Crear stub mínimo si aún no hay doc de paciente (solo login local raro)
+    await setDoc(
+      pacienteRef,
+      {
+        cedula,
+        nombre: data.nombre,
+        fichaEmergencia: data,
+        createdAt: data.updatedAt,
+        updatedAt: data.updatedAt,
+      } as DocumentData,
+      { merge: true },
+    );
+  }
+
+  // Copia pública para QR (colección `users` ya abierta en reglas)
+  await setDoc(doc(db, "users", publicDocId(publicId)), {
+    kind: "ficha_emergencia",
+    fichaEmergencia: data,
+    updatedAt: data.updatedAt,
+  } as DocumentData);
+
   return data;
 }
 

@@ -46,13 +46,6 @@ object DoctorAuthService {
             if (hash.isEmpty() || hash != hashPassword(password)) {
                 error("Cédula o PIN incorrectos")
             }
-            val storedMpps = doc.getString("mpps").orEmpty().filter { it.isDigit() }
-            val inputMpps = mpps.filter { it.isDigit() }
-            // Solo exigir MPPS si la cuenta lo tiene (venezolanos)
-            if (storedMpps.isNotEmpty()) {
-                if (inputMpps.isEmpty()) error("Código MPPS requerido")
-                if (storedMpps != inputMpps) error("Código MPPS incorrecto")
-            }
             val profile = doc.toDoctorProfile()
             DoctorStorage.saveSession(context, profile, doc.id)
             CloudSyncService.syncOnLogin(context, doc.id)
@@ -163,9 +156,16 @@ object DoctorAuthService {
         val db = FirebaseFirestore.getInstance()
         val norm = CedulaNormalizer.normalize(cedulaInput)
         if (norm.isEmpty()) return null
+        val digits = cedulaInput.filter { it.isDigit() }
 
         queryFirst(db, "cedulaNormalizada", norm)?.let { return it }
-        return queryFirst(db, "cedula", cedulaInput.trim())
+        queryFirst(db, "cedula", norm)?.let { return it }
+        queryFirst(db, "cedula", cedulaInput.trim())?.let { return it }
+        if (digits.isNotEmpty() && digits != cedulaInput.trim() && digits != norm) {
+            queryFirst(db, "cedula", digits)?.let { return it }
+            queryFirst(db, "cedulaNormalizada", "V$digits")?.let { return it }
+        }
+        return null
     }
 
     private suspend fun queryFirst(
