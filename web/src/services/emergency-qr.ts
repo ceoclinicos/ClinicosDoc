@@ -96,7 +96,7 @@ export async function buildEmergencyWallpaperBlob(ficha: FichaEmergencia): Promi
   ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
 
   ctx.fillStyle = "#64748b";
-  ctx.font = "500 24px system-ui, Segoe UI, sans-serif";
+  ctx.font = "500 29px system-ui, Segoe UI, sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("Escanea en emergencia · clinicosdoc.com", W / 2, qrY + qrSize + 48);
 
@@ -231,7 +231,7 @@ export async function buildEmergencyCardBlob(ficha: FichaEmergencia): Promise<Bl
   ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
 
   ctx.fillStyle = "#64748b";
-  ctx.font = "500 13px system-ui, Segoe UI, sans-serif";
+  ctx.font = "500 16px system-ui, Segoe UI, sans-serif";
   ctx.textAlign = "center";
   ctx.fillText("Escanea en emergencia", qrX + qrSize / 2, qrY + qrSize + 28);
   ctx.fillText("Clínicos Doc", qrX + qrSize / 2, qrY + qrSize + 48);
