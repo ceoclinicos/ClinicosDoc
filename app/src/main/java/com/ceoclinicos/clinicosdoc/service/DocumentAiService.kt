@@ -147,6 +147,7 @@ object DocumentAiService {
                     )
                     appendLine("- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto.")
                     appendLine("- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.")
+                    appendLine("- Plan (si está en la plantilla): lista numerada de conducta/tratamiento (observación, fármacos, controles). Solo según dictado.")
                     appendLine()
                     appendLine(SectionDefaults.promptBlock(effectiveSections))
                     if (physicalExamBlock.isNotBlank()) {

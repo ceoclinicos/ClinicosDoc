@@ -25,7 +25,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -55,6 +54,7 @@ import com.ceoclinicos.clinicosdoc.model.PhysicalExamSystem
 import com.ceoclinicos.clinicosdoc.model.SectionCatalog
 import com.ceoclinicos.clinicosdoc.ui.components.ActiveSectionsEditor
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
+import com.ceoclinicos.clinicosdoc.ui.components.PhysicalExamSystemsEditor
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumTextField
 import com.ceoclinicos.clinicosdoc.ui.theme.Navy
@@ -135,39 +135,13 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
             ) {
                 Spacer(modifier = Modifier.height(24.dp))
                 Text("Sistemas de examen físico (IA)", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Activa los bloques que quieres en el examen físico generado.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                Spacer(modifier = Modifier.height(8.dp))
+                PhysicalExamSystemsEditor(
+                    systems = examCatalog,
+                    enabledIds = enabledExamIds,
+                    onEnabledIdsChange = { enabledExamIds = it },
+                    onCatalogChanged = { examCatalog = it },
                 )
-                PhysicalExamCatalogStorage.reportDisplayOrder(examCatalog).forEach { system ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(system.name, style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                system.defaultText.take(80) + if (system.defaultText.length > 80) "…" else "",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = TextSecondary,
-                            )
-                        }
-                        Switch(
-                            checked = system.id in enabledExamIds,
-                            onCheckedChange = { checked ->
-                                enabledExamIds = PhysicalExamDefaults.orderEnabledIds(
-                                    if (checked) {
-                                        enabledExamIds + system.id
-                                    } else {
-                                        enabledExamIds.filterNot { it == system.id }
-                                    },
-                                )
-                            },
-                        )
-                    }
-                }
             }
             Spacer(modifier = Modifier.height(28.dp))
             PremiumPrimaryButton(
@@ -181,7 +155,10 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
                             sections = sections,
                             sectionLayoutOrder = layoutOrder,
                             isDefault = true,
-                            enabledPhysicalExamSystemIds = PhysicalExamDefaults.orderEnabledIds(enabledExamIds),
+                            enabledPhysicalExamSystemIds = PhysicalExamCatalogStorage.orderEnabledIdsByCatalog(
+                                enabledExamIds,
+                                examCatalog,
+                            ),
                         ),
                     )
                     Toast.makeText(context, "Plantilla guardada", Toast.LENGTH_SHORT).show()

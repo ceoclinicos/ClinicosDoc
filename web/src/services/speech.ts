@@ -1,4 +1,4 @@
-/** Dictado web — evita duplicar frases (bug típico de Web Speech API). */
+/** Dictado web — paridad anti-duplicado con SpeechService de la app. */
 
 type Rec = {
   lang: string;
@@ -7,6 +7,7 @@ type Rec = {
   maxAlternatives?: number;
   start: () => void;
   stop: () => void;
+  abort?: () => void;
   onresult: ((ev: SpeechRecognitionEvent) => void) | null;
   onerror: ((ev: SpeechRecognitionErrorEvent) => void) | null;
   onend: ((ev: Event) => void) | null;
@@ -29,10 +30,37 @@ function getRecognitionCtor(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+/** Une base + nuevo texto evitando repeticiones (misma idea que la app). */
+function joinText(base: string, addition: string): string {
+  const left = base.trimEnd();
+  const right = addition.trim();
+  if (!left) return right;
+  if (!right) return left;
+  const leftL = left.toLowerCase();
+  const rightL = right.toLowerCase();
+  if (rightL.startsWith(leftL)) return right;
+  if (leftL.endsWith(rightL)) return left;
+  const lastWords = leftL.split(/\s+/).slice(-8).join(" ");
+  if (lastWords && rightL.startsWith(lastWords)) {
+    return left + right.slice(lastWords.length);
+  }
+  // Evitar "palabra palabra" al final
+  const leftWords = leftL.split(/\s+/);
+  const rightWords = rightL.split(/\s+/);
+  for (let n = Math.min(leftWords.length, rightWords.length, 6); n >= 1; n--) {
+    const suffix = leftWords.slice(-n).join(" ");
+    const prefix = rightWords.slice(0, n).join(" ");
+    if (suffix === prefix) {
+      const trimmedRight = right.split(/\s+/).slice(n).join(" ");
+      return trimmedRight ? `${left} ${trimmedRight}` : left;
+    }
+  }
+  return `${left} ${right}`;
+}
+
 /**
- * Dictado continuo.
- * Evita duplicados con cursor de resultados finales
- * (Chrome a veces reenvía finales previos).
+ * Dictado continuo sin repetir frases.
+ * Usa resultIndex + join anti-duplicado; al reiniciar tras silencio no re-anexa texto viejo.
  */
 export function startDictation(
   existingText: string,
@@ -52,47 +80,55 @@ export function startDictation(
   rec.maxAlternatives = 1;
 
   let committed = existingText.trim();
-  if (committed) committed += " ";
-  let finalizedCount = 0;
+  let sessionPartial = "";
   let stopped = false;
+  let restarting = false;
 
-  const emit = (interim: string) => {
-    onUpdate((committed + interim).replace(/\s+/g, " ").trim());
+  const emit = () => {
+    onUpdate(joinText(committed, sessionPartial));
   };
+
+  if (committed) onUpdate(committed);
 
   rec.onresult = (ev: SpeechRecognitionEvent) => {
     let interim = "";
-    for (let i = 0; i < ev.results.length; i++) {
+    // Solo resultados nuevos desde resultIndex (evita re-procesar finales viejos)
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
       const result = ev.results[i];
       const piece = (result[0]?.transcript ?? "").trim();
       if (!piece) continue;
       if (result.isFinal) {
-        if (i < finalizedCount) continue;
-        const already =
-          committed.toLowerCase().endsWith(piece.toLowerCase() + " ") ||
-          committed.toLowerCase().endsWith(piece.toLowerCase());
-        if (!already) committed += piece + " ";
-        finalizedCount = i + 1;
-      } else if (i >= finalizedCount) {
-        interim += (interim ? " " : "") + piece;
+        committed = joinText(committed, piece);
+        sessionPartial = "";
+      } else {
+        interim = interim ? `${interim} ${piece}` : piece;
       }
     }
-    emit(interim);
+    sessionPartial = interim;
+    emit();
   };
 
   rec.onerror = (ev: SpeechRecognitionErrorEvent) => {
     if (ev.error === "aborted" || ev.error === "no-speech") return;
-    onError?.(`Error de dictado: ${ev.error}`);
+    if (ev.error === "network" || ev.error === "audio-capture") {
+      onError?.(`Error de dictado: ${ev.error}`);
+    }
   };
 
   rec.onend = () => {
     if (stopped) return;
-    try {
-      finalizedCount = 0;
-      rec.start();
-    } catch {
-      /* ya arrancado */
-    }
+    // Reinicio limpio: no resetear committed; sí limpiar parcial
+    sessionPartial = "";
+    restarting = true;
+    window.setTimeout(() => {
+      if (stopped) return;
+      try {
+        rec.start();
+      } catch {
+        /* ya arrancado */
+      }
+      restarting = false;
+    }, 200);
   };
 
   try {
@@ -104,10 +140,13 @@ export function startDictation(
   return () => {
     stopped = true;
     try {
-      rec.onend = () => {};
-      rec.stop();
+      rec.onend = null;
+      rec.onresult = null;
+      if (typeof rec.abort === "function") rec.abort();
+      else rec.stop();
     } catch {
       /* noop */
     }
+    void restarting;
   };
 }

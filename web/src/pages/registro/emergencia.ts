@@ -23,7 +23,7 @@ function renderFichaPublica(f: FichaEmergencia): string {
     <div class="card-panel emergency-grid">
       <div><span class="muted">Tipo de sangre</span><strong class="blood-type">${escapeHtml(f.tipoSangre)}</strong></div>
       <div><span class="muted">Alergias</span><p>${escapeHtml(f.alergias)}</p></div>
-      <div><span class="muted">Condiciones</span><p>${escapeHtml(f.condiciones)}</p></div>
+      <div><span class="muted">Condiciones / Comorbilidades</span><p>${escapeHtml(f.condiciones)}</p></div>
       <div><span class="muted">Medicamentos</span><p>${escapeHtml(f.medicamentos)}</p></div>
     </div>
     <h3 class="home-section-title">Contactos de emergencia</h3>

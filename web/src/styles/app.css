@@ -664,6 +664,36 @@ dialog {
   font-size: 1.05rem;
 }
 
+.exam-sys-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.exam-sys-check {
+  flex: 1 1 200px;
+  align-items: flex-start;
+}
+
+.exam-sys-check input {
+  transform: scale(0.85);
+  margin-top: 4px;
+}
+
+.exam-sys-preview {
+  display: block;
+  font-size: 0.85rem;
+  margin-top: 2px;
+  max-width: 36rem;
+}
+
+.exam-sys-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
 .header-logo-preview {
   margin: 0.5rem 0;
 }
@@ -675,6 +705,7 @@ dialog {
   border-radius: 8px;
   border: 1px solid var(--border, #c5ced8);
 }
+
 
 .doc-live-preview .print-header-sub,
 .doc-live-preview .print-header-desc {
@@ -1336,6 +1367,34 @@ fieldset.card-panel legend {
   border-radius: 8px;
   border: 1px solid var(--border);
   background: #fff;
+}
+
+.disclaimer-check {
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin: 1rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border, #c5ced8);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.disclaimer-check span {
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.share-ficha-dialog {
+  min-width: min(92vw, 420px);
+}
+
+.share-card-preview {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  margin: 0.75rem auto;
+  border-radius: 8px;
+  border: 1px solid var(--border, #c5ced8);
 }
 
 .contact-row {

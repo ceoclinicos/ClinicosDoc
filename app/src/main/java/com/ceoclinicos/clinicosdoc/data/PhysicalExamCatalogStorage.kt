@@ -90,21 +90,43 @@ object PhysicalExamCatalogStorage {
 
     fun resolvedForTemplate(context: Context, enabledIds: List<String>): List<PhysicalExamSystem> {
         val catalog = loadAll(context)
-        val ids = PhysicalExamDefaults.orderEnabledIds(
+        val ids = orderEnabledIdsByCatalog(
             enabledIds.ifEmpty { PhysicalExamDefaults.defaultEnabledIds },
+            catalog,
         )
-        return reportDisplayOrder(catalog.filter { it.id in ids })
+        return reportDisplayOrder(catalog.filter { it.id in ids.toSet() })
     }
 
-    /** Orden de redacción clínico fijo (no depende del orden de activación). */
+    /** Orden: sortOrder del usuario (subir/bajar), luego prioridad clínica. */
     fun reportDisplayOrder(systems: List<PhysicalExamSystem>): List<PhysicalExamSystem> {
         return systems.sortedWith(
             compareBy<PhysicalExamSystem>(
-                { PhysicalExamDefaults.displayPriority[it.id] ?: (it.sortOrder + 100) },
                 { it.sortOrder },
+                { PhysicalExamDefaults.displayPriority[it.id] ?: 100 },
                 { it.name },
             ),
         )
+    }
+
+    fun orderEnabledIdsByCatalog(ids: List<String>, catalog: List<PhysicalExamSystem>): List<String> {
+        val set = ids.toSet()
+        val known = reportDisplayOrder(catalog).map { it.id }.filter { it in set }
+        val unknown = ids.filter { id -> catalog.none { it.id == id } }
+        return known + unknown
+    }
+
+    fun moveSystem(context: Context, systemId: String, delta: Int): List<PhysicalExamSystem>? {
+        val ordered = reportDisplayOrder(loadAll(context)).toMutableList()
+        val idx = ordered.indexOfFirst { it.id == systemId }
+        val swap = idx + delta
+        if (idx < 0 || swap !in ordered.indices) return null
+        val tmp = ordered[idx]
+        ordered[idx] = ordered[swap]
+        ordered[swap] = tmp
+        val renumbered = ordered.mapIndexed { i, s -> s.copy(sortOrder = i) }
+        saveAllLocal(context, renumbered)
+        SyncCoordinator.afterPhysicalExamCatalogBulkSaved(context)
+        return renumbered
     }
 
     fun resolvedForReport(
@@ -112,18 +134,20 @@ object PhysicalExamCatalogStorage {
         enabledIds: List<String>,
         textOverrides: Map<String, String> = emptyMap(),
     ): List<PhysicalExamSystem> {
-        val catalog = loadAll(context).associateBy { it.id }
-        val ids = PhysicalExamDefaults.orderEnabledIds(
+        val catalog = loadAll(context)
+        val ids = orderEnabledIdsByCatalog(
             enabledIds.ifEmpty { PhysicalExamDefaults.defaultEnabledIds },
+            catalog,
         )
+        val byId = catalog.associateBy { it.id }
         return reportDisplayOrder(
-            ids.mapNotNull { catalog[it] }.map { system ->
+            ids.mapNotNull { byId[it] }.map { system ->
                 textOverrides[system.id]?.let { system.copy(defaultText = it) } ?: system
             },
         )
     }
 
-    /** Misma secuencia clínica del informe. */
+    /** Misma secuencia del catálogo (sortOrder del usuario). */
     @Suppress("UNUSED_PARAMETER")
     fun displayOrderForConfig(
         catalog: List<PhysicalExamSystem>,

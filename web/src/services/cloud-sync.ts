@@ -19,7 +19,7 @@ import {
   type Patient,
   type PhysicalExamSystem,
 } from "../shared/models";
-import { PhysicalExamDefaults } from "../shared/physical-exam-defaults";
+import { PhysicalExamDefaults, orderEnabledIds } from "../shared/physical-exam-defaults";
 import { loadJson, saveJson } from "./local-store";
 
 function userIdOrThrow(): string {
@@ -46,9 +46,11 @@ function parseTemplate(data: DocumentData, id: string): DocumentTemplate | null 
     documentType: asDocType(String(data.documentType)),
     sections: Array.isArray(data.sections) ? data.sections.map(String) : [],
     isDefault: Boolean(data.isDefault),
-    enabledPhysicalExamSystemIds: Array.isArray(data.enabledPhysicalExamSystemIds)
-      ? data.enabledPhysicalExamSystemIds.map(String)
-      : [],
+    enabledPhysicalExamSystemIds: orderEnabledIds(
+      Array.isArray(data.enabledPhysicalExamSystemIds)
+        ? data.enabledPhysicalExamSystemIds.map(String)
+        : [],
+    ),
     enfermedadActualEjemplo: data.enfermedadActualEjemplo
       ? String(data.enfermedadActualEjemplo)
       : undefined,
@@ -194,7 +196,7 @@ export async function pushTemplate(t: DocumentTemplate, userId = userIdOrThrow()
     documentType: t.documentType,
     sections: t.sections,
     isDefault: t.isDefault,
-    enabledPhysicalExamSystemIds: t.enabledPhysicalExamSystemIds ?? [],
+    enabledPhysicalExamSystemIds: orderEnabledIds(t.enabledPhysicalExamSystemIds ?? []),
     physicalExamTextOverrides: {},
     enfermedadActualEjemplo: t.enfermedadActualEjemplo ?? "",
     sectionLayoutOrder: t.sections,

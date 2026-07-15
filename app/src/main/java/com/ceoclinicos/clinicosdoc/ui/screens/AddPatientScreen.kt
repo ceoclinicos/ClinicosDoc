@@ -112,10 +112,16 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
             } catch (_: Exception) {
                 emptyList()
             }
+            val portal = try {
+                CloudSyncService.findPortalPatientByCedula(cedula)
+            } catch (_: Exception) {
+                null
+            }
             val merged = buildList {
                 local?.let { add(it) }
                 addAll(remote)
-            }.distinctBy { CedulaNormalizer.normalize(it.cedula) + it.nombre.lowercase() }
+                portal?.let { add(it) }
+            }.distinctBy { CedulaNormalizer.digitsOnly(it.cedula) + it.nombre.lowercase() }
 
             searching = false
             if (merged.isNotEmpty()) {

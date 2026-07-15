@@ -1,6 +1,7 @@
 package com.ceoclinicos.clinicosdoc.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,12 +13,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.PersonAddAlt1
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -29,6 +33,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,6 +47,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ceoclinicos.clinicosdoc.data.CloudSyncService
 import com.ceoclinicos.clinicosdoc.data.PatientStorage
+import com.ceoclinicos.clinicosdoc.model.EmergencyFicha
 import com.ceoclinicos.clinicosdoc.model.Patient
 import com.ceoclinicos.clinicosdoc.ui.theme.Navy
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
@@ -62,16 +68,23 @@ fun PacienteScreen(
     var loading by remember { mutableStateOf(true) }
     var cedulaQuery by remember { mutableStateOf("") }
     var searchMessage by remember { mutableStateOf<String?>(null) }
+    var searching by remember { mutableStateOf(false) }
+    var fichaPatient by remember { mutableStateOf<Patient?>(null) }
+    var ficha by remember { mutableStateOf<EmergencyFicha?>(null) }
+    var fichaLoading by remember { mutableStateOf(false) }
+    var fichaError by remember { mutableStateOf<String?>(null) }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(ZoneId.systemDefault()) }
 
     val displayedPatients = remember(patients, cedulaQuery) {
-        val query = CedulaNormalizer.normalize(cedulaQuery)
+        val queryDigits = CedulaNormalizer.digitsOnly(cedulaQuery)
         when {
-            query.isBlank() -> patients
+            queryDigits.isBlank() -> patients
             else -> {
-                val exact = patients.firstOrNull { CedulaNormalizer.normalize(it.cedula) == query }
+                val exact = patients.firstOrNull {
+                    CedulaNormalizer.digitsOnly(it.cedula) == queryDigits
+                }
                 exact?.let { listOf(it) }
-                    ?: patients.filter { CedulaNormalizer.normalize(it.cedula).contains(query) }
+                    ?: patients.filter { CedulaNormalizer.digitsOnly(it.cedula).contains(queryDigits) }
             }
         }
     }
@@ -80,6 +93,24 @@ fun PacienteScreen(
         loading = true
         patients = PatientStorage.loadAll(context)
         loading = false
+    }
+
+    fun openFicha(patient: Patient) {
+        fichaPatient = patient
+        ficha = null
+        fichaError = null
+        fichaLoading = true
+        scope.launch {
+            ficha = try {
+                CloudSyncService.findEmergencyFichaByCedula(patient.cedula)
+            } catch (_: Exception) {
+                null
+            }
+            fichaLoading = false
+            if (ficha == null) {
+                fichaError = "Este paciente aún no tiene ficha de emergencia."
+            }
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
@@ -109,6 +140,7 @@ fun PacienteScreen(
             )
             Spacer(modifier = Modifier.padding(horizontal = 4.dp))
             FilledTonalButton(
+                enabled = !searching,
                 onClick = {
                     val query = CedulaNormalizer.normalize(cedulaQuery)
                     if (query.isBlank()) {
@@ -116,13 +148,15 @@ fun PacienteScreen(
                         return@FilledTonalButton
                     }
                     scope.launch {
+                        searching = true
                         searchMessage = "Buscando…"
                         val local = PatientStorage.findByCedula(context, cedulaQuery)
                         val found = local ?: try {
-                            CloudSyncService.findGlobalByCedula(cedulaQuery).firstOrNull()
+                            CloudSyncService.findPatientByCedulaAnywhere(cedulaQuery)
                         } catch (_: Exception) {
                             null
                         }
+                        searching = false
                         if (found != null) {
                             val saved = PatientStorage.ensureInDoctorList(context, found)
                             patients = PatientStorage.loadAll(context)
@@ -134,13 +168,23 @@ fun PacienteScreen(
                     }
                 },
             ) {
-                Icon(Icons.Outlined.Search, contentDescription = null)
+                if (searching) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Teal)
+                } else {
+                    Icon(Icons.Outlined.Search, contentDescription = null)
+                }
                 Text("Buscar", modifier = Modifier.padding(start = 4.dp))
             }
         }
         searchMessage?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = Teal, modifier = Modifier.padding(top = 6.dp))
         }
+        Text(
+            "Toca un paciente para ver su ficha de emergencia",
+            style = MaterialTheme.typography.bodySmall,
+            color = TextSecondary,
+            modifier = Modifier.padding(top = 8.dp),
+        )
         Spacer(modifier = Modifier.height(16.dp))
 
         when {
@@ -154,7 +198,10 @@ fun PacienteScreen(
             else -> {
                 LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
                     items(displayedPatients, key = { it.id }) { patient ->
-                        Card(colors = CardDefaults.cardColors()) {
+                        Card(
+                            colors = CardDefaults.cardColors(),
+                            modifier = Modifier.clickable { openFicha(patient) },
+                        ) {
                             ListItem(
                                 leadingContent = {
                                     Box(
@@ -185,6 +232,42 @@ fun PacienteScreen(
                 }
             }
         }
+    }
+
+    fichaPatient?.let { patient ->
+        AlertDialog(
+            onDismissRequest = { fichaPatient = null },
+            title = { Text("Ficha de emergencia") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(patient.nombre, style = MaterialTheme.typography.titleMedium)
+                    Text("C.I. ${patient.cedula}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    when {
+                        fichaLoading -> CircularProgressIndicator(color = Teal, modifier = Modifier.size(28.dp))
+                        ficha != null -> {
+                            val f = ficha!!
+                            Text("Tipo de sangre: ${f.tipoSangre}", style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Alergias: ${f.alergias.ifBlank { "—" }}")
+                            Text("Condiciones: ${f.condiciones.ifBlank { "—" }}")
+                            Text("Medicamentos: ${f.medicamentos.ifBlank { "—" }}")
+                            if (f.contactos.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Contactos", style = MaterialTheme.typography.labelLarge)
+                                f.contactos.forEach { c ->
+                                    Text("• ${c.nombre} (${c.parentesco}): ${c.telefono}")
+                                }
+                            }
+                        }
+                        else -> Text(fichaError ?: "Sin ficha de emergencia.", color = TextSecondary)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { fichaPatient = null }) { Text("Cerrar") }
+            },
+        )
     }
 }
 

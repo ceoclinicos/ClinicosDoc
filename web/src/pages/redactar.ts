@@ -1,7 +1,7 @@
 import { registerRoute, navigate } from "../app/router";
 import { generateDocument } from "../services/ai/document-ai-service";
 import { getAiProvider } from "../services/ai/ai-service";
-import { loadPhysicalExamCatalog } from "../services/ai/physical-exam-prompt";
+import { bindExamSystemsEditor, orderEnabledByCatalog, loadExamCatalog } from "../services/exam-catalog";
 import {
   defaultHeader,
   deleteDraft,
@@ -183,11 +183,11 @@ function mountRedactar(root: HTMLElement): void {
 
   function renderPlantilla(): void {
     const catalog = catalogFor(docType);
-    const examSystems = loadPhysicalExamCatalog().sort((a, b) => a.sortOrder - b.sortOrder);
-    const enabled = new Set(
+    let draftExamIds = orderEnabledByCatalog(
       workingTemplate.enabledPhysicalExamSystemIds?.length
         ? workingTemplate.enabledPhysicalExamSystemIds
-        : examSystems.map((s) => s.id),
+        : loadExamCatalog().map((s) => s.id),
+      loadExamCatalog(),
     );
     const needsExam = docType === "historiaClinica" || docType === "informe";
     const showEjemplo = needsExam;
@@ -227,24 +227,25 @@ function mountRedactar(root: HTMLElement): void {
             ? `
         <fieldset class="card-panel">
           <legend><strong>Examen físico (sistemas activos)</strong></legend>
-          <p class="muted">Marca los sistemas que la IA debe incluir. Al menos uno.</p>
-          <div class="stack">
-            ${examSystems
-              .map(
-                (s) =>
-                  `<label class="check-row"><input type="checkbox" name="examId" value="${escapeHtml(s.id)}" ${enabled.has(s.id) ? "checked" : ""} /> <strong>${escapeHtml(s.name)}</strong></label>`,
-              )
-              .join("")}
-          </div>
+          <div id="exam-systems-box"></div>
         </fieldset>`
             : ""
         }
         <p class="muted">IA: ${getAiProvider()} · ${isSpeechSupported() ? "Dictado por voz disponible" : "Dictado solo texto"}</p>
-        <label class="check-row"><input type="checkbox" name="saveTpl" /> Guardar esta configuración como plantilla por defecto</label>
+        <label class="check-row"><input type="checkbox" name="saveTpl" value="1" /> Guardar esta configuración como plantilla por defecto</label>
         <button type="submit" class="btn btn-primary">Continuar al dictado</button>
         <button type="button" class="btn btn-ghost" id="btn-back-pac">Volver</button>
       </form>
     `;
+
+    if (needsExam) {
+      bindExamSystemsEditor(root.querySelector("#exam-systems-box") as HTMLElement, {
+        enabledIds: draftExamIds,
+        onChange: (ids) => {
+          draftExamIds = ids;
+        },
+      });
+    }
 
     root.querySelector("#btn-back-pac")?.addEventListener("click", () => {
       step = "paciente";
@@ -257,7 +258,7 @@ function mountRedactar(root: HTMLElement): void {
       const sections = Array.from(fd.getAll("section")).map(String);
       if (!sections.includes("Datos del paciente")) sections.unshift("Datos del paciente");
       const ordered = catalog.filter((s) => sections.includes(s));
-      const examIds = Array.from(fd.getAll("examId")).map(String);
+      const examIds = draftExamIds;
       if (needsExam && examIds.length === 0) {
         alert("Seleccione al menos un sistema de examen físico.");
         return;
@@ -274,7 +275,7 @@ function mountRedactar(root: HTMLElement): void {
         enfermedadActualEjemplo: ejemplo,
         isDefault: true,
       };
-      if (fd.get("saveTpl")) {
+      if (fd.get("saveTpl") === "1") {
         upsertTemplate(workingTemplate);
       }
       step = "dictado";
@@ -313,11 +314,18 @@ function mountRedactar(root: HTMLElement): void {
 
     root.querySelector("#mic-btn")?.addEventListener("click", () => {
       const errEl = root.querySelector("#error-msg") as HTMLElement;
+      const micBtn = root.querySelector("#mic-btn") as HTMLButtonElement;
+      const status = micBtn?.nextElementSibling as HTMLElement | null;
       if (listening) {
         stopSpeech?.();
         stopSpeech = null;
         listening = false;
-        renderDictado();
+        dictation = (root.querySelector("#dictation") as HTMLTextAreaElement)?.value ?? dictation;
+        if (micBtn) {
+          micBtn.classList.remove("mic-active");
+          micBtn.textContent = "🎤 Dictar";
+        }
+        if (status) status.textContent = "Toque para hablar o escriba";
         return;
       }
       if (!isSpeechSupported()) {
@@ -325,10 +333,14 @@ function mountRedactar(root: HTMLElement): void {
         return;
       }
       listening = true;
-      renderDictado();
-      const ta2 = root.querySelector("#dictation") as HTMLTextAreaElement;
+      if (micBtn) {
+        micBtn.classList.add("mic-active");
+        micBtn.textContent = "⏹ Detener";
+      }
+      if (status) status.textContent = "Escuchando…";
+      const taNow = root.querySelector("#dictation") as HTMLTextAreaElement;
       stopSpeech = startDictation(
-        ta2?.value ?? dictation,
+        taNow?.value ?? dictation,
         (text) => {
           dictation = text;
           const t = root.querySelector("#dictation") as HTMLTextAreaElement;
@@ -338,6 +350,11 @@ function mountRedactar(root: HTMLElement): void {
           errEl.textContent = msg;
           listening = false;
           stopSpeech = null;
+          if (micBtn) {
+            micBtn.classList.remove("mic-active");
+            micBtn.textContent = "🎤 Dictar";
+          }
+          if (status) status.textContent = "Toque para hablar o escriba";
         },
       );
     });

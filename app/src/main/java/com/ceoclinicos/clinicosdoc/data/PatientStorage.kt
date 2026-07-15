@@ -39,8 +39,11 @@ object PatientStorage {
     fun upsert(context: Context, patient: Patient): Patient {
         val all = loadAll(context).toMutableList()
         val cedulaKey = CedulaNormalizer.normalize(patient.cedula)
+        val digits = CedulaNormalizer.digitsOnly(patient.cedula)
         val idx = all.indexOfFirst {
-            it.id == patient.id || CedulaNormalizer.normalize(it.cedula) == cedulaKey
+            it.id == patient.id ||
+                CedulaNormalizer.normalize(it.cedula) == cedulaKey ||
+                CedulaNormalizer.digitsOnly(it.cedula) == digits
         }
         val saved = if (idx >= 0) {
             val keepId = all[idx].id
@@ -59,10 +62,12 @@ object PatientStorage {
         upsert(context, patient)
 
     fun findByCedula(context: Context, cedula: String): Patient? {
-        val normalized = CedulaNormalizer.normalize(cedula)
-        if (normalized.isBlank()) return null
-        return loadAll(context).firstOrNull {
-            CedulaNormalizer.normalize(it.cedula) == normalized
+        val keys = CedulaNormalizer.lookupKeys(cedula).toSet()
+        if (keys.isEmpty()) return null
+        val digits = CedulaNormalizer.digitsOnly(cedula)
+        return loadAll(context).firstOrNull { p ->
+            val pNorm = CedulaNormalizer.normalize(p.cedula)
+            pNorm in keys || CedulaNormalizer.digitsOnly(p.cedula) == digits
         }
     }
 

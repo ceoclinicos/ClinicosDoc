@@ -26,7 +26,14 @@ function textFor(section: string): string {
   if (s === SectionCatalog.IMPRESION_DIAGNOSTICA.toLowerCase()) {
     return "Impresión diagnóstica pendiente de correlacionar con evolución clínica.";
   }
-  if (s === SectionCatalog.PLAN.toLowerCase()) return "Plan terapéutico según evolución clínica.";
+  if (s === SectionCatalog.PLAN.toLowerCase()) {
+    return [
+      "1. Hospitalizar o mantener bajo observación 4 horas",
+      "2. Omeprazol 40 mg EV",
+      "3. Ketoprofeno 100 mg EV cada 12 horas",
+      "4. Control de signos vitales",
+    ].join("\n");
+  }
   if (s === SectionCatalog.OBSERVACIONES.toLowerCase()) return "Sin observaciones adicionales.";
   if (s === SectionCatalog.CONCLUSIONES.toLowerCase()) return "Conclusiones según hallazgos de la evaluación.";
   if (s === SectionCatalog.RECOMENDACIONES.toLowerCase()) return "Seguimiento médico según evolución clínica.";

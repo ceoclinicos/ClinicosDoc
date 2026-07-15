@@ -15,6 +15,7 @@ import {
   saveEnfermedadActualEjemplo,
 } from "../../shared/enfermedad-actual";
 import { loadPhysicalExamCatalog } from "../../services/ai/physical-exam-prompt";
+import { bindExamSystemsEditor, orderEnabledByCatalog } from "../../services/exam-catalog";
 import { fileToLogoBase64, logoDataUrl } from "../../services/header-logo";
 import { bindNavButtons, page } from "../helpers";
 import { getProfessionalSession } from "../../registro/session";
@@ -229,15 +230,15 @@ registerRoute({
 
     let template: DocumentTemplate = loadTemplates().find((t) => t.documentType === tipo)!;
     const catalog = catalogFor(tipo);
-    const examSystems = loadPhysicalExamCatalog().sort((a, b) => a.sortOrder - b.sortOrder);
+    let draftExamIds = orderEnabledByCatalog(
+      template.enabledPhysicalExamSystemIds?.length
+        ? template.enabledPhysicalExamSystemIds
+        : loadPhysicalExamCatalog().map((s) => s.id),
+      loadPhysicalExamCatalog(),
+    );
     const needsExam = tipo === "historiaClinica" || tipo === "informe";
     const showEjemplo = tipo === "historiaClinica" || tipo === "informe";
     const ejemploActual = resolveEnfermedadActualEjemplo(template.enfermedadActualEjemplo);
-    const enabledExam = new Set(
-      template.enabledPhysicalExamSystemIds?.length
-        ? template.enabledPhysicalExamSystemIds
-        : examSystems.map((s) => s.id),
-    );
     const el = page(
       `Plantilla ${DocumentTypeLabels[tipo]}`,
       `
@@ -271,15 +272,7 @@ registerRoute({
             ? `
         <fieldset class="card-panel">
           <legend><strong>Examen físico</strong></legend>
-          <p class="muted">Sistemas que la IA incluirá por defecto.</p>
-          <div class="stack">
-            ${examSystems
-              .map(
-                (s) =>
-                  `<label class="check-row"><input type="checkbox" name="examId" value="${s.id}" ${enabledExam.has(s.id) ? "checked" : ""} /> ${s.name}</label>`,
-              )
-              .join("")}
-          </div>
+          <div id="exam-systems-box"></div>
         </fieldset>`
             : ""
         }
@@ -289,13 +282,23 @@ registerRoute({
       `,
     );
 
+    if (needsExam) {
+      const box = el.querySelector("#exam-systems-box") as HTMLElement;
+      bindExamSystemsEditor(box, {
+        enabledIds: draftExamIds,
+        onChange: (ids) => {
+          draftExamIds = ids;
+        },
+      });
+    }
+
     el.querySelector("#tpl-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
       const fd = new FormData(e.target as HTMLFormElement);
       const sections = Array.from(fd.getAll("section")).map(String);
       if (!sections.includes("Datos del paciente")) sections.unshift("Datos del paciente");
       const ordered = catalog.filter((s) => sections.includes(s));
-      const examIds = Array.from(fd.getAll("examId")).map(String);
+      const examIds = draftExamIds;
       if (needsExam && examIds.length === 0) {
         alert("Seleccione al menos un sistema de examen físico.");
         return;

@@ -44,7 +44,7 @@ export function catalogFor(type: DocumentType): string[] {
         SectionCatalog.EXAMEN_FISICO,
         SectionCatalog.DIAGNOSTICO,
         SectionCatalog.CONCLUSIONES,
-        SectionCatalog.RECOMENDACIONES,
+        SectionCatalog.PLAN,
       ];
     case "reposo":
       return [
@@ -58,6 +58,53 @@ export function catalogFor(type: DocumentType): string[] {
 }
 
 export function defaultSectionsFor(type: DocumentType): string[] {
-  // Informe: todas las del catálogo marcadas por defecto
-  return catalogFor(type);
+  switch (type) {
+    case "informe":
+      // Primera vez: solo núcleo clínico (Conclusiones/Plan desmarcados)
+      return [
+        SectionCatalog.DATOS_PACIENTE,
+        SectionCatalog.MOTIVO_CONSULTA,
+        SectionCatalog.ENFERMEDAD_ACTUAL,
+        SectionCatalog.EXAMEN_FISICO,
+        SectionCatalog.DIAGNOSTICO,
+      ];
+    case "historiaClinica":
+    case "reposo":
+      return catalogFor(type);
+  }
+}
+
+function sameSections(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((s, i) => s === b[i]);
+}
+
+/** Catálogo completo del informe (legado: solían venir todas checadas). */
+export const INFORME_FULL_CATALOG = catalogFor("informe");
+
+/** Antiguo catálogo completo con "Recomendaciones" (antes del rename a Plan). */
+const INFORME_LEGACY_FULL = [
+  SectionCatalog.DATOS_PACIENTE,
+  SectionCatalog.MOTIVO_CONSULTA,
+  SectionCatalog.ENFERMEDAD_ACTUAL,
+  SectionCatalog.EXAMEN_FISICO,
+  SectionCatalog.DIAGNOSTICO,
+  SectionCatalog.CONCLUSIONES,
+  "Recomendaciones",
+];
+
+export function isLegacyInformeAllChecked(sections: string[]): boolean {
+  return sameSections(sections, INFORME_FULL_CATALOG) || sameSections(sections, INFORME_LEGACY_FULL);
+}
+
+export function normalizeTemplateSections(type: DocumentType, sections: string[]): string[] {
+  const catalog = catalogFor(type);
+  const mapped = sections.map((s) =>
+    s.trim().toLowerCase() === "recomendaciones" ? SectionCatalog.PLAN : s,
+  );
+  const ordered = mapped.filter((s) => catalog.includes(s));
+  const unique = [...new Set(ordered)];
+  if (!unique.includes(SectionCatalog.DATOS_PACIENTE) && catalog.includes(SectionCatalog.DATOS_PACIENTE)) {
+    unique.unshift(SectionCatalog.DATOS_PACIENTE);
+  }
+  return unique.length ? unique : defaultSectionsFor(type);
 }

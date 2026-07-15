@@ -1,8 +1,9 @@
 /** Persistencia local de plantillas, encabezados y documentos (paridad con la app). */
 import { DocumentTypeLabels, type ClinicalDocument, type ClinicalDraft, type DocumentHeader, type DocumentTemplate, type DocumentType } from "../shared/models";
-import { catalogFor, defaultSectionsFor } from "../shared/section-catalog";
+import { defaultSectionsFor, isLegacyInformeAllChecked, normalizeTemplateSections } from "../shared/section-catalog";
 import { ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT } from "../shared/enfermedad-actual";
 import { PhysicalExamDefaults } from "../shared/physical-exam-defaults";
+import { loadExamCatalog, orderEnabledByCatalog } from "./exam-catalog";
 import { loadJson, saveJson } from "./local-store";
 import {
   canSync,
@@ -23,8 +24,10 @@ const KEY_DRAFTS = "drafts";
 const DOC_TYPES: DocumentType[] = ["historiaClinica", "informe", "reposo"];
 
 function makeDefaultTemplates(): DocumentTemplate[] {
-  const stored = loadJson<{ id: string }[]>("physical_exam", []);
-  const examIds = (stored.length ? stored : PhysicalExamDefaults).map((s) => s.id);
+  const examIds = orderEnabledByCatalog(
+    PhysicalExamDefaults.map((s) => s.id),
+    loadExamCatalog(),
+  );
   return DOC_TYPES.map((type) => ({
     id: crypto.randomUUID(),
     name: `Plantilla ${DocumentTypeLabels[type]}`,
@@ -44,17 +47,19 @@ export function loadTemplates(): DocumentTemplate[] {
     saveJson(KEY_TEMPLATES, list);
     return list;
   }
-  // Asegura una plantilla por tipo + secciones por defecto del informe
   let changed = false;
   const ensured = DOC_TYPES.map((type) => {
     const ofType = list.filter((t) => t.documentType === type);
     let tpl =
       ofType.find((t) => t.isDefault) ?? ofType[0] ?? makeDefaultTemplates().find((t) => t.documentType === type)!;
-    if (type === "informe") {
-      const defaults = defaultSectionsFor("informe");
-      const merged = [...defaults, ...tpl.sections.filter((s) => !defaults.includes(s) && catalogFor("informe").includes(s))];
-      if (merged.length !== tpl.sections.length || merged.some((s, i) => s !== tpl.sections[i])) {
-        tpl = { ...tpl, sections: merged };
+    // Migración: plantillas que tenían todo el catálogo del informe (legado) → defaults nuevos
+    if (type === "informe" && isLegacyInformeAllChecked(tpl.sections)) {
+      tpl = { ...tpl, sections: defaultSectionsFor("informe") };
+      changed = true;
+    } else {
+      const normalized = normalizeTemplateSections(type, tpl.sections);
+      if (normalized.length !== tpl.sections.length || normalized.some((s, i) => s !== tpl.sections[i])) {
+        tpl = { ...tpl, sections: normalized };
         changed = true;
       }
     }
@@ -71,12 +76,21 @@ export function saveTemplates(templates: DocumentTemplate[]): void {
 }
 
 export function upsertTemplate(template: DocumentTemplate): DocumentTemplate {
+  const normalized: DocumentTemplate = {
+    ...template,
+    enabledPhysicalExamSystemIds: orderEnabledByCatalog(
+      template.enabledPhysicalExamSystemIds ?? [],
+      loadExamCatalog(),
+    ),
+  };
   const all = loadTemplates();
-  const next = all.map((t) => (t.documentType === template.documentType ? { ...template, isDefault: true } : t));
-  if (!next.some((t) => t.documentType === template.documentType)) next.push(template);
+  const next = all.map((t) =>
+    t.documentType === normalized.documentType ? { ...normalized, isDefault: true } : t,
+  );
+  if (!next.some((t) => t.documentType === normalized.documentType)) next.push(normalized);
   saveTemplates(next);
-  if (canSync()) syncQuiet(() => pushTemplate(template));
-  return template;
+  if (canSync()) syncQuiet(() => pushTemplate(normalized));
+  return normalized;
 }
 
 export function templateForType(type: DocumentType): DocumentTemplate {

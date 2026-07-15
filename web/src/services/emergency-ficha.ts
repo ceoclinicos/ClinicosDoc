@@ -28,6 +28,9 @@ export type FichaEmergencia = {
   contactos: EmergencyContact[];
   updatedAt: string;
   activo: boolean;
+  /** Usuario declaró veracidad de los datos. */
+  declaracionFe?: boolean;
+  declaracionFeAt?: string;
 };
 
 export const TIPOS_SANGRE = ["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-", "Desconocido"] as const;
@@ -59,6 +62,8 @@ function asFicha(raw: unknown): FichaEmergencia | null {
     contactos: Array.isArray(d.contactos) ? (d.contactos as EmergencyContact[]) : [],
     updatedAt: String(d.updatedAt ?? ""),
     activo: true,
+    declaracionFe: Boolean(d.declaracionFe),
+    declaracionFeAt: d.declaracionFeAt ? String(d.declaracionFeAt) : undefined,
   };
 }
 
@@ -88,7 +93,11 @@ export async function upsertFichaEmergencia(input: {
   medicamentos: string;
   contactos: EmergencyContact[];
   existingPublicId?: string;
+  declaracionFe: boolean;
 }): Promise<FichaEmergencia> {
+  if (!input.declaracionFe) {
+    throw new Error("Debe aceptar la declaración de veracidad de los datos");
+  }
   const cedula = normalizeCedula(input.patientCedula);
   let publicId = input.existingPublicId?.trim();
   if (!publicId) {
@@ -96,6 +105,7 @@ export async function upsertFichaEmergencia(input: {
     publicId = existing?.publicId || randomPublicId();
   }
 
+  const now = new Date().toISOString();
   const data: FichaEmergencia = {
     publicId,
     patientCedula: cedula,
@@ -111,8 +121,10 @@ export async function upsertFichaEmergencia(input: {
         telefono: c.telefono.trim(),
         parentesco: c.parentesco.trim() || "Contacto",
       })),
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
     activo: true,
+    declaracionFe: true,
+    declaracionFeAt: now,
   };
 
   const db = getDb();
@@ -152,4 +164,34 @@ export function emergenciaPublicUrl(publicId: string): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "https://clinicosdoc.com";
   const path = typeof window !== "undefined" ? window.location.pathname : "/";
   return `${origin}${path}#/emergencia/${publicId}`;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** HTML de ficha para médico (modal / detalle). */
+export function renderFichaHtml(f: FichaEmergencia): string {
+  const contacts = f.contactos.length
+    ? `<ul class="list">${f.contactos
+        .map(
+          (c) =>
+            `<li class="list-item"><strong>${escapeHtml(c.nombre)}</strong><span>${escapeHtml(c.parentesco)} · <a href="tel:${escapeHtml(c.telefono)}">${escapeHtml(c.telefono)}</a></span></li>`,
+        )
+        .join("")}</ul>`
+    : `<p class="muted">Sin contactos registrados.</p>`;
+
+  return `
+    <div class="emergency-badge">EMERGENCIA</div>
+    <h2 class="emergency-name">${escapeHtml(f.nombre)}</h2>
+    <p class="muted">C.I. ${escapeHtml(f.patientCedula)}</p>
+    <div class="card-panel emergency-grid">
+      <div><span class="muted">Tipo de sangre</span><strong class="blood-type">${escapeHtml(f.tipoSangre)}</strong></div>
+      <div><span class="muted">Alergias</span><p>${escapeHtml(f.alergias)}</p></div>
+      <div><span class="muted">Condiciones / Comorbilidades</span><p>${escapeHtml(f.condiciones)}</p></div>
+      <div><span class="muted">Medicamentos</span><p>${escapeHtml(f.medicamentos)}</p></div>
+    </div>
+    <h3 class="home-section-title">Contactos de emergencia</h3>
+    ${contacts}
+  `;
 }

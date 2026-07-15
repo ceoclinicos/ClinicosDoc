@@ -9,10 +9,10 @@ function loadCatalog(): PhysicalExamSystem[] {
 
 function reportDisplayOrder(systems: PhysicalExamSystem[]): PhysicalExamSystem[] {
   return [...systems].sort((a, b) => {
-    const pa = displayPriority[a.id] ?? a.sortOrder + 100;
-    const pb = displayPriority[b.id] ?? b.sortOrder + 100;
-    if (pa !== pb) return pa - pb;
     if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    const pa = displayPriority[a.id] ?? 100;
+    const pb = displayPriority[b.id] ?? 100;
+    if (pa !== pb) return pa - pb;
     return a.name.localeCompare(b.name);
   });
 }
@@ -92,5 +92,10 @@ export function buildPhysicalExamBlock(
 }
 
 export function loadPhysicalExamCatalog(): PhysicalExamSystem[] {
-  return loadCatalog();
+  return reportDisplayOrder(loadCatalog());
+}
+
+/** Orden clínico fijo para UI de plantilla (mismo que informe/historia). */
+export function catalogInClinicalOrder(systems?: PhysicalExamSystem[]): PhysicalExamSystem[] {
+  return reportDisplayOrder(systems ?? loadCatalog());
 }

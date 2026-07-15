@@ -448,7 +448,7 @@ fun RedactarFlowScreen(
                                 patientSearchMessage = "Buscando…"
                                 val local = PatientStorage.findByCedula(context, cedulaSearch)
                                 val found = local ?: try {
-                                    CloudSyncService.findGlobalByCedula(cedulaSearch).firstOrNull()
+                                    CloudSyncService.findPatientByCedulaAnywhere(cedulaSearch)
                                 } catch (_: Exception) {
                                     null
                                 }
@@ -518,15 +518,11 @@ fun RedactarFlowScreen(
                     examCatalog = examCatalog,
                     enabledExamIds = enabledExamIds,
                     onEnabledExamIdsChange = {
-                        val ordered = PhysicalExamDefaults.orderEnabledIds(it)
+                        val ordered = PhysicalExamCatalogStorage.orderEnabledIdsByCatalog(it, examCatalog)
                         enabledExamIds = ordered
                         persistTemplateConfig(ids = ordered)
                     },
-                    examTextOverrides = examTextOverrides,
-                    onExamTextOverridesChange = {
-                        examTextOverrides = it
-                        persistTemplateConfig(overrides = it)
-                    },
+                    onExamCatalogChange = { examCatalog = it },
                     enfermedadActualEjemplo = enfermedadActualEjemplo,
                     onEnfermedadActualEjemploChange = {
                         enfermedadActualEjemplo = it

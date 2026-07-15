@@ -11,6 +11,8 @@ import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
 import com.ceoclinicos.clinicosdoc.model.HeaderInfoLine
 import com.ceoclinicos.clinicosdoc.model.HeaderType
+import com.ceoclinicos.clinicosdoc.model.EmergencyContact
+import com.ceoclinicos.clinicosdoc.model.EmergencyFicha
 import com.ceoclinicos.clinicosdoc.model.Patient
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
 import com.ceoclinicos.clinicosdoc.model.PhysicalExamSystem
@@ -25,7 +27,9 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.tasks.await
 import java.io.File
 import java.time.Instant
-
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.UUID
 object CloudSyncService {
     private const val TAG = "CloudSyncService"
     private val gson = Gson()
@@ -163,16 +167,48 @@ object CloudSyncService {
         if (byKey.isNotEmpty()) return byKey.distinctBy { it.id }
 
         val raw = cedula.trim()
-        val variants = listOf(raw, key, "V-$key", "V$key", "E-$key", "E$key").distinct()
+        val variants = CedulaNormalizer.lookupKeys(cedula) + listOf(raw)
         val found = mutableListOf<Patient>()
-        for (variant in variants) {
+        for (variant in variants.distinct()) {
             col.whereEqualTo("cedula", variant).get().await().documents.mapNotNull { it.toPatient() }
                 .forEach { found.add(it) }
             if (found.isNotEmpty()) break
         }
+        val digits = CedulaNormalizer.digitsOnly(cedula)
         return found
-            .filter { CedulaNormalizer.normalize(it.cedula) == key }
+            .filter { CedulaNormalizer.digitsOnly(it.cedula) == digits || CedulaNormalizer.normalize(it.cedula) == key }
             .distinctBy { it.id }
+    }
+
+    /**
+     * Paciente del portal (modo paciente) en colección `pacientes/{cedula}`.
+     * Cubre registro web paciente que no está en clinicosdoc_patients.
+     */
+    suspend fun findPortalPatientByCedula(cedula: String): Patient? {
+        val db = FirebaseFirestore.getInstance()
+        for (key in CedulaNormalizer.lookupKeys(cedula)) {
+            val snap = db.collection(FirestorePaths.PORTAL_PACIENTES).document(key).get().await()
+            if (!snap.exists()) continue
+            return snap.toPortalPatient() ?: continue
+        }
+        return null
+    }
+
+    /** Primero global de médicos; si no, portal modo paciente. */
+    suspend fun findPatientByCedulaAnywhere(cedula: String): Patient? {
+        findGlobalByCedula(cedula).firstOrNull()?.let { return it }
+        return findPortalPatientByCedula(cedula)
+    }
+
+    suspend fun findEmergencyFichaByCedula(cedula: String): EmergencyFicha? {
+        val db = FirebaseFirestore.getInstance()
+        for (key in CedulaNormalizer.lookupKeys(cedula)) {
+            val snap = db.collection(FirestorePaths.PORTAL_PACIENTES).document(key).get().await()
+            if (!snap.exists()) continue
+            val ficha = snap.toEmergencyFicha()
+            if (ficha != null && ficha.activo) return ficha
+        }
+        return null
     }
 
     suspend fun pushTemplate(context: Context, userId: String, template: DocumentTemplate) {
@@ -340,6 +376,69 @@ object CloudSyncService {
             whatsapp = dto.whatsapp.orEmpty(),
             sexo = dto.sexo.orEmpty(),
         )
+    }
+
+    /** Doc de colección `pacientes` (portal modo paciente). */
+    private fun com.google.firebase.firestore.DocumentSnapshot.toPortalPatient(): Patient? {
+        val data = data ?: return null
+        val cedula = (data["cedula"] as? String).orEmpty().ifBlank { id }
+        val nombre = (data["nombre"] as? String).orEmpty()
+        if (nombre.isBlank() || cedula.isBlank()) return null
+        val edad = when (val e = data["edad"]) {
+            is Number -> e.toInt()
+            is String -> e.toIntOrNull() ?: 0
+            else -> 0
+        }
+        val birthRaw = (data["fechaNacimiento"] as? String).orEmpty()
+        val createdRaw = (data["createdAt"] as? String).orEmpty()
+        return Patient(
+            id = "portal_${CedulaNormalizer.digitsOnly(cedula).ifBlank { UUID.randomUUID().toString().take(8) }}",
+            nombre = nombre,
+            cedula = cedula,
+            edad = edad,
+            fechaNacimiento = parseFlexibleInstant(birthRaw),
+            createdAt = parseFlexibleInstant(createdRaw).takeUnless { it == Instant.EPOCH } ?: Instant.now(),
+            whatsapp = (data["telefono"] as? String).orEmpty(),
+            sexo = (data["sexo"] as? String).orEmpty(),
+        )
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun com.google.firebase.firestore.DocumentSnapshot.toEmergencyFicha(): EmergencyFicha? {
+        val raw = data?.get("fichaEmergencia") as? Map<*, *> ?: return null
+        if (raw["activo"] == false) return null
+        val publicId = (raw["publicId"] as? String).orEmpty()
+        if (publicId.isBlank()) return null
+        val contactosRaw = raw["contactos"] as? List<*> ?: emptyList<Any>()
+        val contactos = contactosRaw.mapNotNull { item ->
+            val m = item as? Map<*, *> ?: return@mapNotNull null
+            EmergencyContact(
+                nombre = (m["nombre"] as? String).orEmpty(),
+                telefono = (m["telefono"] as? String).orEmpty(),
+                parentesco = (m["parentesco"] as? String).orEmpty(),
+            )
+        }
+        return EmergencyFicha(
+            publicId = publicId,
+            patientCedula = (raw["patientCedula"] as? String).orEmpty().ifBlank { id },
+            nombre = (raw["nombre"] as? String).orEmpty(),
+            tipoSangre = (raw["tipoSangre"] as? String).orEmpty().ifBlank { "Desconocido" },
+            alergias = (raw["alergias"] as? String).orEmpty(),
+            condiciones = (raw["condiciones"] as? String).orEmpty(),
+            medicamentos = (raw["medicamentos"] as? String).orEmpty(),
+            contactos = contactos,
+            updatedAt = (raw["updatedAt"] as? String).orEmpty(),
+            activo = true,
+        )
+    }
+
+    private fun parseFlexibleInstant(raw: String): Instant {
+        if (raw.isBlank()) return Instant.EPOCH
+        runCatching { Instant.parse(raw) }.getOrNull()?.let { return it }
+        runCatching {
+            LocalDate.parse(raw.take(10)).atStartOfDay(ZoneId.systemDefault()).toInstant()
+        }.getOrNull()?.let { return it }
+        return Instant.EPOCH
     }
 
     private fun com.google.firebase.firestore.DocumentSnapshot.toClinicalDocument(): ClinicalDocument? {

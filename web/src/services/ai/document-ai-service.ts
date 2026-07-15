@@ -142,6 +142,7 @@ function buildPrompt(
       "- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto. PROHIBIDO omitir sistemas activos no mencionados en el dictado.",
       "- Signos vitales: solo si hay valores dictados; si no, omitir esa línea.",
       "- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.",
+      "- Plan (si está en la plantilla): lista numerada de conducta/tratamiento (ej. observación, fármacos EV, control de signos). Solo según dictado.",
       "",
       enfermedadActualPromptBlock(ejemplo),
       "",

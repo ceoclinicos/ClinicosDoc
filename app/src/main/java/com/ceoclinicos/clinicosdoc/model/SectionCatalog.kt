@@ -64,7 +64,7 @@ object SectionCatalog {
             EXAMEN_FISICO,
             DIAGNOSTICO,
             CONCLUSIONES,
-            RECOMENDACIONES,
+            PLAN,
         )
         DocumentType.REPOSO -> listOf(
             DATOS_PACIENTE,
@@ -81,7 +81,10 @@ object SectionCatalog {
     /** Asegura «Datos del paciente» primero y solo secciones válidas del catálogo. */
     fun normalizeActive(documentType: DocumentType, sections: List<String>): List<String> {
         val catalog = catalogFor(documentType).toSet()
-        val filtered = sections.filter { it in catalog }
+        val mapped = sections.map { s ->
+            if (s.equals(RECOMENDACIONES, ignoreCase = true)) PLAN else s
+        }
+        val filtered = mapped.filter { it in catalog }
         if (!requiresLockedPatientSection(documentType)) return filtered
         val withoutLocked = filtered.filterNot { it == DATOS_PACIENTE }
         return listOf(DATOS_PACIENTE) + withoutLocked
@@ -112,8 +115,14 @@ object SectionCatalog {
             EXAMEN_FISICO,
             DIAGNOSTICO,
         )
-        // Informe: todas las del catálogo marcadas por defecto
-        DocumentType.INFORME -> catalogFor(DocumentType.INFORME)
+        // Informe: núcleo clínico por defecto (Conclusiones/Plan opcionales)
+        DocumentType.INFORME -> listOf(
+            DATOS_PACIENTE,
+            MOTIVO_CONSULTA,
+            ENFERMEDAD_ACTUAL,
+            EXAMEN_FISICO,
+            DIAGNOSTICO,
+        )
         DocumentType.REPOSO -> listOf(
             DATOS_PACIENTE,
             DIAGNOSTICO,

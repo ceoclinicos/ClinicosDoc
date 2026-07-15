@@ -1,39 +1,22 @@
 package com.ceoclinicos.clinicosdoc.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.unit.dp
 import com.ceoclinicos.clinicosdoc.data.EnfermedadActualStorage
-import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
 import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.Patient
@@ -41,8 +24,8 @@ import com.ceoclinicos.clinicosdoc.model.PhysicalExamDefaults
 import com.ceoclinicos.clinicosdoc.model.PhysicalExamSystem
 import com.ceoclinicos.clinicosdoc.model.SectionCatalog
 import com.ceoclinicos.clinicosdoc.ui.components.ActiveSectionsEditor
+import com.ceoclinicos.clinicosdoc.ui.components.PhysicalExamSystemsEditor
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
-import com.ceoclinicos.clinicosdoc.ui.theme.Teal
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 
 @Composable
@@ -56,21 +39,13 @@ fun TemplateConfigStep(
     examCatalog: List<PhysicalExamSystem>,
     enabledExamIds: List<String>,
     onEnabledExamIdsChange: (List<String>) -> Unit,
-    examTextOverrides: Map<String, String>,
-    onExamTextOverridesChange: (Map<String, String>) -> Unit,
+    onExamCatalogChange: (List<PhysicalExamSystem>) -> Unit,
     enfermedadActualEjemplo: String,
     onEnfermedadActualEjemploChange: (String) -> Unit,
     canChangeTemplate: Boolean = false,
     onChangeTemplate: () -> Unit,
     onContinue: () -> Unit,
 ) {
-    var editingSystem by remember { mutableStateOf<PhysicalExamSystem?>(null) }
-    var editText by remember { mutableStateOf("") }
-
-    val orderedCatalog = remember(examCatalog, enabledExamIds) {
-        PhysicalExamCatalogStorage.displayOrderForConfig(examCatalog, enabledExamIds)
-    }
-
     val showPhysicalExam = documentType == DocumentType.INFORME ||
         activeSections.any { it.equals(SectionCatalog.EXAMEN_FISICO, ignoreCase = true) }
     val showSectionEditor = SectionCatalog.catalogFor(documentType).isNotEmpty()
@@ -157,68 +132,13 @@ fun TemplateConfigStep(
             HorizontalDivider()
             Spacer(modifier = Modifier.height(16.dp))
             Text("Examen físico", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Activa los sistemas a incluir. Orden: signos vitales → general → piel → cabeza/cuello → cardiopulmonar…",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
-                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            Spacer(modifier = Modifier.height(8.dp))
+            PhysicalExamSystemsEditor(
+                systems = examCatalog,
+                enabledIds = enabledExamIds,
+                onEnabledIdsChange = onEnabledExamIdsChange,
+                onCatalogChanged = onExamCatalogChange,
             )
-
-            orderedCatalog.forEach { system ->
-                val effectiveText = examTextOverrides[system.id] ?: system.defaultText
-                val checked = system.id in enabledExamIds
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(
-                        checked = checked,
-                        onCheckedChange = { isChecked ->
-                            onEnabledExamIdsChange(
-                                PhysicalExamDefaults.orderEnabledIds(
-                                    if (isChecked) {
-                                        enabledExamIds + system.id
-                                    } else {
-                                        enabledExamIds.filterNot { it == system.id }
-                                    },
-                                ),
-                            )
-                        },
-                        modifier = Modifier
-                            .scale(0.78f)
-                            .size(32.dp),
-                    )
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 2.dp, end = 4.dp),
-                    ) {
-                        Text(system.name, style = MaterialTheme.typography.labelLarge)
-                        Text(
-                            effectiveText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (checked) MaterialTheme.colorScheme.onSurface else TextSecondary,
-                            maxLines = 3,
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            editingSystem = system
-                            editText = effectiveText
-                        },
-                        modifier = Modifier.size(36.dp),
-                    ) {
-                        Icon(
-                            Icons.Outlined.Edit,
-                            contentDescription = "Editar texto",
-                            modifier = Modifier.size(18.dp),
-                            tint = Teal,
-                        )
-                    }
-                }
-            }
         }
 
         Spacer(modifier = Modifier.height(28.dp))
@@ -229,32 +149,6 @@ fun TemplateConfigStep(
                 onContinue()
             },
             enabled = !showPhysicalExam || enabledExamIds.isNotEmpty(),
-        )
-    }
-
-    editingSystem?.let { system ->
-        AlertDialog(
-            onDismissRequest = { editingSystem = null },
-            title = { Text("Texto de ${system.name}") },
-            text = {
-                OutlinedTextField(
-                    value = editText,
-                    onValueChange = { editText = it },
-                    modifier = Modifier.fillMaxWidth().height(120.dp),
-                    maxLines = 6,
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onExamTextOverridesChange(examTextOverrides + (system.id to editText.trim()))
-                        editingSystem = null
-                    },
-                ) { Text("Guardar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { editingSystem = null }) { Text("Cancelar") }
-            },
         )
     }
 }

@@ -27,7 +27,10 @@ object SectionDefaults {
         section.equals(SectionCatalog.IMPRESION_DIAGNOSTICA, ignoreCase = true) ->
             "Impresión diagnóstica pendiente de correlacionar con evolución clínica."
         section.equals(SectionCatalog.PLAN, ignoreCase = true) ->
-            "Plan terapéutico según evolución clínica."
+            "1. Hospitalizar o mantener bajo observación 4 horas\n" +
+                "2. Omeprazol 40 mg EV\n" +
+                "3. Ketoprofeno 100 mg EV cada 12 horas\n" +
+                "4. Control de signos vitales"
         section.equals(SectionCatalog.OBSERVACIONES, ignoreCase = true) ->
             "Sin observaciones adicionales."
         section.equals(SectionCatalog.MOTIVO_INFORME, ignoreCase = true) ->

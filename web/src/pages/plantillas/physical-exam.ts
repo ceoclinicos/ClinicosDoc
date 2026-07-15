@@ -1,18 +1,28 @@
 import { registerRoute } from "../../app/router";
 import { loadJson, saveJson } from "../../services/local-store";
 import type { PhysicalExamSystem } from "../../shared/models";
-import { PhysicalExamDefaults } from "../../shared/physical-exam-defaults";
+import { PhysicalExamDefaults, displayPriority } from "../../shared/physical-exam-defaults";
 import { canSync, pushPhysicalExam, syncQuiet } from "../../services/cloud-sync";
 import { page } from "../helpers";
 
 const KEY = "physical_exam";
 
+function clinicalOrder(systems: PhysicalExamSystem[]): PhysicalExamSystem[] {
+  return [...systems].sort((a, b) => {
+    const pa = displayPriority[a.id] ?? a.sortOrder + 100;
+    const pb = displayPriority[b.id] ?? b.sortOrder + 100;
+    if (pa !== pb) return pa - pb;
+    if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 function loadCatalog(): PhysicalExamSystem[] {
-  return loadJson(KEY, PhysicalExamDefaults);
+  return clinicalOrder(loadJson(KEY, PhysicalExamDefaults));
 }
 
 function persist(systems: PhysicalExamSystem[]): void {
-  saveJson(KEY, systems);
+  saveJson(KEY, clinicalOrder(systems));
 }
 
 registerRoute({
@@ -20,7 +30,7 @@ registerRoute({
   title: "Catálogo examen físico",
   medicoOnly: true,
   render: () => {
-    const systems = loadCatalog();
+    let systems = loadCatalog();
     const el = page(
       "Catálogo examen físico",
       `
@@ -94,11 +104,12 @@ registerRoute({
         id,
         name: String(fd.get("name")).trim(),
         defaultText: String(fd.get("defaultText")).trim(),
-        sortOrder: systems.find((s) => s.id === id)?.sortOrder ?? 100,
+        sortOrder: displayPriority[id] ?? systems.find((s) => s.id === id)?.sortOrder ?? 100,
       };
       const idx = systems.findIndex((s) => s.id === id);
       if (idx >= 0) systems[idx] = updated;
       else systems.push(updated);
+      systems = clinicalOrder(systems);
       persist(systems);
       if (canSync()) syncQuiet(() => pushPhysicalExam(updated));
       dialog.close();

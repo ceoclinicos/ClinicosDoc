@@ -10,11 +10,21 @@ const DEFAULT_BODY: Record<string, string> = {
     "TA: --- mmHg | FR: --- rpm | FC: --- lpm | SaTO2: ---%\nExamen físico según plantilla de sistemas activos.",
   [SectionCatalog.DIAGNOSTICO]: "1. Evaluación clínica.",
   [SectionCatalog.CONCLUSIONES]: "Conclusiones según hallazgos de la evaluación.",
-  [SectionCatalog.RECOMENDACIONES]: "Seguimiento médico según evolución clínica.",
+  [SectionCatalog.PLAN]: [
+    "1. Hospitalizar o mantener bajo observación 4 horas",
+    "2. Omeprazol 40 mg EV",
+    "3. Ketoprofeno 100 mg EV cada 12 horas",
+    "4. Control de signos vitales",
+  ].join("\n"),
+  [SectionCatalog.RECOMENDACIONES]: [
+    "1. Hospitalizar o mantener bajo observación 4 horas",
+    "2. Omeprazol 40 mg EV",
+    "3. Ketoprofeno 100 mg EV cada 12 horas",
+    "4. Control de signos vitales",
+  ].join("\n"),
   [SectionCatalog.OBSERVACIONES]: "Sin observaciones adicionales.",
   [SectionCatalog.IMPRESION_DIAGNOSTICA]:
     "Impresión diagnóstica pendiente de correlacionar con evolución clínica.",
-  [SectionCatalog.PLAN]: "Plan terapéutico según evolución clínica.",
   [SectionCatalog.DIAS_REPOSO]: "Días de reposo a indicar según criterio médico.",
   [SectionCatalog.INDICACIONES]: "Indicaciones médicas según evolución.",
 };

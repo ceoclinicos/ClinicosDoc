@@ -21,7 +21,11 @@ import {
 import {
   buildEmergencyQrDataUrl,
   buildEmergencyWallpaperBlob,
+  buildEmergencyCardBlob,
   downloadBlob,
+  printEmergencyCardPdf,
+  shareEmergencyCard,
+  shareTextWhatsApp,
 } from "../../services/emergency-qr";
 import { bindNavButtons, page } from "../helpers";
 
@@ -73,29 +77,55 @@ async function mountFichaEditor(root: HTMLElement, cedula: string, nombre: strin
   root.innerHTML = `
     <div class="card-panel emergency-intro">
       <h2>Ficha Médica de Emergencia</h2>
-      <p class="muted">Perfil rápido: tipo de sangre, alergias y contactos. Genera un QR descargable para usarlo como fondo de pantalla en emergencias. Cualquier persona puede escanearlo y ver esta ficha.</p>
+      <p class="muted">Responda las preguntas médicas. Al guardar podrá compartir la tarjeta (tamaño cédula ~9×6 cm) como publicación en Instagram o WhatsApp.</p>
     </div>
     <form class="form" id="ficha-form">
       <label>Nombre<input name="nombre" required value="${escapeAttr(ficha?.nombre || nombre)}" /></label>
       <label>Tipo de sangre
         <select name="tipoSangre" required>${bloodOptions(ficha?.tipoSangre || "")}</select>
       </label>
-      <label>Alergias<textarea name="alergias" rows="2" placeholder="Ej. Penicilina, mariscos…">${escapeAttr(ficha?.alergias || "")}</textarea></label>
-      <label>Condiciones médicas<textarea name="condiciones" rows="2" placeholder="Ej. Diabetes, hipertensión…">${escapeAttr(ficha?.condiciones || "")}</textarea></label>
-      <label>Medicamentos<textarea name="medicamentos" rows="2" placeholder="Ej. Metformina…">${escapeAttr(ficha?.medicamentos || "")}</textarea></label>
+      <label>¿Es alérgico a algún medicamento o alimento?
+        <textarea name="alergias" rows="2" placeholder="Ej. Penicilina, mariscos… Si no, indique Ninguna">${escapeAttr(ficha?.alergias || "")}</textarea>
+      </label>
+      <label>¿Padece usted alguna enfermedad de base como hipertensión arterial, diabetes mellitus u otra?
+        <textarea name="condiciones" rows="2" placeholder="Ej. Hipertensión, diabetes… Si no, indique Ninguna">${escapeAttr(ficha?.condiciones || "")}</textarea>
+      </label>
+      <label>¿Toma usted algún tipo de tratamiento actualmente para alguna enfermedad o suplementario?
+        <textarea name="medicamentos" rows="2" placeholder="Ej. Metformina, vitamina D… Si no, indique Ninguno">${escapeAttr(ficha?.medicamentos || "")}</textarea>
+      </label>
       <h3 class="home-section-title">Contactos de emergencia</h3>
       <div id="contacts-box">${contactRowsHtml(contacts)}</div>
       <button type="button" class="btn btn-ghost btn-sm" id="btn-add-contact">+ Otro contacto</button>
+      <label class="check-row disclaimer-check">
+        <input type="checkbox" name="declaracionFe" value="1" required ${ficha?.declaracionFe ? "checked" : ""} />
+        <span>Doy fe como usuario de esta tarjeta médica de emergencia que los datos aportados son reales y rellenados por mi persona.</span>
+      </label>
       <button type="submit" class="btn btn-primary">Guardar ficha</button>
     </form>
     <div id="ficha-actions" class="stack" style="margin-top:1rem" hidden>
       <p class="status-badge status-ok">Ficha lista</p>
       <p class="muted" id="ficha-url"></p>
       <img id="ficha-qr" alt="Código QR de emergencia" class="emergency-qr-img" width="220" height="220" />
-      <button type="button" class="btn btn-secondary" id="btn-dl-qr">Descargar QR</button>
-      <button type="button" class="btn btn-primary" id="btn-dl-wallpaper">Descargar fondo de pantalla (emergencia)</button>
+      <button type="button" class="btn btn-primary" id="btn-dl-pdf">Imprimir / PDF tarjeta (9×6 cm)</button>
+      <button type="button" class="btn btn-secondary" id="btn-dl-card">Descargar tarjeta PNG</button>
+      <button type="button" class="btn btn-ghost" id="btn-dl-qr">Descargar QR</button>
+      <button type="button" class="btn btn-ghost" id="btn-dl-wallpaper">Fondo de pantalla</button>
       <a class="btn btn-ghost" id="ficha-preview-link" href="#">Ver ficha pública</a>
     </div>
+    <dialog id="share-dialog">
+      <div class="form share-ficha-dialog">
+        <h2>¡Ficha guardada!</h2>
+        <p><strong>Compártela como publicación principal</strong> en Instagram o WhatsApp para que tu familia sepa escanear el QR en una emergencia.</p>
+        <img id="share-card-preview" alt="Vista previa tarjeta" class="share-card-preview" hidden />
+        <div class="stack">
+          <button type="button" class="btn btn-primary" id="btn-share-wa">Compartir en WhatsApp</button>
+          <button type="button" class="btn btn-secondary" id="btn-share-native">Compartir (Instagram / otras apps)</button>
+          <button type="button" class="btn btn-ghost" id="btn-share-pdf">Imprimir / PDF (9×6 cm)</button>
+          <button type="button" class="btn btn-ghost" id="btn-share-close">Cerrar</button>
+        </div>
+        <p class="muted" style="margin-top:0.75rem">En Instagram: descarga la tarjeta PNG y publícala como post principal o historia.</p>
+      </div>
+    </dialog>
   `;
 
   let contactCount = contacts.length;
@@ -119,6 +149,26 @@ async function mountFichaEditor(root: HTMLElement, cedula: string, nombre: strin
 
   let lastQr = "";
   let lastSaved: FichaEmergencia | null = null;
+  let lastCardBlob: Blob | null = null;
+
+  const shareDialog = root.querySelector("#share-dialog") as HTMLDialogElement;
+
+  async function prepareCard(saved: FichaEmergencia): Promise<Blob> {
+    lastCardBlob = await buildEmergencyCardBlob(saved);
+    const preview = root.querySelector("#share-card-preview") as HTMLImageElement;
+    preview.src = URL.createObjectURL(lastCardBlob);
+    preview.hidden = false;
+    return lastCardBlob;
+  }
+
+  async function openSharePrompt(saved: FichaEmergencia): Promise<void> {
+    try {
+      await prepareCard(saved);
+    } catch {
+      /* preview opcional */
+    }
+    shareDialog.showModal();
+  }
 
   root.querySelector("#btn-dl-qr")?.addEventListener("click", () => {
     if (!lastQr || !lastSaved) return;
@@ -138,6 +188,63 @@ async function mountFichaEditor(root: HTMLElement, cedula: string, nombre: strin
     }
   });
 
+  root.querySelector("#btn-dl-card")?.addEventListener("click", async () => {
+    if (!lastSaved) return;
+    try {
+      const blob = lastCardBlob ?? (await buildEmergencyCardBlob(lastSaved));
+      lastCardBlob = blob;
+      downloadBlob(blob, `tarjeta-emergencia-${lastSaved.publicId}.png`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "No se pudo generar la tarjeta");
+    }
+  });
+
+  root.querySelector("#btn-dl-pdf")?.addEventListener("click", async () => {
+    if (!lastSaved) return;
+    try {
+      await printEmergencyCardPdf(lastSaved);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "No se pudo abrir el PDF");
+    }
+  });
+
+  root.querySelector("#btn-share-wa")?.addEventListener("click", async () => {
+    if (!lastSaved) return;
+    const url = emergenciaPublicUrl(lastSaved.publicId);
+    const text =
+      `Mi tarjeta médica de emergencia (Clínicos Doc)\n` +
+      `${url}\n` +
+      `Compártela también como publicación principal en Instagram.`;
+    if (lastCardBlob) {
+      downloadBlob(lastCardBlob, `tarjeta-emergencia-${lastSaved.publicId}.png`);
+    }
+    shareTextWhatsApp(text);
+  });
+
+  root.querySelector("#btn-share-native")?.addEventListener("click", async () => {
+    if (!lastSaved) return;
+    try {
+      const blob = lastCardBlob ?? (await prepareCard(lastSaved));
+      const result = await shareEmergencyCard(lastSaved, blob);
+      if (result === "copied") {
+        alert("Texto copiado. En Instagram: descarga la tarjeta PNG y publícala como post principal.");
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "No se pudo compartir");
+    }
+  });
+
+  root.querySelector("#btn-share-pdf")?.addEventListener("click", async () => {
+    if (!lastSaved) return;
+    try {
+      await printEmergencyCardPdf(lastSaved);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "No se pudo abrir el PDF");
+    }
+  });
+
+  root.querySelector("#btn-share-close")?.addEventListener("click", () => shareDialog.close());
+
   async function refreshQrUi(saved: FichaEmergencia): Promise<void> {
     lastSaved = saved;
     const actions = root.querySelector("#ficha-actions") as HTMLElement;
@@ -154,6 +261,10 @@ async function mountFichaEditor(root: HTMLElement, cedula: string, nombre: strin
   root.querySelector("#ficha-form")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target as HTMLFormElement);
+    if (fd.get("declaracionFe") !== "1") {
+      alert("Debe marcar la declaración de veracidad de los datos.");
+      return;
+    }
     const contactos: EmergencyContact[] = [];
     for (let i = 0; i < 8; i++) {
       const n = String(fd.get(`cNombre${i}`) ?? "").trim();
@@ -175,10 +286,11 @@ async function mountFichaEditor(root: HTMLElement, cedula: string, nombre: strin
         medicamentos: String(fd.get("medicamentos")),
         contactos,
         existingPublicId: ficha?.publicId,
+        declaracionFe: true,
       });
       ficha = saved;
-      alert("Ficha guardada");
       await refreshQrUi(saved);
+      await openSharePrompt(saved);
     } catch (err) {
       alert(err instanceof Error ? err.message : "No se pudo guardar");
     }

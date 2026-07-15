@@ -26,6 +26,9 @@ object FirestorePaths {
      */
     const val GLOBAL_PATIENTS = "${PREFIX}patients"
 
+    /** Registro portal pacientes (modo paciente / ficha emergencia). */
+    const val PORTAL_PACIENTES = "pacientes"
+
     // Colecciones planas legadas (no usar en sync nuevo):
     const val DOCUMENTS = "${PREFIX}documents"
     const val APPOINTMENTS = "${PREFIX}appointments"
