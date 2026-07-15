@@ -1,6 +1,6 @@
 /** Persistencia local de plantillas, encabezados y documentos (paridad con la app). */
 import { DocumentTypeLabels, type ClinicalDocument, type ClinicalDraft, type DocumentHeader, type DocumentTemplate, type DocumentType } from "../shared/models";
-import { defaultSectionsFor } from "../shared/section-catalog";
+import { catalogFor, defaultSectionsFor } from "../shared/section-catalog";
 import { PhysicalExamDefaults } from "../shared/physical-exam-defaults";
 import { loadJson, saveJson } from "./local-store";
 import {
@@ -41,12 +41,23 @@ export function loadTemplates(): DocumentTemplate[] {
     saveJson(KEY_TEMPLATES, list);
     return list;
   }
-  // Asegura una plantilla por tipo
+  // Asegura una plantilla por tipo + secciones por defecto del informe
+  let changed = false;
   const ensured = DOC_TYPES.map((type) => {
     const ofType = list.filter((t) => t.documentType === type);
-    return ofType.find((t) => t.isDefault) ?? ofType[0] ?? makeDefaultTemplates().find((t) => t.documentType === type)!;
+    let tpl =
+      ofType.find((t) => t.isDefault) ?? ofType[0] ?? makeDefaultTemplates().find((t) => t.documentType === type)!;
+    if (type === "informe") {
+      const defaults = defaultSectionsFor("informe");
+      const merged = [...defaults, ...tpl.sections.filter((s) => !defaults.includes(s) && catalogFor("informe").includes(s))];
+      if (merged.length !== tpl.sections.length || merged.some((s, i) => s !== tpl.sections[i])) {
+        tpl = { ...tpl, sections: merged };
+        changed = true;
+      }
+    }
+    return tpl;
   });
-  if (ensured.length !== list.length || ensured.some((t, i) => t.id !== list[i]?.id)) {
+  if (changed || ensured.length !== list.length || ensured.some((t, i) => t.id !== list[i]?.id)) {
     saveJson(KEY_TEMPLATES, ensured);
   }
   return ensured;

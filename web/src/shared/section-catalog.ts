@@ -58,5 +58,6 @@ export function catalogFor(type: DocumentType): string[] {
 }
 
 export function defaultSectionsFor(type: DocumentType): string[] {
+  // Informe: todas las del catálogo marcadas por defecto
   return catalogFor(type);
 }

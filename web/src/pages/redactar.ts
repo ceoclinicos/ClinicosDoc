@@ -18,6 +18,15 @@ import {
   buildMembreteFromPatient,
   printClinicalDocument,
 } from "../services/document-pdf";
+import { parseDocumentSections, serializeDocumentSections } from "../services/document-parser";
+import {
+  applyVitalsToBody,
+  bodyWithoutVitals,
+  isPhysicalExamTitle,
+  parseVitalsFromBody,
+  readVitalsFromForm,
+  vitalSignsFieldsHtml,
+} from "../services/vital-signs";
 import { loadJson } from "../services/local-store";
 import { isSpeechSupported, startDictation } from "../services/speech";
 import { getProfessionalSession } from "../registro/session";
@@ -367,15 +376,8 @@ function mountRedactar(root: HTMLElement): void {
   function renderResultado(): void {
     const headers = loadHeaders();
     if (!selectedHeader) selectedHeader = defaultHeader();
-    const membrete = selectedPatient
-      ? buildMembreteFromPatient(selectedPatient)
-      : undefined;
-    const preview = buildFullDocumentHtml({
-      type: docType,
-      content: generatedContent,
-      header: selectedHeader,
-      membrete,
-    });
+
+    let sections = parseDocumentSections(generatedContent);
 
     const headerOpts = headers
       .map(
@@ -384,32 +386,72 @@ function mountRedactar(root: HTMLElement): void {
       )
       .join("");
 
+    const sectionsHtml = sections
+      .map((sec, i) => {
+        const isExam = isPhysicalExamTitle(sec.title);
+        const vitals = isExam ? parseVitalsFromBody(sec.body) : null;
+        const bodyText = isExam ? bodyWithoutVitals(sec.body) : sec.body;
+        return `
+          <div class="card-panel section-edit" data-sec-idx="${i}">
+            <label>Título de sección
+              <input type="text" class="sec-title" value="${escapeHtml(sec.title)}" placeholder="(sin título)" />
+            </label>
+            ${vitals ? vitalSignsFieldsHtml(vitals, `vs${i}`) : ""}
+            <label>${isExam ? "Resto del examen físico" : "Contenido"}
+              <textarea class="sec-body" rows="${isExam ? 8 : 5}">${escapeHtml(bodyText)}</textarea>
+            </label>
+          </div>`;
+      })
+      .join("");
+
     root.innerHTML = `
       <p class="step-badge">4 / 4 · Resultado</p>
       <p class="status-badge status-ok">${DocumentReportTitles[docType]} generado</p>
       <p class="muted">${escapeHtml(selectedPatient?.nombre ?? "")} · ${escapeHtml(selectedPatient?.cedula ?? "")}</p>
 
+      <div class="result-actions">
+        <button type="button" class="btn btn-primary" id="btn-save">Guardar</button>
+        <button type="button" class="btn btn-secondary" id="btn-print">Imprimir / PDF</button>
+        <button type="button" class="btn btn-ghost" id="btn-scroll-preview">Ver vista previa</button>
+      </div>
+
       <label>Encabezado
         <select id="header-select">${headerOpts || `<option value="">Sin encabezados — cree uno en Plantillas</option>`}</select>
       </label>
 
-      <div class="card-panel doc-live-preview" id="live-preview">${preview}</div>
+      <h2 class="home-section-title">Editar secciones</h2>
+      <div id="sections-editor" class="stack">${sectionsHtml}</div>
+      <button type="button" class="btn btn-ghost btn-sm" id="btn-add-section">+ Sección</button>
 
-      <label class="search-label">Contenido clínico (editable)
-        <textarea id="content-edit" rows="12">${escapeHtml(generatedContent)}</textarea>
-      </label>
+      <h2 class="home-section-title" id="preview-heading">Vista previa del documento</h2>
+      <div class="card-panel doc-live-preview" id="live-preview"></div>
 
-      <div class="stack" style="margin-top:1rem">
-        <button type="button" class="btn btn-primary" id="btn-save">Guardar documento</button>
-        <button type="button" class="btn btn-secondary" id="btn-print">Imprimir / PDF</button>
+      <div class="result-actions result-actions-bottom">
+        <button type="button" class="btn btn-primary" id="btn-save-2">Guardar documento</button>
+        <button type="button" class="btn btn-secondary" id="btn-print-2">Imprimir / PDF</button>
         <button type="button" class="btn btn-secondary" id="btn-copy">Copiar texto</button>
         <button type="button" class="btn btn-ghost" id="btn-edit">Editar dictado y regenerar</button>
         <button type="button" class="btn btn-ghost" data-nav="/informes">Ver informes</button>
       </div>
     `;
 
+    const collectContent = (): string => {
+      const boxes = Array.from(root.querySelectorAll(".section-edit")) as HTMLElement[];
+      sections = boxes.map((box, i) => {
+        const title = (box.querySelector(".sec-title") as HTMLInputElement).value.trim();
+        let body = (box.querySelector(".sec-body") as HTMLTextAreaElement).value;
+        if (isPhysicalExamTitle(title) || box.querySelector(".vitals-editor")) {
+          const vitals = readVitalsFromForm(box, `vs${i}`);
+          body = applyVitalsToBody(body, vitals);
+        }
+        return { id: sections[i]?.id ?? crypto.randomUUID(), title, body };
+      });
+      generatedContent = serializeDocumentSections(sections);
+      return generatedContent;
+    };
+
     const refreshPreview = () => {
-      generatedContent = (root.querySelector("#content-edit") as HTMLTextAreaElement).value;
+      collectContent();
       const box = root.querySelector("#live-preview") as HTMLElement;
       if (box) {
         box.innerHTML = buildFullDocumentHtml({
@@ -419,7 +461,10 @@ function mountRedactar(root: HTMLElement): void {
           membrete: selectedPatient ? buildMembreteFromPatient(selectedPatient) : undefined,
         });
       }
+      persistDraft();
     };
+
+    refreshPreview();
 
     root.querySelector("#header-select")?.addEventListener("change", (e) => {
       const id = (e.target as HTMLSelectElement).value;
@@ -427,21 +472,20 @@ function mountRedactar(root: HTMLElement): void {
       refreshPreview();
     });
 
-    root.querySelector("#content-edit")?.addEventListener("input", () => refreshPreview());
+    root.querySelector("#sections-editor")?.addEventListener("input", () => refreshPreview());
 
-    root.querySelector("#btn-copy")?.addEventListener("click", async () => {
-      refreshPreview();
-      await navigator.clipboard.writeText(generatedContent);
-      alert("Copiado al portapapeles");
+    root.querySelector("#btn-add-section")?.addEventListener("click", () => {
+      collectContent();
+      sections = [...sections, { id: crypto.randomUUID(), title: "", body: "" }];
+      generatedContent = serializeDocumentSections(sections);
+      renderResultado();
     });
 
-    root.querySelector("#btn-edit")?.addEventListener("click", () => {
-      refreshPreview();
-      step = "dictado";
-      render();
+    root.querySelector("#btn-scroll-preview")?.addEventListener("click", () => {
+      root.querySelector("#preview-heading")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
 
-    root.querySelector("#btn-print")?.addEventListener("click", () => {
+    const doPrint = () => {
       refreshPreview();
       if (!selectedPatient) return;
       printClinicalDocument({
@@ -451,9 +495,9 @@ function mountRedactar(root: HTMLElement): void {
         membrete: buildMembreteFromPatient(selectedPatient),
         patientNombre: selectedPatient.nombre,
       });
-    });
+    };
 
-    root.querySelector("#btn-save")?.addEventListener("click", () => {
+    const doSave = () => {
       if (!selectedPatient) return;
       refreshPreview();
       const membreteData = buildMembreteFromPatient(selectedPatient);
@@ -475,6 +519,23 @@ function mountRedactar(root: HTMLElement): void {
       deleteDraft(currentDraftId);
       alert("Documento guardado");
       navigate(`/informes/${doc.id}`);
+    };
+
+    root.querySelector("#btn-print")?.addEventListener("click", doPrint);
+    root.querySelector("#btn-print-2")?.addEventListener("click", doPrint);
+    root.querySelector("#btn-save")?.addEventListener("click", doSave);
+    root.querySelector("#btn-save-2")?.addEventListener("click", doSave);
+
+    root.querySelector("#btn-copy")?.addEventListener("click", async () => {
+      refreshPreview();
+      await navigator.clipboard.writeText(generatedContent);
+      alert("Copiado al portapapeles");
+    });
+
+    root.querySelector("#btn-edit")?.addEventListener("click", () => {
+      refreshPreview();
+      step = "dictado";
+      render();
     });
 
     bindNavButtons(root);

@@ -357,6 +357,17 @@ a {
   font-size: 0.9rem;
 }
 
+.form label.check-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 500;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
 .form input,
 .form textarea,
 .form select {
@@ -364,6 +375,19 @@ a {
   padding: 0.75rem;
   border: 1px solid var(--border);
   border-radius: 12px;
+}
+
+.form input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  min-width: 1.1rem;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 3px;
+  flex-shrink: 0;
+  accent-color: var(--teal);
+  cursor: pointer;
 }
 
 .form select,
@@ -579,9 +603,11 @@ dialog {
 
 .check-row {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.55rem;
   font-size: 0.95rem;
+  line-height: 1.3;
 }
 
 .step-badge {
@@ -644,6 +670,57 @@ dialog {
   font-family: inherit;
   margin: 0;
   font-size: 0.9rem;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg, #f5f7fa);
+  padding: 0.5rem 0;
+}
+
+.result-actions-bottom {
+  position: static;
+  margin-top: 1.25rem;
+  padding-bottom: 4.5rem;
+}
+
+.section-edit {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.vitals-editor {
+  display: grid;
+  gap: 0.65rem;
+  background: color-mix(in srgb, var(--teal) 6%, var(--card));
+}
+
+.vitals-title {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.vitals-ta-row {
+  display: flex;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.vitals-ta-row label {
+  flex: 1;
+}
+
+.vitals-slash {
+  font-weight: 700;
+  padding-bottom: 0.85rem;
+  color: var(--text-secondary);
 }
 
 @media (max-width: 520px) {

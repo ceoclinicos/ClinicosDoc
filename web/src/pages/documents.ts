@@ -13,6 +13,15 @@ import {
   buildFullDocumentHtml,
   printFromClinicalDocument,
 } from "../services/document-pdf";
+import { parseDocumentSections, serializeDocumentSections } from "../services/document-parser";
+import {
+  applyVitalsToBody,
+  bodyWithoutVitals,
+  isPhysicalExamTitle,
+  parseVitalsFromBody,
+  readVitalsFromForm,
+  vitalSignsFieldsHtml,
+} from "../services/vital-signs";
 import { bindNavButtons, emptyState, page } from "./helpers";
 
 function escapeHtml(s: string): string {
@@ -62,10 +71,36 @@ registerRoute({
       doc.headerSnapshot ||
       defaultHeader();
 
+    let sections = parseDocumentSections(doc.content);
+
+    const sectionsHtml = sections
+      .map((sec, i) => {
+        const isExam = isPhysicalExamTitle(sec.title);
+        const vitals = isExam ? parseVitalsFromBody(sec.body) : null;
+        const bodyText = isExam ? bodyWithoutVitals(sec.body) : sec.body;
+        return `
+          <div class="card-panel section-edit" data-sec-idx="${i}">
+            <label>Título de sección
+              <input type="text" class="sec-title" value="${escapeHtml(sec.title)}" placeholder="(sin título)" />
+            </label>
+            ${vitals ? vitalSignsFieldsHtml(vitals, `vs${i}`) : ""}
+            <label>${isExam ? "Resto del examen físico" : "Contenido"}
+              <textarea class="sec-body" rows="${isExam ? 8 : 5}">${escapeHtml(bodyText)}</textarea>
+            </label>
+          </div>`;
+      })
+      .join("");
+
     const el = page(
       DocumentReportTitles[doc.type],
       `
       <p class="muted">${escapeHtml(doc.patientNombre)} · C.I. ${escapeHtml(doc.patientCedula)} · ${new Date(doc.createdAt).toLocaleString("es")}</p>
+
+      <div class="result-actions">
+        <button type="button" class="btn btn-primary" id="btn-save">Guardar cambios</button>
+        <button type="button" class="btn btn-secondary" id="btn-print">Imprimir / PDF</button>
+        <button type="button" class="btn btn-ghost" id="btn-scroll-preview">Ver vista previa</button>
+      </div>
 
       <label>Encabezado
         <select id="header-select">
@@ -78,15 +113,15 @@ registerRoute({
         </select>
       </label>
 
+      <h2 class="home-section-title">Editar secciones</h2>
+      <div id="sections-editor" class="stack">${sectionsHtml}</div>
+
+      <h2 class="home-section-title" id="preview-heading">Vista previa del documento</h2>
       <div class="card-panel doc-live-preview" id="live-preview"></div>
 
-      <label class="search-label">Contenido (editable)
-        <textarea id="content-edit" rows="12">${escapeHtml(doc.content)}</textarea>
-      </label>
-
-      <div class="stack" style="margin-top:1rem">
-        <button type="button" class="btn btn-primary" id="btn-save">Guardar cambios</button>
-        <button type="button" class="btn btn-secondary" id="btn-print">Imprimir / PDF</button>
+      <div class="result-actions result-actions-bottom">
+        <button type="button" class="btn btn-primary" id="btn-save-2">Guardar cambios</button>
+        <button type="button" class="btn btn-secondary" id="btn-print-2">Imprimir / PDF</button>
         <button type="button" class="btn btn-secondary" id="btn-copy">Copiar texto</button>
         <button type="button" class="btn btn-ghost" data-nav="/informes">Volver</button>
         <button type="button" class="btn btn-ghost" id="btn-delete">Eliminar</button>
@@ -94,8 +129,21 @@ registerRoute({
       `,
     );
 
+    const collectContent = (): string => {
+      const boxes = Array.from(el.querySelectorAll(".section-edit")) as HTMLElement[];
+      sections = boxes.map((box, i) => {
+        const title = (box.querySelector(".sec-title") as HTMLInputElement).value.trim();
+        let body = (box.querySelector(".sec-body") as HTMLTextAreaElement).value;
+        if (isPhysicalExamTitle(title) || box.querySelector(".vitals-editor")) {
+          body = applyVitalsToBody(body, readVitalsFromForm(box, `vs${i}`));
+        }
+        return { id: sections[i]?.id ?? crypto.randomUUID(), title, body };
+      });
+      return serializeDocumentSections(sections);
+    };
+
     const refreshPreview = () => {
-      const content = (el.querySelector("#content-edit") as HTMLTextAreaElement).value;
+      const content = collectContent();
       const box = el.querySelector("#live-preview") as HTMLElement;
       box.innerHTML = buildFullDocumentHtml({
         type: doc!.type,
@@ -103,6 +151,7 @@ registerRoute({
         header: selectedHeader,
         membrete: doc!.membrete,
       });
+      return content;
     };
 
     refreshPreview();
@@ -113,10 +162,13 @@ registerRoute({
       refreshPreview();
     });
 
-    el.querySelector("#content-edit")?.addEventListener("input", () => refreshPreview());
+    el.querySelector("#sections-editor")?.addEventListener("input", () => refreshPreview());
+    el.querySelector("#btn-scroll-preview")?.addEventListener("click", () => {
+      el.querySelector("#preview-heading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
 
-    el.querySelector("#btn-save")?.addEventListener("click", () => {
-      const content = (el.querySelector("#content-edit") as HTMLTextAreaElement).value;
+    const doSave = () => {
+      const content = refreshPreview();
       const updated: ClinicalDocument = {
         ...doc!,
         content,
@@ -125,20 +177,24 @@ registerRoute({
       };
       doc = saveDocument(updated);
       alert("Cambios guardados");
-      refreshPreview();
-    });
+    };
 
-    el.querySelector("#btn-print")?.addEventListener("click", () => {
-      const content = (el.querySelector("#content-edit") as HTMLTextAreaElement).value;
+    const doPrint = () => {
+      const content = refreshPreview();
       printFromClinicalDocument({
         ...doc!,
         content,
         headerSnapshot: selectedHeader ?? doc!.headerSnapshot,
       });
-    });
+    };
+
+    el.querySelector("#btn-save")?.addEventListener("click", doSave);
+    el.querySelector("#btn-save-2")?.addEventListener("click", doSave);
+    el.querySelector("#btn-print")?.addEventListener("click", doPrint);
+    el.querySelector("#btn-print-2")?.addEventListener("click", doPrint);
 
     el.querySelector("#btn-copy")?.addEventListener("click", async () => {
-      const content = (el.querySelector("#content-edit") as HTMLTextAreaElement).value;
+      const content = refreshPreview();
       await navigator.clipboard.writeText(content);
       alert("Copiado");
     });

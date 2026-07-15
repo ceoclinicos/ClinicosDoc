@@ -112,13 +112,8 @@ object SectionCatalog {
             EXAMEN_FISICO,
             DIAGNOSTICO,
         )
-        DocumentType.INFORME -> listOf(
-            DATOS_PACIENTE,
-            MOTIVO_CONSULTA,
-            ENFERMEDAD_ACTUAL,
-            EXAMEN_FISICO,
-            DIAGNOSTICO,
-        )
+        // Informe: todas las del catálogo marcadas por defecto
+        DocumentType.INFORME -> catalogFor(DocumentType.INFORME)
         DocumentType.REPOSO -> listOf(
             DATOS_PACIENTE,
             DIAGNOSTICO,

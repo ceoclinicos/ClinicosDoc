@@ -14,7 +14,7 @@ object TemplateStorage {
     private const val KEY = "document_templates_json"
     private const val INITIALIZED_KEY = "templates_initialized"
     private const val HC_SECTIONS_VERSION_KEY = "hc_template_sections_version"
-    private const val HC_SECTIONS_VERSION = 7
+    private const val HC_SECTIONS_VERSION = 8
     const val MAX_PER_TYPE = 1
     private val gson = Gson()
 
