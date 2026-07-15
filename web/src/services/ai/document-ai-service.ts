@@ -1,6 +1,7 @@
 import { DocumentTypeLabels } from "../../shared/models";
 import type { DocumentTemplate, DocumentType, Patient } from "../../shared/models";
 import { SectionCatalog, defaultSectionsFor } from "../../shared/section-catalog";
+import { ensureTemplateSections } from "../ensure-sections";
 import { sendPrompt } from "./ai-service";
 import { sanitizeDocumentContent } from "./document-sanitizer";
 import { buildPhysicalExamBlock } from "./physical-exam-prompt";
@@ -22,32 +23,7 @@ export function defaultTemplateFor(type: DocumentType): DocumentTemplate {
   };
 }
 
-export async function generateDocument(options: {
-  template: DocumentTemplate;
-  patient: Patient;
-  doctor: DoctorInfo;
-  dictation: string;
-}): Promise<string> {
-  const { template, patient, doctor, dictation } = options;
-  const physicalExamBlock = buildPhysicalExamBlock(template);
-
-  const system = `
-Eres un asistente médico que redacta y mejora documentos clínicos en español.
-Tu trabajo es transformar el dictado del médico en un texto profesional, claro y legible.
-Corrige ortografía, gramática y puntuación.
-Convierte expresiones coloquiales a terminología médica equivalente, sin cambiar el significado clínico.
-Organiza el contenido en párrafos fluidos y coherentes.
-No inventes hallazgos clínicos patológicos que contradigan el dictado.
-En INFORME MÉDICO / HISTORIA: el examen físico DEBE incluir TODOS los sistemas activos de la plantilla.
-En HISTORIA CLÍNICA: respeta el orden de secciones de la plantilla; antecedentes negativos con "Niega..."; datos no mencionados con texto predeterminado.
-Usa terminología médica apropiada para Venezuela/Latinoamérica.`.trim();
-
-  const prompt = buildPrompt(template, patient, doctor, dictation, physicalExamBlock);
-  const raw = await sendPrompt({ prompt, systemMessage: system, maxTokens: 4096 });
-  return sanitizeDocumentContent(raw);
-}
-
-function clinicalSections(template: DocumentTemplate): string[] {
+export function clinicalSectionsOf(template: DocumentTemplate): string[] {
   const secs = template.sections.filter(
     (s) => s.toLowerCase() !== SectionCatalog.DATOS_PACIENTE.toLowerCase(),
   );
@@ -65,12 +41,40 @@ function clinicalSections(template: DocumentTemplate): string[] {
   );
 }
 
+export async function generateDocument(options: {
+  template: DocumentTemplate;
+  patient: Patient;
+  doctor: DoctorInfo;
+  dictation: string;
+}): Promise<string> {
+  const { template, patient, doctor, dictation } = options;
+  const physicalExamBlock = buildPhysicalExamBlock(template);
+  const effective = clinicalSectionsOf(template);
+
+  const system = `
+Eres un asistente médico que redacta y mejora documentos clínicos en español.
+Tu trabajo es transformar el dictado del médico en un texto profesional, claro y legible.
+Corrige ortografía, gramática y puntuación.
+Convierte expresiones coloquiales a terminología médica equivalente, sin cambiar el significado clínico.
+Organiza el contenido en párrafos fluidos y coherentes.
+No inventes hallazgos clínicos patológicos que contradigan el dictado.
+OBLIGATORIO: cada sección empieza con una línea exacta [[SECTION:Nombre]] (sin excepciones).
+PROHIBIDO empezar con un párrafo sin marcador [[SECTION:]].
+Usa terminología médica apropiada para Venezuela/Latinoamérica.`.trim();
+
+  const prompt = buildPrompt(template, patient, doctor, dictation, physicalExamBlock, effective);
+  const raw = await sendPrompt({ prompt, systemMessage: system, maxTokens: 4096 });
+  const sanitized = sanitizeDocumentContent(raw);
+  return ensureTemplateSections(sanitized, effective);
+}
+
 function buildPrompt(
   template: DocumentTemplate,
   patient: Patient,
   doctor: DoctorInfo,
   dictation: string,
   physicalExamBlock: string,
+  effective: string[],
 ): string {
   const typeLabel = DocumentTypeLabels[template.documentType];
   const lines: string[] = [
@@ -92,53 +96,49 @@ function buildPrompt(
     "1. Mejora la redacción del dictado: corrige errores, ordena ideas y usa lenguaje médico apropiado.",
     "2. NO incluyas título del documento (INFORME MÉDICO, HISTORIA CLÍNICA, REPOSO MÉDICO).",
     "3. NO incluyas encabezado institucional ni identificación del paciente.",
-    "4. NO incluyas sección \"Datos del paciente\".",
-    "5. Responde SOLO con el cuerpo clínico redactado.",
+    "4. NO incluyas sección \"Datos del paciente\" (van en el membrete de la app).",
+    "5. Responde SOLO con el cuerpo clínico.",
+    "6. La PRIMERA línea de la respuesta DEBE ser [[SECTION:…]] de la primera sección listada.",
+    "7. Genera EXACTAMENTE una sección por cada ítem listado, en ese orden, con el nombre EXACTO.",
+    "8. PROHIBIDO párrafos o bloques sin [[SECTION:Nombre]].",
+    "",
+  ];
+
+  const sectionList = [
+    "Secciones de la plantilla (orden obligatorio — no omitas ninguna):",
+    ...effective.map((s, i) => `${i + 1}. [[SECTION:${s}]]`),
     "",
   ];
 
   if (template.documentType === "historiaClinica") {
-    const effective = clinicalSections(template);
     lines.push(
-      "Para HISTORIA CLÍNICA ignora detección libre de secciones.",
-      "Genera UNA sección por cada ítem de la plantilla, en el orden exacto indicado.",
-      "Formato: línea [[SECTION:Nombre exacto]] y contenido debajo.",
-      "PROHIBIDO usar ** para títulos.",
+      "Para HISTORIA CLÍNICA:",
+      "Formato: línea [[SECTION:Nombre exacto]] y contenido debajo. PROHIBIDO usar **.",
       "",
-      "Secciones de la plantilla (orden obligatorio):",
-      ...effective.map((s) => `- ${s}`),
-      "",
+      ...sectionList,
       sectionDefaultsPromptBlock(effective),
     );
     if (physicalExamBlock) lines.push("", physicalExamBlock);
   } else if (template.documentType === "informe") {
-    const effective = clinicalSections(template);
     const sexoTexto = sexoLabel(patient.sexo);
     lines.push(
-      "Para INFORME MÉDICO ignora la detección libre de secciones.",
-      "El encabezado institucional lo coloca la app; tú generas SOLO el cuerpo.",
-      "Genera UNA sección por cada ítem de la plantilla, en el orden exacto indicado.",
+      "Para INFORME MÉDICO:",
       "Formato: línea [[SECTION:Nombre exacto]] y contenido debajo. PROHIBIDO usar **.",
-      'NO incluyas "Datos del paciente" ni nombre/cédula.',
       "",
-      "Secciones de la plantilla (orden obligatorio):",
-      ...effective.map((s) => `- ${s}`),
-      "",
+      ...sectionList,
       "Guía de estilo:",
       MOTIVO_CONSULTA_STYLE,
-      `- Enfermedad actual: párrafo narrativo. Inicia "Se trata de paciente ${sexoTexto} de ${patient.edad} años de edad..."; motivo, síntomas y conducta SOLO según el dictado.`,
+      `- Enfermedad actual: párrafo narrativo. Inicia "Se trata de paciente ${sexoTexto} de ${patient.edad} años de edad..."; motivo, síntomas y conducta SOLO según el dictado. DEBE ir bajo [[SECTION:Enfermedad actual]], NUNCA sin título.`,
       "- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto.",
-      "- Primera línea del examen físico: TA: [---] mmHg | FR: [---] rpm | FC: [---] lpm | SaTO2: [---]%",
+      "- Primera línea del examen físico: TA: --- mmHg | FR: --- rpm | FC: --- lpm | SaTO2: ---%  (usa --- solo si no hay dato; no pongas corchetes).",
       "- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.",
       "",
       sectionDefaultsPromptBlock(effective),
     );
     if (physicalExamBlock) lines.push("", physicalExamBlock);
   } else {
-    const effective = clinicalSections(template);
     lines.push(
-      "Secciones en orden:",
-      ...effective.map((s) => `- ${s}`),
+      ...sectionList,
       "Formato: línea [[SECTION:Nombre exacto]] y contenido debajo.",
       "",
       sectionDefaultsPromptBlock(effective),

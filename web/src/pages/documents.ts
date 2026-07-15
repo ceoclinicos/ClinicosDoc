@@ -80,13 +80,15 @@ registerRoute({
         const bodyText = isExam ? bodyWithoutVitals(sec.body) : sec.body;
         return `
           <div class="card-panel section-edit" data-sec-idx="${i}">
-            <label>Título de sección
+            <div class="field">
+              <span class="field-label">Título de sección</span>
               <input type="text" class="sec-title" value="${escapeHtml(sec.title)}" placeholder="(sin título)" />
-            </label>
+            </div>
             ${vitals ? vitalSignsFieldsHtml(vitals, `vs${i}`) : ""}
-            <label>${isExam ? "Resto del examen físico" : "Contenido"}
+            <div class="field">
+              <span class="field-label">${isExam ? "Resto del examen físico" : "Contenido"}</span>
               <textarea class="sec-body" rows="${isExam ? 8 : 5}">${escapeHtml(bodyText)}</textarea>
-            </label>
+            </div>
           </div>`;
       })
       .join("");
@@ -99,10 +101,11 @@ registerRoute({
       <div class="result-actions">
         <button type="button" class="btn btn-primary" id="btn-save">Guardar cambios</button>
         <button type="button" class="btn btn-secondary" id="btn-print">Imprimir / PDF</button>
-        <button type="button" class="btn btn-ghost" id="btn-scroll-preview">Ver vista previa</button>
+        <button type="button" class="btn btn-ghost" id="btn-scroll-preview">Vista previa</button>
       </div>
 
-      <label>Encabezado
+      <div class="field">
+        <span class="field-label">Encabezado</span>
         <select id="header-select">
           ${headers
             .map(
@@ -111,13 +114,15 @@ registerRoute({
             )
             .join("")}
         </select>
-      </label>
+      </div>
 
       <h2 class="home-section-title">Editar secciones</h2>
       <div id="sections-editor" class="stack">${sectionsHtml}</div>
 
-      <h2 class="home-section-title" id="preview-heading">Vista previa del documento</h2>
-      <div class="card-panel doc-live-preview" id="live-preview"></div>
+      <h2 class="home-section-title" id="preview-heading">Vista previa (hoja)</h2>
+      <div class="doc-paper-wrap">
+        <div class="doc-paper doc-live-preview" id="live-preview"></div>
+      </div>
 
       <div class="result-actions result-actions-bottom">
         <button type="button" class="btn btn-primary" id="btn-save-2">Guardar cambios</button>

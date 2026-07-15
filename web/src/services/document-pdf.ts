@@ -47,11 +47,11 @@ export function renderHeaderHtml(header?: DocumentHeader | null): string {
 export function renderMembreteHtml(m?: PatientMembrete | null): string {
   if (!m) return "";
   return `
+    <div class="print-date-row">${escapeHtml(m.fecha || "")}</div>
     <section class="print-membrete">
       <div><strong>Paciente:</strong> ${escapeHtml(m.nombre)}</div>
       <div><strong>Edad:</strong> ${escapeHtml(m.edad)} años · <strong>Sexo:</strong> ${escapeHtml(m.sexo)}</div>
       <div><strong>Fecha de nacimiento:</strong> ${escapeHtml(m.fechaNacimiento)}</div>
-      <div><strong>Fecha:</strong> ${escapeHtml(m.fecha)}</div>
     </section>
   `;
 }
@@ -107,17 +107,20 @@ export function printClinicalDocument(doc: {
   <meta charset="utf-8" />
   <title>${DocumentReportTitles[doc.type]} — ${doc.patientNombre || "Clínicos Doc"}</title>
   <style>
-    body { font-family: Georgia, "Times New Roman", serif; color: #0b1f33; margin: 24px; line-height: 1.45; }
-    .print-header { text-align: center; margin-bottom: 1rem; }
-    .print-header-name { font-size: 1.25rem; font-weight: 700; color: #0d9488; }
-    .print-header-sub { font-size: 0.95rem; color: #334155; }
-    .print-header-desc { font-size: 0.85rem; color: #64748b; white-space: pre-wrap; }
-    .print-title { text-align: center; font-size: 1.15rem; letter-spacing: 0.04em; margin: 1rem 0; }
-    .print-membrete { font-size: 0.95rem; margin: 0.75rem 0 1rem; }
-    .print-rule { border: 0; border-top: 1px solid #cbd5e1; margin: 1rem 0; }
-    .print-section h3 { font-size: 1rem; margin: 1rem 0 0.35rem; color: #0f766e; }
-    .print-body { white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 0.95rem; }
-    @media print { body { margin: 12mm; } }
+    @page { size: A4; margin: 16mm; }
+    body { font-family: "Times New Roman", Times, Georgia, serif; color: #111; margin: 0; line-height: 1.45; background: #fff; }
+    .print-doc { max-width: 180mm; margin: 0 auto; padding: 12mm 14mm; }
+    .print-header { text-align: center; margin-bottom: 0.75rem; }
+    .print-header-name { font-size: 13pt; font-weight: 700; color: #111; }
+    .print-header-sub { font-size: 11pt; color: #222; }
+    .print-header-desc { font-size: 10pt; color: #444; white-space: pre-wrap; }
+    .print-date-row { text-align: right; font-size: 10.5pt; margin-bottom: 0.5rem; }
+    .print-title { text-align: center; font-size: 13pt; letter-spacing: 0.03em; margin: 0.75rem 0 1rem; font-weight: 700; }
+    .print-membrete { font-size: 10.5pt; margin: 0.5rem 0 0.75rem; }
+    .print-rule { border: 0; border-top: 1px solid #999; margin: 0.75rem 0 1rem; }
+    .print-section h3 { font-size: 11pt; margin: 0.9rem 0 0.25rem; color: #111; font-weight: 700; }
+    .print-body { white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 11pt; }
+    @media print { body { margin: 0; } .print-doc { padding: 0; max-width: none; } }
   </style>
 </head>
 <body>${html}

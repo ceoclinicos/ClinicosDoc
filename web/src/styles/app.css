@@ -619,50 +619,79 @@ dialog {
 }
 
 .doc-live-preview {
-  margin: 0.75rem 0 1rem;
+  margin: 0;
   background: #fff;
-  color: #0b1f33;
+  color: #111;
+}
+
+.doc-paper-wrap {
+  background: #d8dee6;
+  border-radius: 12px;
+  padding: 1rem;
+  margin: 0.75rem 0 1.25rem;
+  overflow-x: auto;
+}
+
+.doc-paper {
+  background: #fff;
+  width: min(100%, 210mm);
+  min-height: 260px;
+  margin: 0 auto;
+  padding: 14mm 12mm;
+  box-shadow: 0 8px 28px rgba(11, 31, 51, 0.18);
+  border: 1px solid #c5ced8;
+  font-family: "Times New Roman", Times, Georgia, serif;
+  line-height: 1.45;
 }
 
 .doc-live-preview .print-header {
   text-align: center;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.65rem;
 }
 
 .doc-live-preview .print-header-name {
   font-weight: 700;
-  color: var(--teal);
-  font-size: 1.1rem;
+  color: #111;
+  font-size: 1.05rem;
 }
 
 .doc-live-preview .print-header-sub,
 .doc-live-preview .print-header-desc {
-  color: var(--text-secondary);
+  color: #333;
+  font-size: 0.88rem;
+}
+
+.doc-live-preview .print-date-row {
+  text-align: right;
   font-size: 0.85rem;
+  margin-bottom: 0.35rem;
 }
 
 .doc-live-preview .print-title {
   text-align: center;
-  font-size: 1.05rem;
+  font-size: 1rem;
   letter-spacing: 0.03em;
-  margin: 0.75rem 0;
+  margin: 0.65rem 0 0.85rem;
+  font-weight: 700;
+  color: #111;
 }
 
 .doc-live-preview .print-membrete {
-  font-size: 0.9rem;
-  margin-bottom: 0.75rem;
+  font-size: 0.88rem;
+  margin-bottom: 0.65rem;
 }
 
 .doc-live-preview .print-rule {
   border: 0;
-  border-top: 1px solid var(--border);
-  margin: 0.75rem 0;
+  border-top: 1px solid #999;
+  margin: 0.65rem 0 0.85rem;
 }
 
 .doc-live-preview .print-section h3 {
   font-size: 0.95rem;
-  color: var(--teal);
+  color: #111;
   margin: 0.85rem 0 0.25rem;
+  font-weight: 700;
 }
 
 .doc-live-preview .print-body {
@@ -670,6 +699,36 @@ dialog {
   font-family: inherit;
   margin: 0;
   font-size: 0.9rem;
+  color: #111;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.field-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #5c6b7a);
+}
+
+.field input,
+.field textarea,
+.field select,
+.section-edit .sec-title,
+.section-edit .sec-body,
+.vitals-editor input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card, #fff);
 }
 
 .result-actions {
@@ -691,39 +750,55 @@ dialog {
 }
 
 .section-edit {
-  display: grid;
-  gap: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
 }
 
 .vitals-editor {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0.65rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   background: color-mix(in srgb, var(--teal) 6%, var(--card));
 }
 
 .vitals-title {
   margin: 0;
   font-size: 0.9rem;
-  color: var(--text-secondary);
-}
-
-.vitals-ta-row {
-  display: flex;
-  align-items: end;
-  gap: 0.5rem;
-}
-
-.vitals-ta-row label {
-  flex: 1;
-}
-
-.vitals-slash {
   font-weight: 700;
-  padding-bottom: 0.85rem;
-  color: var(--text-secondary);
+  color: var(--navy, #0b1f33);
+}
+
+.vitals-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem 0.75rem;
+}
+
+.vitals-sato2 {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 520px) {
+  .vitals-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vitals-sato2 {
+    grid-column: auto;
+  }
+
+  .doc-paper-wrap {
+    padding: 0.65rem;
+  }
+
+  .doc-paper {
+    padding: 10mm 8mm;
+  }
+
   .home-redactar-hero {
     flex-direction: column;
     align-items: stretch;

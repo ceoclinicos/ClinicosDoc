@@ -12,10 +12,19 @@ export function emptyVitals(): VitalSigns {
   return { tas: "", tad: "", fr: "", fc: "", sato2: "" };
 }
 
+function cleanVitalToken(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^\[|]$/g, "")
+    .replace(/—/g, "-")
+    .trim();
+}
+
 function isPresent(value: string): boolean {
-  const v = value.trim();
+  const v = cleanVitalToken(value);
   if (!v) return false;
-  if (v === "0" || v === "0.0" || v === "0/0" || v.toLowerCase() === "---") return false;
+  if (v === "0" || v === "0.0" || v === "0/0") return false;
+  if (/^-+$/.test(v) || v === "---" || v.toLowerCase() === "n/a") return false;
   return true;
 }
 
@@ -47,10 +56,22 @@ export function isPhysicalExamTitle(title: string): boolean {
 }
 
 function fromTaCombined(ta: string): { tas: string; tad: string } {
-  const parts = ta.trim().split("/", 2);
-  if (parts.length >= 2) return { tas: parts[0].trim(), tad: parts[1].trim() };
-  if (ta.trim()) return { tas: ta.trim(), tad: "" };
-  return { tas: "", tad: "" };
+  const cleaned = cleanVitalToken(ta);
+  if (!isPresent(cleaned)) return { tas: "", tad: "" };
+  const parts = cleaned.split("/", 2);
+  if (parts.length >= 2) {
+    return {
+      tas: isPresent(parts[0]) ? parts[0].trim() : "",
+      tad: isPresent(parts[1]) ? parts[1].trim() : "",
+    };
+  }
+  return { tas: cleaned, tad: "" };
+}
+
+function tokenOrEmpty(raw: string | undefined): string {
+  if (!raw) return "";
+  const v = cleanVitalToken(raw);
+  return isPresent(v) ? v : "";
 }
 
 export function parseVitalsFromBody(body: string): VitalSigns {
@@ -60,9 +81,9 @@ export function parseVitalsFromBody(body: string): VitalSigns {
   return {
     tas: ta.tas,
     tad: ta.tad,
-    fr: frRegex.exec(firstLine)?.[1] ?? "",
-    fc: fcRegex.exec(firstLine)?.[1] ?? "",
-    sato2: sato2Regex.exec(firstLine)?.[1] ?? "",
+    fr: tokenOrEmpty(frRegex.exec(firstLine)?.[1]),
+    fc: tokenOrEmpty(fcRegex.exec(firstLine)?.[1]),
+    sato2: tokenOrEmpty(sato2Regex.exec(firstLine)?.[1]),
   };
 }
 
@@ -94,19 +115,33 @@ export function applyVitalsToBody(body: string, vitals: VitalSigns): string {
   return lines.join("\n");
 }
 
-/** HTML de inputs ordenados: TAS/TAD → FR → FC → SaTO2 */
+/** HTML de inputs ordenados: TAS/TAD → FR | FC → SaTO2 */
 export function vitalSignsFieldsHtml(vitals: VitalSigns, prefix = "vs"): string {
   return `
-    <div class="vitals-editor card-panel">
-      <p class="vitals-title"><strong>Signos vitales</strong></p>
-      <div class="vitals-ta-row">
-        <label>TAS (mmHg)<input type="text" inputmode="decimal" name="${prefix}-tas" value="${escapeAttr(vitals.tas)}" maxlength="8" /></label>
-        <span class="vitals-slash">/</span>
-        <label>TAD (mmHg)<input type="text" inputmode="decimal" name="${prefix}-tad" value="${escapeAttr(vitals.tad)}" maxlength="8" /></label>
+    <div class="vitals-editor">
+      <p class="vitals-title">Signos vitales</p>
+      <div class="vitals-grid">
+        <div class="field">
+          <span class="field-label">TAS (mmHg)</span>
+          <input type="text" inputmode="decimal" name="${prefix}-tas" value="${escapeAttr(vitals.tas)}" maxlength="8" placeholder="ej. 120" />
+        </div>
+        <div class="field">
+          <span class="field-label">TAD (mmHg)</span>
+          <input type="text" inputmode="decimal" name="${prefix}-tad" value="${escapeAttr(vitals.tad)}" maxlength="8" placeholder="ej. 80" />
+        </div>
+        <div class="field">
+          <span class="field-label">FR (rpm)</span>
+          <input type="text" inputmode="decimal" name="${prefix}-fr" value="${escapeAttr(vitals.fr)}" maxlength="8" placeholder="ej. 16" />
+        </div>
+        <div class="field">
+          <span class="field-label">FC (lpm)</span>
+          <input type="text" inputmode="decimal" name="${prefix}-fc" value="${escapeAttr(vitals.fc)}" maxlength="8" placeholder="ej. 78" />
+        </div>
+        <div class="field vitals-sato2">
+          <span class="field-label">SaTO2 (%)</span>
+          <input type="text" inputmode="decimal" name="${prefix}-sato2" value="${escapeAttr(vitals.sato2)}" maxlength="8" placeholder="ej. 98" />
+        </div>
       </div>
-      <label>FR (rpm)<input type="text" inputmode="decimal" name="${prefix}-fr" value="${escapeAttr(vitals.fr)}" maxlength="8" /></label>
-      <label>FC (lpm)<input type="text" inputmode="decimal" name="${prefix}-fc" value="${escapeAttr(vitals.fc)}" maxlength="8" /></label>
-      <label>SaTO2 (%)<input type="text" inputmode="decimal" name="${prefix}-sato2" value="${escapeAttr(vitals.sato2)}" maxlength="8" /></label>
     </div>
   `;
 }
