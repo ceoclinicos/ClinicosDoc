@@ -1,6 +1,7 @@
 package com.ceoclinicos.clinicosdoc.util
 
 import com.ceoclinicos.clinicosdoc.model.PhysicalExamDefaults
+import com.ceoclinicos.clinicosdoc.model.PhysicalExamSystem
 
 private val SECTION_START = Regex("""(?m)^\*\*(.+?)\*\*:?\s*$""")
 private val PATIENT_LINE = Regex("""(?i)^(nombre|edad|sexo|fecha(\s+de\s+nacimiento)?)\s*:""")
@@ -13,20 +14,26 @@ private val SYSTEM_LINE_START = Regex(
     """(?i)^(signos\s+vitales|general|piel|cabeza(\s+y\s+|\s*/\s*)?cuello|cardiopulmonar|abdomen|extremidades|neurol[oó]gico)\s*[:\-]?\s*""",
 )
 
-fun sanitizeDocumentContent(content: String): String {
+fun sanitizeDocumentContent(
+    content: String,
+    examSystems: List<PhysicalExamSystem> = emptyList(),
+): String {
     val trimmed = content.trim()
     val withoutPatientSection = removePatientDataSection(trimmed)
     val withoutPatientLines = removeLeadingPatientLines(withoutPatientSection)
     val withoutTitles = removeDuplicateDocumentTitles(withoutPatientLines).trim()
     val withoutZeroVitals = stripAbsentVitalSigns(withoutTitles)
-    val orderedExam = reorderPhysicalExamSystems(withoutZeroVitals)
+    val orderedExam = reorderPhysicalExamSystems(withoutZeroVitals, examSystems)
     return normalizeSectionMarkdown(orderedExam)
 }
 
-/** Reordena líneas del examen físico al orden clínico (piel → cabeza/cuello → cardio…). */
-private fun reorderPhysicalExamSystems(content: String): String {
+/** Reordena líneas del examen físico al orden del catálogo/plantilla (↑↓). */
+private fun reorderPhysicalExamSystems(
+    content: String,
+    examSystems: List<PhysicalExamSystem>,
+): String {
     if (!content.contains("[[SECTION:")) {
-        return reorderExamBodyLines(content)
+        return reorderExamBodyLines(content, examSystems)
     }
     val chunks = content.split(Regex("""(?=\[\[SECTION:[^\]]+]])"""))
         .map { it.trim() }
@@ -39,13 +46,52 @@ private fun reorderPhysicalExamSystems(content: String): String {
         if (!EXAMEN_FISICO_SECTION.matches(title)) return@joinToString chunk
         val header = first
         val body = lines.drop(1).joinToString("\n")
-        "$header\n${reorderExamBodyLines(body)}".trim()
+        "$header\n${reorderExamBodyLines(body, examSystems)}".trim()
     }
 }
 
-private fun reorderExamBodyLines(body: String): String {
+private fun normalizeSystemKey(name: String): String {
+    val n = name.trim().lowercase()
+    return when {
+        n.startsWith("signos") -> "signos"
+        n.startsWith("general") -> "general"
+        n.startsWith("piel") -> "piel"
+        n.startsWith("cabeza") -> "cabeza"
+        n.startsWith("cardiopulmonar") || n.startsWith("cardio") -> "cardio"
+        n.startsWith("abdomen") -> "abdomen"
+        n.startsWith("extremidades") -> "extremidades"
+        n.startsWith("neurol") -> "neurologico"
+        else -> n
+    }
+}
+
+private fun systemPriority(name: String, examSystems: List<PhysicalExamSystem>): Int {
+    if (examSystems.isNotEmpty()) {
+        val key = normalizeSystemKey(name)
+        val idx = examSystems.indexOfFirst { normalizeSystemKey(it.name) == key }
+        if (idx >= 0) return idx
+        return 1000 + PhysicalExamDefaults.priorityForName(name)
+    }
+    return PhysicalExamDefaults.priorityForName(name)
+}
+
+private fun matchSystemName(line: String, examSystems: List<PhysicalExamSystem>): String? {
+    SYSTEM_LINE_START.find(line)?.groupValues?.getOrNull(1)?.let { return it }
+    for (system in examSystems) {
+        val escaped = Regex.escape(system.name)
+        if (Regex("""(?i)^$escaped\s*[:\-]?\s*""").containsMatchIn(line)) {
+            return system.name
+        }
+    }
+    return null
+}
+
+private fun reorderExamBodyLines(
+    body: String,
+    examSystems: List<PhysicalExamSystem>,
+): String {
     val lines = body.lines()
-    if (lines.none { SYSTEM_LINE_START.containsMatchIn(it.trim()) }) return body
+    if (lines.none { matchSystemName(it.trim(), examSystems) != null }) return body
 
     data class Block(val priority: Int, val text: String)
 
@@ -62,10 +108,10 @@ private fun reorderExamBodyLines(body: String): String {
 
     for (line in lines) {
         val trimmed = line.trim()
-        val match = SYSTEM_LINE_START.find(trimmed)
-        if (match != null) {
+        val matched = matchSystemName(trimmed, examSystems)
+        if (matched != null) {
             flush()
-            currentPriority = PhysicalExamDefaults.priorityForName(match.groupValues[1])
+            currentPriority = systemPriority(matched, examSystems)
             current = mutableListOf(line)
         } else if (current != null) {
             current!!.add(line)
@@ -99,7 +145,6 @@ private fun stripAbsentVitalSigns(content: String): String {
             fc = Regex("""(?i)FC:\s*([^\s|]+)\s*lpm""").find(line)?.groupValues?.getOrNull(1).orEmpty(),
             sato2 = Regex("""(?i)SaTO2:\s*([^\s|]+)\s*%""").find(line)?.groupValues?.getOrNull(1).orEmpty(),
         )
-        // Solo reescribir si la línea parece de signos vitales (más de un signo o uno solo con unidades).
         if (!vitals.hasAnyValue() && Regex("""(?i)(mmHg|rpm|lpm|SaTO2)""").containsMatchIn(line)) {
             return@joinToString ""
         }

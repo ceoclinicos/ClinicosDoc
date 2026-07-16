@@ -20,16 +20,8 @@ object PhysicalExamDefaults {
         "neurologico" to 7,
     )
 
-    /** Reordena IDs activos al orden clínico fijo (ignora el orden de activación). */
-    fun orderEnabledIds(ids: List<String>): List<String> {
-        val unique = ids.distinct()
-        return unique.sortedWith(
-            compareBy(
-                { displayPriority[it] ?: 100 },
-                { it },
-            ),
-        )
-    }
+    /** Conserva el orden recibido (plantilla/catálogo). Solo elimina duplicados. */
+    fun orderEnabledIds(ids: List<String>): List<String> = ids.distinct()
 
     fun priorityForName(name: String): Int {
         val n = name.trim().lowercase()

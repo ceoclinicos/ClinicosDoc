@@ -26,6 +26,13 @@ function persistCatalog(systems: PhysicalExamSystem[]): PhysicalExamSystem[] {
   return ordered;
 }
 
+/** Persiste el orden actual del array (sin reordenar por sortOrder viejo). */
+function persistInArrayOrder(systems: PhysicalExamSystem[]): PhysicalExamSystem[] {
+  const renumbered = systems.map((s, i) => ({ ...s, sortOrder: i }));
+  saveJson(KEY, renumbered);
+  return renumbered;
+}
+
 export function orderEnabledByCatalog(ids: string[], catalog: PhysicalExamSystem[]): string[] {
   const set = new Set(ids);
   const known = clinicalOrder(catalog)
@@ -42,7 +49,9 @@ export function moveExamSystem(id: string, delta: number): PhysicalExamSystem[] 
   if (idx < 0 || swap < 0 || swap >= ordered.length) return ordered;
   const next = [...ordered];
   [next[idx], next[swap]] = [next[swap], next[idx]];
-  return persistCatalog(next);
+  // Importante: renumerar en el orden del swap; no volver a clinicalOrder()
+  // con sortOrder antiguos (eso deshacía el movimiento).
+  return persistInArrayOrder(next);
 }
 
 export function upsertExamSystem(system: PhysicalExamSystem): PhysicalExamSystem[] {
@@ -156,6 +165,8 @@ export function bindExamSystemsEditor(
     container.querySelectorAll("[data-up]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.preventDefault();
+        e.stopPropagation();
+        if ((btn as HTMLButtonElement).disabled) return;
         const id = (btn as HTMLElement).closest("[data-id]")?.getAttribute("data-id");
         if (!id) return;
         catalog = moveExamSystem(id, -1);
@@ -167,6 +178,8 @@ export function bindExamSystemsEditor(
     container.querySelectorAll("[data-down]").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.preventDefault();
+        e.stopPropagation();
+        if ((btn as HTMLButtonElement).disabled) return;
         const id = (btn as HTMLElement).closest("[data-id]")?.getAttribute("data-id");
         if (!id) return;
         catalog = moveExamSystem(id, +1);

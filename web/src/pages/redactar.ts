@@ -257,8 +257,8 @@ function mountRedactar(root: HTMLElement): void {
       const fd = new FormData(e.target as HTMLFormElement);
       const sections = Array.from(fd.getAll("section")).map(String);
       if (!sections.includes("Datos del paciente")) sections.unshift("Datos del paciente");
-      const ordered = catalog.filter((s) => sections.includes(s));
-      const examIds = draftExamIds;
+      const ordered = [...new Set(sections.filter((s) => catalog.includes(s)))];
+      const examIds = orderEnabledByCatalog(draftExamIds, loadExamCatalog());
       if (needsExam && examIds.length === 0) {
         alert("Seleccione al menos un sistema de examen físico.");
         return;

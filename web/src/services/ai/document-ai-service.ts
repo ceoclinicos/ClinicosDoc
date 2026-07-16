@@ -52,6 +52,7 @@ export async function generateDocument(options: {
   dictation: string;
 }): Promise<string> {
   const { template, patient, doctor, dictation } = options;
+  const systems = resolveSystemsForReport(template);
   const physicalExamBlock = buildPhysicalExamBlock(template);
   const effective = clinicalSectionsOf(template);
 
@@ -70,8 +71,8 @@ Usa terminología médica apropiada para Venezuela/Latinoamérica.`.trim();
 
   const prompt = buildPrompt(template, patient, doctor, dictation, physicalExamBlock, effective);
   const raw = await sendPrompt({ prompt, systemMessage: system, maxTokens: 4096 });
-  const sanitized = sanitizeDocumentContent(raw);
-  const withExam = ensurePhysicalExamSystems(sanitized, resolveSystemsForReport(template));
+  const sanitized = sanitizeDocumentContent(raw, systems);
+  const withExam = ensurePhysicalExamSystems(sanitized, systems);
   return ensureTemplateSections(withExam, effective);
 }
 

@@ -10,7 +10,10 @@ const EXAMEN_FISICO_SECTION = /^examen\s+f[ií]sico$/i;
 const SYSTEM_LINE_START =
   /^(signos\s+vitales|general|piel|cabeza(\s+y\s+|\s*\/\s*)?cuello|cardiopulmonar|abdomen|extremidades|neurol[oó]gico)\s*[:\-]?\s*/i;
 
-export function sanitizeDocumentContent(content: string): string {
+export function sanitizeDocumentContent(
+  content: string,
+  examSystems: PhysicalExamSystem[] = [],
+): string {
   let text = content.trim();
   text = removePatientDataSection(text);
   text = removeLeadingPatientLines(text);
@@ -20,7 +23,7 @@ export function sanitizeDocumentContent(content: string): string {
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  text = reorderPhysicalExamSystems(text);
+  text = reorderPhysicalExamSystems(text, examSystems);
   return text;
 }
 
@@ -53,9 +56,7 @@ export function ensurePhysicalExamSystems(
       const body = lines.slice(1).join("\n");
       const present = new Set<string>();
       for (const line of body.split("\n")) {
-        const match = SYSTEM_LINE_START.exec(line.trim());
-        if (!match) continue;
-        const key = normalizeSystemKey(match[1]);
+        const key = matchSystemKey(line.trim(), systems);
         if (key) present.add(key);
       }
 
@@ -64,11 +65,11 @@ export function ensurePhysicalExamSystems(
         .map((s) => `${s.name}: ${s.defaultText}`);
 
       if (!missingLines.length) {
-        return `${first}\n${reorderExamBodyLines(body)}`.trim();
+        return `${first}\n${reorderExamBodyLines(body, systems)}`.trim();
       }
 
       const merged = [body.trim(), ...missingLines].filter(Boolean).join("\n");
-      return `${first}\n${reorderExamBodyLines(merged)}`.trim();
+      return `${first}\n${reorderExamBodyLines(merged, systems)}`.trim();
     })
     .join("\n\n");
 }
@@ -86,8 +87,30 @@ function normalizeSystemKey(name: string): string {
   return n;
 }
 
-function reorderPhysicalExamSystems(content: string): string {
-  if (!content.includes("[[SECTION:")) return reorderExamBodyLines(content);
+function matchSystemKey(line: string, systems: PhysicalExamSystem[]): string | null {
+  const builtIn = SYSTEM_LINE_START.exec(line);
+  if (builtIn) return normalizeSystemKey(builtIn[1]);
+  for (const s of systems) {
+    const escaped = s.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`^${escaped}\\s*[:\\-]?\\s*`, "i").test(line)) {
+      return normalizeSystemKey(s.name);
+    }
+  }
+  return null;
+}
+
+function systemPriority(name: string, systems: PhysicalExamSystem[]): number {
+  if (systems.length) {
+    const key = normalizeSystemKey(name);
+    const idx = systems.findIndex((s) => normalizeSystemKey(s.name) === key);
+    if (idx >= 0) return idx;
+    return 1000 + priorityForName(name);
+  }
+  return priorityForName(name);
+}
+
+function reorderPhysicalExamSystems(content: string, systems: PhysicalExamSystem[]): string {
+  if (!content.includes("[[SECTION:")) return reorderExamBodyLines(content, systems);
   const chunks = content
     .split(/(?=\[\[SECTION:[^\]]+]])/)
     .map((c) => c.trim())
@@ -100,14 +123,15 @@ function reorderPhysicalExamSystems(content: string): string {
       const title = m?.[1]?.trim() ?? "";
       if (!EXAMEN_FISICO_SECTION.test(title)) return chunk;
       const body = lines.slice(1).join("\n");
-      return `${first}\n${reorderExamBodyLines(body)}`.trim();
+      return `${first}\n${reorderExamBodyLines(body, systems)}`.trim();
     })
     .join("\n\n");
 }
 
-function reorderExamBodyLines(body: string): string {
+function reorderExamBodyLines(body: string, systems: PhysicalExamSystem[] = []): string {
   const lines = body.split("\n");
-  if (!lines.some((l) => SYSTEM_LINE_START.test(l.trim()))) return body;
+  const hasSystem = lines.some((l) => matchSystemKey(l.trim(), systems) || SYSTEM_LINE_START.test(l.trim()));
+  if (!hasSystem) return body;
 
   type Block = { priority: number; text: string; index: number };
   const preamble: string[] = [];
@@ -128,10 +152,12 @@ function reorderExamBodyLines(body: string): string {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    const match = SYSTEM_LINE_START.exec(trimmed);
-    if (match) {
+    const key = matchSystemKey(trimmed, systems);
+    const builtIn = SYSTEM_LINE_START.exec(trimmed);
+    if (key || builtIn) {
       flush();
-      currentPriority = priorityForName(match[1]);
+      const name = builtIn?.[1] ?? systems.find((s) => normalizeSystemKey(s.name) === key)?.name ?? trimmed;
+      currentPriority = systemPriority(name, systems);
       current = [line];
     } else if (current) {
       current.push(line);

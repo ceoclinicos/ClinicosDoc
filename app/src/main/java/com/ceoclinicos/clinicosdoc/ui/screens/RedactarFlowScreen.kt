@@ -230,8 +230,9 @@ fun RedactarFlowScreen(
 
     fun applyTemplateConfig(tpl: DocumentTemplate) {
         val config = tpl.toSessionConfig()
-        enabledExamIds = PhysicalExamDefaults.orderEnabledIds(
+        enabledExamIds = PhysicalExamCatalogStorage.orderEnabledIdsByCatalog(
             config.enabledPhysicalExamSystemIds.ifEmpty { PhysicalExamDefaults.defaultEnabledIds },
+            PhysicalExamCatalogStorage.loadAll(context),
         )
         examTextOverrides = config.physicalExamTextOverrides
         enfermedadActualEjemplo = config.enfermedadActualEjemplo.ifBlank {

@@ -3,6 +3,7 @@ package com.ceoclinicos.clinicosdoc.service
 import android.content.Context
 import com.ceoclinicos.clinicosdoc.config.AiConfig
 import com.ceoclinicos.clinicosdoc.data.EnfermedadActualStorage
+import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
@@ -38,6 +39,11 @@ object DocumentAiService {
         val headerBlock = header?.toPlainTextBlock()
         val textOverrides = sessionConfig?.physicalExamTextOverrides.orEmpty()
         val physicalExamBlock = PhysicalExamPromptBuilder.buildBlock(context, effectiveTemplate, textOverrides)
+        val examSystems = PhysicalExamCatalogStorage.resolvedForReport(
+            context,
+            effectiveTemplate.enabledPhysicalExamSystemIds,
+            textOverrides,
+        )
         val enfermedadEjemplo = EnfermedadActualStorage.resolved(
             sessionConfig?.enfermedadActualEjemplo.orEmpty(),
             context,
@@ -173,7 +179,7 @@ object DocumentAiService {
         }
 
         val raw = AiService.sendPrompt(prompt = prompt, systemMessage = system, maxTokens = 4096)
-        return sanitizeDocumentContent(raw)
+        return sanitizeDocumentContent(raw, examSystems)
     }
 
     suspend fun regenerateSection(
@@ -340,7 +346,7 @@ object DocumentAiService {
     }
 
     private fun extractRegeneratedSectionBody(raw: String, sectionTitle: String): String {
-        val sanitized = sanitizeDocumentContent(raw)
+        val sanitized = sanitizeDocumentContent(raw, emptyList())
         val parsed = parseDocumentSections(sanitized)
         val matching = parsed.firstOrNull { section ->
             val title = normalizeSectionTitle(section.title)

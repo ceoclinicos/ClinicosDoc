@@ -14,8 +14,7 @@ import {
   resolveEnfermedadActualEjemplo,
   saveEnfermedadActualEjemplo,
 } from "../../shared/enfermedad-actual";
-import { loadPhysicalExamCatalog } from "../../services/ai/physical-exam-prompt";
-import { bindExamSystemsEditor, orderEnabledByCatalog } from "../../services/exam-catalog";
+import { bindExamSystemsEditor, orderEnabledByCatalog, loadExamCatalog } from "../../services/exam-catalog";
 import { fileToLogoBase64, logoDataUrl } from "../../services/header-logo";
 import { bindNavButtons, page } from "../helpers";
 import { getProfessionalSession } from "../../registro/session";
@@ -233,8 +232,8 @@ registerRoute({
     let draftExamIds = orderEnabledByCatalog(
       template.enabledPhysicalExamSystemIds?.length
         ? template.enabledPhysicalExamSystemIds
-        : loadPhysicalExamCatalog().map((s) => s.id),
-      loadPhysicalExamCatalog(),
+        : loadExamCatalog().map((s) => s.id),
+      loadExamCatalog(),
     );
     const needsExam = tipo === "historiaClinica" || tipo === "informe";
     const showEjemplo = tipo === "historiaClinica" || tipo === "informe";
@@ -295,10 +294,17 @@ registerRoute({
     el.querySelector("#tpl-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
       const fd = new FormData(e.target as HTMLFormElement);
+      // Orden de secciones = orden de checkboxes en el DOM (orden de plantilla)
       const sections = Array.from(fd.getAll("section")).map(String);
       if (!sections.includes("Datos del paciente")) sections.unshift("Datos del paciente");
-      const ordered = catalog.filter((s) => sections.includes(s));
-      const examIds = draftExamIds;
+      // Conservar orden marcado por el usuario en el DOM; completar con catálogo solo para validar
+      const seen = new Set(sections);
+      const ordered = [
+        ...sections.filter((s) => catalog.includes(s)),
+        ...catalog.filter((s) => !seen.has(s) && sections.includes(s)),
+      ];
+      const uniqueOrdered = [...new Set(ordered)];
+      const examIds = orderEnabledByCatalog(draftExamIds, loadExamCatalog());
       if (needsExam && examIds.length === 0) {
         alert("Seleccione al menos un sistema de examen físico.");
         return;
@@ -310,7 +316,7 @@ registerRoute({
       template = upsertTemplate({
         ...template,
         name: String(fd.get("name")).trim() || template.name,
-        sections: ordered,
+        sections: uniqueOrdered,
         enabledPhysicalExamSystemIds: examIds,
         enfermedadActualEjemplo: ejemplo,
         isDefault: true,

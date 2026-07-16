@@ -69,12 +69,8 @@ export const PhysicalExamDefaults: PhysicalExamSystem[] = [
 export const DefaultEnabledExamIds = PhysicalExamDefaults.map((s) => s.id);
 
 export function orderEnabledIds(ids: string[]): string[] {
-  return [...new Set(ids)].sort((a, b) => {
-    const pa = displayPriority[a] ?? 100;
-    const pb = displayPriority[b] ?? 100;
-    if (pa !== pb) return pa - pb;
-    return a.localeCompare(b);
-  });
+  // Conserva el orden recibido (plantilla / catálogo). Solo elimina duplicados.
+  return [...new Set(ids)];
 }
 
 export function priorityForName(name: string): number {

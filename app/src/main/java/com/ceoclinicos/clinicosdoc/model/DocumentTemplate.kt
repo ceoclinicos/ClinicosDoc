@@ -8,7 +8,7 @@ data class DocumentTemplate(
     val isDefault: Boolean = false,
     /** Orden visual de todas las secciones del catálogo (activas e inactivas). */
     val sectionLayoutOrder: List<String> = emptyList(),
-    /** IDs de sistemas activos (se reordenan al orden clínico fijo al generar). */
+    /** IDs de sistemas activos (orden del catálogo / ↑↓ del usuario). */
     val enabledPhysicalExamSystemIds: List<String> = emptyList(),
     /** Textos base personalizados por sistema (solo para esta plantilla). */
     val physicalExamTextOverrides: Map<String, String> = emptyMap(),
@@ -60,6 +60,9 @@ data class DocumentTemplate(
         return listOf(SectionCatalog.DATOS_PACIENTE) + base.filterNot { it == SectionCatalog.DATOS_PACIENTE }
     }
 
-    fun normalizedSections(): List<String> =
-        SectionCatalog.normalizeActive(documentType, sections)
+    fun normalizedSections(): List<String> {
+        val active = SectionCatalog.normalizeActive(documentType, sections)
+        val layout = resolvedLayoutOrder()
+        return SectionCatalog.activeFromLayout(layout, active)
+    }
 }

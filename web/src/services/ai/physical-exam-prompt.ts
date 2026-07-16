@@ -1,10 +1,11 @@
-import { PhysicalExamDefaults, orderEnabledIds, displayPriority } from "../../shared/physical-exam-defaults";
+import { PhysicalExamDefaults, displayPriority } from "../../shared/physical-exam-defaults";
 import type { DocumentTemplate, PhysicalExamSystem } from "../../shared/models";
 import { loadJson } from "../local-store";
+import { clinicalOrder, orderEnabledByCatalog } from "../exam-catalog";
 
 function loadCatalog(): PhysicalExamSystem[] {
   const stored = loadJson<PhysicalExamSystem[]>("physical_exam", []);
-  return stored.length ? stored : PhysicalExamDefaults;
+  return stored.length ? clinicalOrder(stored) : PhysicalExamDefaults;
 }
 
 function reportDisplayOrder(systems: PhysicalExamSystem[]): PhysicalExamSystem[] {
@@ -17,23 +18,25 @@ function reportDisplayOrder(systems: PhysicalExamSystem[]): PhysicalExamSystem[]
   });
 }
 
-/** Sistemas activos de la plantilla, en orden clínico (paridad con la app). */
+/** Sistemas activos de la plantilla, en el orden del catálogo (↑↓ del usuario). */
 export function resolveSystemsForReport(
   template: DocumentTemplate,
   textOverrides: Record<string, string> = {},
 ): PhysicalExamSystem[] {
-  const catalog = loadCatalog().reduce<Record<string, PhysicalExamSystem>>((acc, s) => {
+  const catalog = loadCatalog();
+  const byId = catalog.reduce<Record<string, PhysicalExamSystem>>((acc, s) => {
     acc[s.id] = s;
     return acc;
   }, {});
-  const ids = orderEnabledIds(
+  const ids = orderEnabledByCatalog(
     template.enabledPhysicalExamSystemIds?.length
       ? template.enabledPhysicalExamSystemIds
       : PhysicalExamDefaults.map((s) => s.id),
+    catalog,
   );
   return reportDisplayOrder(
     ids
-      .map((id) => catalog[id])
+      .map((id) => byId[id])
       .filter((s): s is PhysicalExamSystem => Boolean(s))
       .map((s) => (textOverrides[s.id] ? { ...s, defaultText: textOverrides[s.id] } : s)),
   );
