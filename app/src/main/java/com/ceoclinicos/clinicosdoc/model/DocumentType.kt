@@ -4,6 +4,7 @@ enum class DocumentType(val label: String) {
     HISTORIA_CLINICA("Historia clínica"),
     INFORME("Informe"),
     REPOSO("Reposo"),
+    ORDENES_MEDICAS("Órdenes médicas"),
     ;
 
     val reportTitle: String
@@ -11,6 +12,7 @@ enum class DocumentType(val label: String) {
             HISTORIA_CLINICA -> "HISTORIA CLÍNICA"
             INFORME -> "INFORME MÉDICO"
             REPOSO -> "REPOSO MÉDICO"
+            ORDENES_MEDICAS -> "ÓRDENES MÉDICAS"
         }
 
     companion object {
@@ -22,6 +24,7 @@ enum class DocumentType(val label: String) {
             HISTORIA_CLINICA -> "historiaClinica"
             INFORME -> "informe"
             REPOSO -> "reposo"
+            ORDENES_MEDICAS -> "ordenesMedicas"
         }
 
         fun storageName(type: DocumentType): String = legacyName(type)

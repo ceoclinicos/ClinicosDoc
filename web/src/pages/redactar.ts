@@ -2,6 +2,7 @@ import { registerRoute, navigate } from "../app/router";
 import { generateDocument } from "../services/ai/document-ai-service";
 import { getAiProvider } from "../services/ai/ai-service";
 import { bindExamSystemsEditor, orderEnabledByCatalog, loadExamCatalog } from "../services/exam-catalog";
+import { bindSectionsEditor } from "../services/section-editor";
 import {
   defaultHeader,
   deleteDraft,
@@ -38,13 +39,13 @@ import type {
   Patient,
 } from "../shared/models";
 import { DocumentReportTitles, DocumentTypeLabels } from "../shared/models";
-import { catalogFor } from "../shared/section-catalog";
 import {
   ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT,
   resolveEnfermedadActualEjemplo,
   saveEnfermedadActualEjemplo,
 } from "../shared/enfermedad-actual";
 import { bindNavButtons, page } from "./helpers";
+import { setOrdenesFromCasePending } from "./generar-ordenes";
 
 function hashQuery(): URLSearchParams {
   const raw = window.location.hash.split("?")[1] ?? "";
@@ -88,7 +89,7 @@ function mountRedactar(root: HTMLElement): void {
 
   let docType: DocumentType =
     existingDraft?.documentType ??
-    (tipoQ && ["historiaClinica", "informe", "reposo"].includes(tipoQ) ? tipoQ : "informe");
+    (tipoQ && ["historiaClinica", "informe", "reposo", "ordenesMedicas"].includes(tipoQ) ? tipoQ : "informe");
 
   let workingTemplate: DocumentTemplate = structuredClone(templateForType(docType));
   let selectedHeader: DocumentHeader | undefined =
@@ -121,7 +122,7 @@ function mountRedactar(root: HTMLElement): void {
       )
       .join("");
 
-    const typeBtns = (["historiaClinica", "informe", "reposo"] as DocumentType[])
+    const typeBtns = (["historiaClinica", "informe", "reposo", "ordenesMedicas"] as DocumentType[])
       .map(
         (t) =>
           `<button type="button" class="tile ${docType === t ? "tile-selected" : ""}" data-pick-type="${t}">${DocumentTypeLabels[t]}</button>`,
@@ -182,13 +183,16 @@ function mountRedactar(root: HTMLElement): void {
   }
 
   function renderPlantilla(): void {
-    const catalog = catalogFor(docType);
     let draftExamIds = orderEnabledByCatalog(
       workingTemplate.enabledPhysicalExamSystemIds?.length
         ? workingTemplate.enabledPhysicalExamSystemIds
         : loadExamCatalog().map((s) => s.id),
       loadExamCatalog(),
     );
+    let draftSections = [...workingTemplate.sections];
+    let draftSectionTexts: Record<string, string> = {
+      ...(workingTemplate.sectionDefaultTexts ?? {}),
+    };
     const needsExam = docType === "historiaClinica" || docType === "informe";
     const showEjemplo = needsExam;
     const ejemploActual = resolveEnfermedadActualEjemplo(workingTemplate.enfermedadActualEjemplo);
@@ -202,15 +206,7 @@ function mountRedactar(root: HTMLElement): void {
         </label>
         <fieldset class="card-panel">
           <legend><strong>Secciones</strong></legend>
-          <div class="stack">
-            ${catalog
-              .map((sec) => {
-                const checked = workingTemplate.sections.includes(sec) ? "checked" : "";
-                const locked = sec === "Datos del paciente" ? "disabled" : "";
-                return `<label class="check-row"><input type="checkbox" name="section" value="${escapeHtml(sec)}" ${checked} ${locked} /> ${escapeHtml(sec)}</label>`;
-              })
-              .join("")}
-          </div>
+          <div id="sections-box"></div>
         </fieldset>
         ${
           showEjemplo
@@ -238,6 +234,16 @@ function mountRedactar(root: HTMLElement): void {
       </form>
     `;
 
+    bindSectionsEditor(root.querySelector("#sections-box") as HTMLElement, {
+      documentType: docType,
+      activeSections: draftSections,
+      sectionDefaultTexts: draftSectionTexts,
+      onChange: (state) => {
+        draftSections = state.activeSections;
+        draftSectionTexts = state.sectionDefaultTexts;
+      },
+    });
+
     if (needsExam) {
       bindExamSystemsEditor(root.querySelector("#exam-systems-box") as HTMLElement, {
         enabledIds: draftExamIds,
@@ -255,9 +261,6 @@ function mountRedactar(root: HTMLElement): void {
     root.querySelector("#tpl-step-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
       const fd = new FormData(e.target as HTMLFormElement);
-      const sections = Array.from(fd.getAll("section")).map(String);
-      if (!sections.includes("Datos del paciente")) sections.unshift("Datos del paciente");
-      const ordered = [...new Set(sections.filter((s) => catalog.includes(s)))];
       const examIds = orderEnabledByCatalog(draftExamIds, loadExamCatalog());
       if (needsExam && examIds.length === 0) {
         alert("Seleccione al menos un sistema de examen físico.");
@@ -270,9 +273,10 @@ function mountRedactar(root: HTMLElement): void {
       workingTemplate = {
         ...workingTemplate,
         name: String(fd.get("name")).trim() || workingTemplate.name,
-        sections: ordered,
+        sections: draftSections,
         enabledPhysicalExamSystemIds: examIds,
         enfermedadActualEjemplo: ejemplo,
+        sectionDefaultTexts: draftSectionTexts,
         isDefault: true,
       };
       if (fd.get("saveTpl") === "1") {
@@ -476,6 +480,11 @@ function mountRedactar(root: HTMLElement): void {
         <button type="button" class="btn btn-secondary" id="btn-print-2">Imprimir / PDF</button>
         <button type="button" class="btn btn-secondary" id="btn-copy">Copiar texto</button>
         <button type="button" class="btn btn-ghost" id="btn-edit">Editar dictado y regenerar</button>
+        ${
+          docType === "informe" || docType === "historiaClinica"
+            ? `<button type="button" class="btn btn-secondary" id="btn-ordenes">Generar órdenes médicas</button>`
+            : ""
+        }
         <button type="button" class="btn btn-ghost" data-nav="/informes">Ver informes</button>
       </div>
     `;
@@ -581,6 +590,18 @@ function mountRedactar(root: HTMLElement): void {
       refreshPreview();
       step = "dictado";
       render();
+    });
+
+    root.querySelector("#btn-ordenes")?.addEventListener("click", () => {
+      if (!selectedPatient) return;
+      refreshPreview();
+      setOrdenesFromCasePending({
+        patientId: selectedPatient.id,
+        caseContent: generatedContent,
+        headerId: selectedHeader?.id,
+        sourceTypeLabel: DocumentTypeLabels[docType],
+      });
+      navigate("/ordenes/desde-caso");
     });
 
     bindNavButtons(root);

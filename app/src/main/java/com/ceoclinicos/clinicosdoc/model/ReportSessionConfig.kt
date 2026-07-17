@@ -4,6 +4,7 @@ package com.ceoclinicos.clinicosdoc.model
 data class ReportSessionConfig(
     val enabledPhysicalExamSystemIds: List<String>,
     val physicalExamTextOverrides: Map<String, String> = emptyMap(),
+    val sectionDefaultTexts: Map<String, String> = emptyMap(),
     val enfermedadActualEjemplo: String = "",
     val activeSections: List<String> = emptyList(),
     val sectionLayoutOrder: List<String> = emptyList(),

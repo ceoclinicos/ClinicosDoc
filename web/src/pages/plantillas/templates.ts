@@ -8,13 +8,13 @@ import {
 } from "../../services/clinical-store";
 import type { DocumentHeader, DocumentTemplate, DocumentType } from "../../shared/models";
 import { DocumentTypeLabels } from "../../shared/models";
-import { catalogFor } from "../../shared/section-catalog";
 import {
   ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT,
   resolveEnfermedadActualEjemplo,
   saveEnfermedadActualEjemplo,
 } from "../../shared/enfermedad-actual";
 import { bindExamSystemsEditor, orderEnabledByCatalog, loadExamCatalog } from "../../services/exam-catalog";
+import { bindSectionsEditor } from "../../services/section-editor";
 import { fileToLogoBase64, logoDataUrl } from "../../services/header-logo";
 import { bindNavButtons, page } from "../helpers";
 import { getProfessionalSession } from "../../registro/session";
@@ -222,19 +222,20 @@ registerRoute({
   render: () => {
     const tipo = (window.location.hash.replace(/^#\/plantillas\/documentos\//, "").split("?")[0] ||
       "informe") as DocumentType;
-    if (!["historiaClinica", "informe", "reposo"].includes(tipo)) {
+    if (!["historiaClinica", "informe", "reposo", "ordenesMedicas"].includes(tipo)) {
       navigate("/plantillas/documentos");
       return page("Plantilla", `<p>Tipo inválido</p>`);
     }
 
     let template: DocumentTemplate = loadTemplates().find((t) => t.documentType === tipo)!;
-    const catalog = catalogFor(tipo);
     let draftExamIds = orderEnabledByCatalog(
       template.enabledPhysicalExamSystemIds?.length
         ? template.enabledPhysicalExamSystemIds
         : loadExamCatalog().map((s) => s.id),
       loadExamCatalog(),
     );
+    let draftSections = [...template.sections];
+    let draftSectionTexts: Record<string, string> = { ...(template.sectionDefaultTexts ?? {}) };
     const needsExam = tipo === "historiaClinica" || tipo === "informe";
     const showEjemplo = tipo === "historiaClinica" || tipo === "informe";
     const ejemploActual = resolveEnfermedadActualEjemplo(template.enfermedadActualEjemplo);
@@ -245,16 +246,7 @@ registerRoute({
         <label>Nombre<input name="name" required value="${escapeHtml(template.name)}" /></label>
         <fieldset class="card-panel">
           <legend><strong>Secciones activas</strong></legend>
-          <p class="muted">Marca las secciones que usarás al redactar.</p>
-          <div class="stack" id="sections-box">
-            ${catalog
-              .map((sec) => {
-                const checked = template.sections.includes(sec) ? "checked" : "";
-                const locked = sec === "Datos del paciente" ? "disabled" : "";
-                return `<label class="check-row"><input type="checkbox" name="section" value="${sec}" ${checked} ${locked} /> ${sec}</label>`;
-              })
-              .join("")}
-          </div>
+          <div id="sections-box"></div>
         </fieldset>
         ${
           showEjemplo
@@ -281,6 +273,16 @@ registerRoute({
       `,
     );
 
+    bindSectionsEditor(el.querySelector("#sections-box") as HTMLElement, {
+      documentType: tipo,
+      activeSections: draftSections,
+      sectionDefaultTexts: draftSectionTexts,
+      onChange: (state) => {
+        draftSections = state.activeSections;
+        draftSectionTexts = state.sectionDefaultTexts;
+      },
+    });
+
     if (needsExam) {
       const box = el.querySelector("#exam-systems-box") as HTMLElement;
       bindExamSystemsEditor(box, {
@@ -294,16 +296,6 @@ registerRoute({
     el.querySelector("#tpl-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
       const fd = new FormData(e.target as HTMLFormElement);
-      // Orden de secciones = orden de checkboxes en el DOM (orden de plantilla)
-      const sections = Array.from(fd.getAll("section")).map(String);
-      if (!sections.includes("Datos del paciente")) sections.unshift("Datos del paciente");
-      // Conservar orden marcado por el usuario en el DOM; completar con catálogo solo para validar
-      const seen = new Set(sections);
-      const ordered = [
-        ...sections.filter((s) => catalog.includes(s)),
-        ...catalog.filter((s) => !seen.has(s) && sections.includes(s)),
-      ];
-      const uniqueOrdered = [...new Set(ordered)];
       const examIds = orderEnabledByCatalog(draftExamIds, loadExamCatalog());
       if (needsExam && examIds.length === 0) {
         alert("Seleccione al menos un sistema de examen físico.");
@@ -316,9 +308,10 @@ registerRoute({
       template = upsertTemplate({
         ...template,
         name: String(fd.get("name")).trim() || template.name,
-        sections: uniqueOrdered,
+        sections: draftSections,
         enabledPhysicalExamSystemIds: examIds,
         enfermedadActualEjemplo: ejemplo,
+        sectionDefaultTexts: draftSectionTexts,
         isDefault: true,
       });
       alert("Plantilla guardada");

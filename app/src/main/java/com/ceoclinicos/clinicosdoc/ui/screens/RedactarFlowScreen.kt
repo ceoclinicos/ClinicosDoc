@@ -143,6 +143,12 @@ fun RedactarFlowScreen(
     onAddPatient: () -> Unit,
     onEditHeader: (headerId: String, isNew: Boolean) -> Unit,
     onEditTemplate: (templateId: String, isNew: Boolean) -> Unit,
+    onGenerarOrdenes: (
+        patientId: String,
+        caseContent: String,
+        headerId: String?,
+        typeLabel: String,
+    ) -> Unit = { _, _, _, _ -> },
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -181,6 +187,7 @@ fun RedactarFlowScreen(
     var enfermedadActualEjemplo by rememberSaveable { mutableStateOf("") }
     var activeSections by remember { mutableStateOf<List<String>>(emptyList()) }
     var sectionLayoutOrder by remember { mutableStateOf<List<String>>(emptyList()) }
+    var sectionDefaultTexts by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     val sessionConfig = remember(
         enabledExamIds,
@@ -188,6 +195,7 @@ fun RedactarFlowScreen(
         enfermedadActualEjemplo,
         activeSections,
         sectionLayoutOrder,
+        sectionDefaultTexts,
     ) {
         ReportSessionConfig(
             enabledPhysicalExamSystemIds = enabledExamIds,
@@ -195,6 +203,7 @@ fun RedactarFlowScreen(
             enfermedadActualEjemplo = enfermedadActualEjemplo,
             activeSections = activeSections,
             sectionLayoutOrder = sectionLayoutOrder,
+            sectionDefaultTexts = sectionDefaultTexts,
         )
     }
 
@@ -243,6 +252,7 @@ fun RedactarFlowScreen(
         }
         activeSections = config.activeSections
         sectionLayoutOrder = config.sectionLayoutOrder
+        sectionDefaultTexts = config.sectionDefaultTexts
     }
 
     fun persistTemplateConfig(
@@ -251,6 +261,7 @@ fun RedactarFlowScreen(
         ejemplo: String = enfermedadActualEjemplo,
         sections: List<String> = activeSections,
         layout: List<String> = sectionLayoutOrder,
+        sectionTexts: Map<String, String> = sectionDefaultTexts,
     ) {
         val tpl = template ?: return
         val updated = tpl.withSessionConfig(
@@ -260,6 +271,7 @@ fun RedactarFlowScreen(
                 enfermedadActualEjemplo = ejemplo,
                 activeSections = sections,
                 sectionLayoutOrder = layout,
+                sectionDefaultTexts = sectionTexts,
             ),
         )
         EnfermedadActualStorage.save(context, ejemplo)
@@ -515,6 +527,11 @@ fun RedactarFlowScreen(
                         sectionLayoutOrder = order
                         activeSections = sections
                         persistTemplateConfig(layout = order, sections = sections)
+                    },
+                    sectionDefaultTexts = sectionDefaultTexts,
+                    onSectionDefaultTextsChange = {
+                        sectionDefaultTexts = it
+                        persistTemplateConfig(sectionTexts = it)
                     },
                     examCatalog = examCatalog,
                     enabledExamIds = enabledExamIds,
@@ -780,6 +797,24 @@ fun RedactarFlowScreen(
                                 membrete = membrete,
                             ),
                         )
+                        if (documentType == DocumentType.INFORME ||
+                            documentType == DocumentType.HISTORIA_CLINICA
+                        ) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    onGenerarOrdenes(
+                                        patient.id,
+                                        content,
+                                        header?.id,
+                                        documentType.label,
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("Generar órdenes médicas")
+                            }
+                        }
                     }
                 }
                 Row(

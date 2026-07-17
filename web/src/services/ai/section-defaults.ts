@@ -1,11 +1,20 @@
 /** Textos / estilos predeterminados de secciones (paridad con SectionDefaults.kt). */
 import { SectionCatalog } from "../../shared/section-catalog";
+import { ORDENES_MOLDE_EJEMPLO } from "../../shared/ordenes-medicas";
 
 export const MOTIVO_CONSULTA_STYLE =
   '- Motivo de consulta: SOLO síntomas principales (máximo 3), unidos con "y"/"e". ' +
   'Ejemplo: "diarrea y vómito". PROHIBIDO frases largas, "consulta por…", evolución, antecedentes o diagnóstico.';
 
-function textFor(section: string): string {
+export function defaultTextForSection(
+  section: string,
+  overrides: Record<string, string> = {},
+): string {
+  const override = Object.entries(overrides).find(
+    ([k]) => k.toLowerCase() === section.trim().toLowerCase(),
+  )?.[1]?.trim();
+  if (override) return override;
+
   const s = section.trim().toLowerCase();
   if (s === SectionCatalog.MOTIVO_CONSULTA.toLowerCase()) return "Evaluación médica.";
   if (s === SectionCatalog.ENFERMEDAD_ACTUAL.toLowerCase()) {
@@ -39,17 +48,23 @@ function textFor(section: string): string {
   if (s === SectionCatalog.RECOMENDACIONES.toLowerCase()) return "Seguimiento médico según evolución clínica.";
   if (s === SectionCatalog.DIAS_REPOSO.toLowerCase()) return "Días de reposo a indicar según criterio médico.";
   if (s === SectionCatalog.INDICACIONES.toLowerCase()) return "Indicaciones médicas según evolución.";
+  if (s === SectionCatalog.ORDENES.toLowerCase()) {
+    return ORDENES_MOLDE_EJEMPLO;
+  }
   return "Sin datos adicionales referidos.";
 }
 
-export function sectionDefaultsPromptBlock(sections: string[]): string {
+export function sectionDefaultsPromptBlock(
+  sections: string[],
+  overrides: Record<string, string> = {},
+): string {
   const clinical = sections.filter(
     (sec) => sec.toLowerCase() !== SectionCatalog.DATOS_PACIENTE.toLowerCase(),
   );
   if (!clinical.length) return "";
   return [
     "TEXTOS PREDETERMINADOS (usar SOLO si la sección está activa y el dictado NO aporta datos para ella):",
-    ...clinical.map((section) => `- ${section} → "${textFor(section)}"`),
+    ...clinical.map((section) => `- ${section} → "${defaultTextForSection(section, overrides)}"`),
     "Si el dictado sí aporta datos, prioriza el dictado y mejora la redacción.",
     'NO uses la frase "No referido" cuando exista texto predeterminado arriba.',
   ].join("\n");

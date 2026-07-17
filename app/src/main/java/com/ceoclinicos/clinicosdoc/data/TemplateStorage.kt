@@ -3,6 +3,7 @@ package com.ceoclinicos.clinicosdoc.data
 import android.content.Context
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
 import com.ceoclinicos.clinicosdoc.model.DocumentType
+import com.ceoclinicos.clinicosdoc.model.OrdenesMedicasDefaults
 import com.ceoclinicos.clinicosdoc.model.PhysicalExamDefaults
 import com.ceoclinicos.clinicosdoc.model.SectionCatalog
 import com.google.gson.Gson
@@ -25,15 +26,7 @@ object TemplateStorage {
         val p = prefs(context)
         if (!p.getBoolean(INITIALIZED_KEY, false)) {
             val defaults = DocumentType.entries.map { type ->
-                DocumentTemplate(
-                    id = UUID.randomUUID().toString(),
-                    name = "Plantilla ${type.label}",
-                    documentType = type,
-                    sections = SectionCatalog.defaultsFor(type),
-                    isDefault = true,
-                    enabledPhysicalExamSystemIds = defaultExamSystemsFor(type),
-                    sectionLayoutOrder = SectionCatalog.initialLayoutOrder(type, SectionCatalog.defaultsFor(type)),
-                )
+                defaultTemplateFor(type)
             }
             saveAllLocal(context, defaults)
             p.edit()
@@ -62,27 +55,54 @@ object TemplateStorage {
             unique.any { a -> all.none { b -> b.id == a.id && b.isDefault == a.isDefault } }
         DocumentType.entries.forEach { type ->
             if (unique.none { it.documentType == type }) {
-                unique.add(
-                    DocumentTemplate(
-                        id = UUID.randomUUID().toString(),
-                        name = "Plantilla ${type.label}",
-                        documentType = type,
-                        sections = SectionCatalog.defaultsFor(type),
-                        isDefault = true,
-                        enabledPhysicalExamSystemIds = defaultExamSystemsFor(type),
-                        sectionLayoutOrder = SectionCatalog.initialLayoutOrder(
-                            type,
-                            SectionCatalog.defaultsFor(type),
-                        ),
-                    ),
-                )
+                unique.add(defaultTemplateFor(type))
                 changed = true
+            }
+        }
+        // Sembrar molde de órdenes si la plantilla existe sin texto personalizado
+        unique.forEachIndexed { index, tpl ->
+            if (tpl.documentType == DocumentType.ORDENES_MEDICAS) {
+                val hasMolde = tpl.sectionDefaultTexts.keys.any {
+                    it.equals(OrdenesMedicasDefaults.SECTION_ORDENES, ignoreCase = true)
+                }
+                if (!hasMolde) {
+                    unique[index] = tpl.copy(
+                        sectionDefaultTexts = tpl.sectionDefaultTexts + (
+                            OrdenesMedicasDefaults.SECTION_ORDENES to OrdenesMedicasDefaults.MOLDE_EJEMPLO
+                            ),
+                        sections = SectionCatalog.defaultsFor(DocumentType.ORDENES_MEDICAS),
+                        sectionLayoutOrder = SectionCatalog.initialLayoutOrder(
+                            DocumentType.ORDENES_MEDICAS,
+                            SectionCatalog.defaultsFor(DocumentType.ORDENES_MEDICAS),
+                        ),
+                    )
+                    changed = true
+                }
             }
         }
         if (changed) {
             saveAllLocal(context, unique)
             SyncCoordinator.afterTemplatesBulkSaved(context)
         }
+    }
+
+    private fun defaultTemplateFor(type: DocumentType): DocumentTemplate {
+        val sections = SectionCatalog.defaultsFor(type)
+        val texts = if (type == DocumentType.ORDENES_MEDICAS) {
+            mapOf(OrdenesMedicasDefaults.SECTION_ORDENES to OrdenesMedicasDefaults.MOLDE_EJEMPLO)
+        } else {
+            emptyMap()
+        }
+        return DocumentTemplate(
+            id = UUID.randomUUID().toString(),
+            name = "Plantilla ${type.label}",
+            documentType = type,
+            sections = sections,
+            isDefault = true,
+            enabledPhysicalExamSystemIds = defaultExamSystemsFor(type),
+            sectionLayoutOrder = SectionCatalog.initialLayoutOrder(type, sections),
+            sectionDefaultTexts = texts,
+        )
     }
 
     private val LEGACY_HC_DEFAULT_SECTIONS = listOf(
@@ -264,6 +284,7 @@ object TemplateStorage {
         isDefault = isDefault,
         enabledPhysicalExamSystemIds = enabledPhysicalExamSystemIds,
         physicalExamTextOverrides = physicalExamTextOverrides,
+        sectionDefaultTexts = sectionDefaultTexts,
         enfermedadActualEjemplo = enfermedadActualEjemplo,
         sectionLayoutOrder = sectionLayoutOrder,
     )
@@ -279,6 +300,7 @@ object TemplateStorage {
             enabledPhysicalExamSystemIds.orEmpty(),
         ),
         physicalExamTextOverrides = physicalExamTextOverrides.orEmpty(),
+        sectionDefaultTexts = sectionDefaultTexts.orEmpty(),
         enfermedadActualEjemplo = enfermedadActualEjemplo.orEmpty(),
     )
 }

@@ -10,6 +10,8 @@ import { sendPrompt } from "./ai-service";
 import { sanitizeDocumentContent, ensurePhysicalExamSystems } from "./document-sanitizer";
 import { buildPhysicalExamBlock, resolveSystemsForReport } from "./physical-exam-prompt";
 import { MOTIVO_CONSULTA_STYLE, sectionDefaultsPromptBlock } from "./section-defaults";
+import { ORDENES_SECTION, ordenesMedicasPromptBlock, type OrdenesModo } from "../../shared/ordenes-medicas";
+import { templateForType } from "../clinical-store";
 
 export interface DoctorInfo {
   nombre: string;
@@ -127,7 +129,7 @@ function buildPrompt(
       ...sectionList,
       enfermedadActualPromptBlock(ejemplo),
       "",
-      sectionDefaultsPromptBlock(effective),
+      sectionDefaultsPromptBlock(effective, template.sectionDefaultTexts ?? {}),
     );
     if (physicalExamBlock) lines.push("", physicalExamBlock);
   } else if (template.documentType === "informe") {
@@ -147,15 +149,22 @@ function buildPrompt(
       "",
       enfermedadActualPromptBlock(ejemplo),
       "",
-      sectionDefaultsPromptBlock(effective),
+      sectionDefaultsPromptBlock(effective, template.sectionDefaultTexts ?? {}),
     );
     if (physicalExamBlock) lines.push("", physicalExamBlock);
+  } else if (template.documentType === "ordenesMedicas") {
+    const molde =
+      template.sectionDefaultTexts?.[ORDENES_SECTION] ??
+      Object.entries(template.sectionDefaultTexts ?? {}).find(
+        ([k]) => k.toLowerCase() === ORDENES_SECTION.toLowerCase(),
+      )?.[1];
+    lines.push(ordenesMedicasPromptBlock(molde));
   } else {
     lines.push(
       ...sectionList,
       "Formato: línea [[SECTION:Nombre exacto]] y contenido debajo.",
       "",
-      sectionDefaultsPromptBlock(effective),
+      sectionDefaultsPromptBlock(effective, template.sectionDefaultTexts ?? {}),
     );
   }
 
@@ -167,4 +176,57 @@ function sexoLabel(sexo: string): string {
   if (s === "masculino" || s === "m") return "masculino";
   if (s === "femenino" || s === "f") return "femenino";
   return sexo.trim() || "de sexo no referido";
+}
+
+/** Genera hoja de órdenes a partir de un informe/HC ya redactado. */
+export async function generateOrdenesFromCase(options: {
+  patient: Patient;
+  doctor: DoctorInfo;
+  caseContent: string;
+  notes?: string;
+  modo?: OrdenesModo;
+}): Promise<string> {
+  const { patient, doctor, caseContent } = options;
+  const notes = options.notes?.trim() ?? "";
+  const modo = options.modo ?? "ordenes";
+  const template = templateForType("ordenesMedicas");
+  const molde =
+    template.sectionDefaultTexts?.[ORDENES_SECTION] ??
+    Object.entries(template.sectionDefaultTexts ?? {}).find(
+      ([k]) => k.toLowerCase() === ORDENES_SECTION.toLowerCase(),
+    )?.[1];
+
+  const system = `
+Eres un asistente médico que redacta órdenes / tratamiento en español.
+Te basas en el caso clínico ya redactado (informe o historia).
+No inventes diagnósticos ni fármacos que contradigan el caso.
+Usa terminología médica apropiada para Venezuela/Latinoamérica.
+OBLIGATORIO: la respuesta empieza con [[SECTION:Órdenes]].`.trim();
+
+  const prompt = [
+    `Genera ÓRDENES MÉDICAS (${modo}) a partir del caso clínico.`,
+    "",
+    `DATOS DEL MÉDICO (referencia, no incluir): ${doctor.nombre} · ${doctor.especialidad}`,
+    `DATOS DEL PACIENTE (referencia, no incluir): ${patient.nombre}, ${patient.edad} años, ${patient.sexo || "—"}`,
+    "",
+    "CASO CLÍNICO (informe/historia ya redactado — base para las órdenes):",
+    '"""',
+    caseContent.trim(),
+    '"""',
+    notes
+      ? ["", "NOTAS / DICTADO ADICIONAL DEL MÉDICO (priorizar):", '"""', notes, '"""'].join("\n")
+      : "",
+    "",
+    "Instrucciones:",
+    "1. NO incluyas título ÓRDENES MÉDICAS ni membrete del paciente.",
+    "2. Responde SOLO con [[SECTION:Órdenes]] y la lista numerada.",
+    "",
+    ordenesMedicasPromptBlock(molde, modo),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const raw = await sendPrompt({ prompt, systemMessage: system, maxTokens: 2048 });
+  const sanitized = sanitizeDocumentContent(raw, []);
+  return ensureTemplateSections(sanitized, [ORDENES_SECTION]);
 }

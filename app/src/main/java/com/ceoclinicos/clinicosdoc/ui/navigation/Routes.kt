@@ -13,6 +13,7 @@ object Routes {
     const val ADD_PATIENT = "add_patient"
     const val ADD_APPOINTMENT = "add_appointment"
     const val INFORME_DETAIL = "informe_detail/{docId}"
+    const val GENERAR_ORDENES = "generar_ordenes"
 
     fun informeDetail(docId: String) = "informe_detail/$docId"
     const val DRAFTS = "drafts"

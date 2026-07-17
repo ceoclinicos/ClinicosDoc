@@ -36,6 +36,8 @@ fun TemplateConfigStep(
     layoutOrder: List<String>,
     activeSections: List<String>,
     onSectionsStateChange: (layoutOrder: List<String>, activeSections: List<String>) -> Unit,
+    sectionDefaultTexts: Map<String, String>,
+    onSectionDefaultTextsChange: (Map<String, String>) -> Unit,
     examCatalog: List<PhysicalExamSystem>,
     enabledExamIds: List<String>,
     onEnabledExamIdsChange: (List<String>) -> Unit,
@@ -102,7 +104,9 @@ fun TemplateConfigStep(
                 documentType = documentType,
                 layoutOrder = layoutOrder,
                 activeSections = activeSections,
+                sectionDefaultTexts = sectionDefaultTexts,
                 onStateChange = onSectionsStateChange,
+                onSectionDefaultTextsChange = onSectionDefaultTextsChange,
             )
         }
 

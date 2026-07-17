@@ -16,6 +16,8 @@ data class ClinicalDocument(
     val headerId: String? = null,
     val headerSnapshot: DocumentHeader? = null,
     val membrete: PatientMembrete? = null,
+    /** Documento clínico de origen (informe/HC) si se generó desde él. */
+    val sourceDocumentId: String? = null,
 ) {
     val typeLabel: String get() = type.label
 }

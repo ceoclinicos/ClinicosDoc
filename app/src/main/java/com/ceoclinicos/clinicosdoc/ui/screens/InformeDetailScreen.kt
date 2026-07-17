@@ -25,6 +25,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -51,6 +52,7 @@ import com.ceoclinicos.clinicosdoc.data.PatientStorage
 import com.ceoclinicos.clinicosdoc.data.TemplateStorage
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
+import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
 import com.ceoclinicos.clinicosdoc.service.DocumentAiService
 import com.ceoclinicos.clinicosdoc.service.DocumentPdfExporter
@@ -75,6 +77,13 @@ fun InformeDetailScreen(
     docId: String,
     onBack: () -> Unit,
     onEditHeader: (headerId: String, isNew: Boolean) -> Unit = { _, _ -> },
+    onGenerarOrdenes: (
+        patientId: String,
+        caseContent: String,
+        sourceDocId: String,
+        headerId: String?,
+        typeLabel: String,
+    ) -> Unit = { _, _, _, _, _ -> },
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -400,6 +409,25 @@ fun InformeDetailScreen(
                     membrete = editableMembrete,
                     content = editableContent,
                 )
+                if (document.type == DocumentType.INFORME ||
+                    document.type == DocumentType.HISTORIA_CLINICA
+                ) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedButton(
+                        onClick = {
+                            onGenerarOrdenes(
+                                document.patientId,
+                                editableContent,
+                                document.id,
+                                selectedHeader?.id ?: document.headerId,
+                                document.typeLabel,
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Generar órdenes médicas")
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(32.dp))
         }

@@ -49,7 +49,7 @@ function medicoHome(): HTMLElement {
     <button type="button" class="home-redactar-hero" id="btn-open-redactar">
       <div class="home-redactar-text">
         <span class="hero-title">Redactar</span>
-        <span class="hero-sub">Historia clínica, informe o reposo con dictado por voz</span>
+        <span class="hero-sub">Historia clínica, informe, reposo u órdenes médicas</span>
       </div>
       <span class="home-redactar-cta">Redactar →</span>
     </button>
@@ -80,6 +80,7 @@ function medicoHome(): HTMLElement {
         <button type="button" class="tile tile-full" data-type="historiaClinica">Historia clínica</button>
         <button type="button" class="tile tile-full" data-type="informe">Informe</button>
         <button type="button" class="tile tile-full" data-type="reposo">Reposo</button>
+        <button type="button" class="tile tile-full" data-type="ordenesMedicas">Órdenes médicas</button>
         <button type="submit" class="btn btn-ghost" value="cancel">Cancelar</button>
       </form>
     </dialog>

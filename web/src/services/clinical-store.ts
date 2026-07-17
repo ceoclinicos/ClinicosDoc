@@ -2,6 +2,7 @@
 import { DocumentTypeLabels, type ClinicalDocument, type ClinicalDraft, type DocumentHeader, type DocumentTemplate, type DocumentType } from "../shared/models";
 import { defaultSectionsFor, isLegacyInformeAllChecked, normalizeTemplateSections } from "../shared/section-catalog";
 import { ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT } from "../shared/enfermedad-actual";
+import { ORDENES_MOLDE_EJEMPLO, ORDENES_SECTION } from "../shared/ordenes-medicas";
 import { PhysicalExamDefaults } from "../shared/physical-exam-defaults";
 import { loadExamCatalog, orderEnabledByCatalog } from "./exam-catalog";
 import { loadJson, saveJson } from "./local-store";
@@ -21,7 +22,7 @@ const KEY_HEADERS = "headers";
 const KEY_DOCUMENTS = "documents";
 const KEY_DRAFTS = "drafts";
 
-const DOC_TYPES: DocumentType[] = ["historiaClinica", "informe", "reposo"];
+const DOC_TYPES: DocumentType[] = ["historiaClinica", "informe", "reposo", "ordenesMedicas"];
 
 function makeDefaultTemplates(): DocumentTemplate[] {
   const examIds = orderEnabledByCatalog(
@@ -37,6 +38,8 @@ function makeDefaultTemplates(): DocumentTemplate[] {
     enabledPhysicalExamSystemIds: examIds,
     enfermedadActualEjemplo:
       type === "informe" || type === "historiaClinica" ? ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT : "",
+    sectionDefaultTexts:
+      type === "ordenesMedicas" ? { [ORDENES_SECTION]: ORDENES_MOLDE_EJEMPLO } : undefined,
   }));
 }
 
@@ -60,6 +63,19 @@ export function loadTemplates(): DocumentTemplate[] {
       const normalized = normalizeTemplateSections(type, tpl.sections);
       if (normalized.length !== tpl.sections.length || normalized.some((s, i) => s !== tpl.sections[i])) {
         tpl = { ...tpl, sections: normalized };
+        changed = true;
+      }
+    }
+    if (type === "ordenesMedicas") {
+      const texts = { ...(tpl.sectionDefaultTexts ?? {}) };
+      const hasMolde = Object.keys(texts).some((k) => k.toLowerCase() === ORDENES_SECTION.toLowerCase());
+      if (!hasMolde) {
+        texts[ORDENES_SECTION] = ORDENES_MOLDE_EJEMPLO;
+        tpl = {
+          ...tpl,
+          sections: defaultSectionsFor("ordenesMedicas"),
+          sectionDefaultTexts: texts,
+        };
         changed = true;
       }
     }

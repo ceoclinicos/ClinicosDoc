@@ -23,6 +23,7 @@ import {
   vitalSignsFieldsHtml,
 } from "../services/vital-signs";
 import { bindNavButtons, emptyState, page } from "./helpers";
+import { setOrdenesFromCasePending } from "./generar-ordenes";
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -128,6 +129,11 @@ registerRoute({
         <button type="button" class="btn btn-primary" id="btn-save-2">Guardar cambios</button>
         <button type="button" class="btn btn-secondary" id="btn-print-2">Imprimir / PDF</button>
         <button type="button" class="btn btn-secondary" id="btn-copy">Copiar texto</button>
+        ${
+          doc.type === "informe" || doc.type === "historiaClinica"
+            ? `<button type="button" class="btn btn-secondary" id="btn-ordenes">Generar órdenes médicas</button>`
+            : ""
+        }
         <button type="button" class="btn btn-ghost" data-nav="/informes">Volver</button>
         <button type="button" class="btn btn-ghost" id="btn-delete">Eliminar</button>
       </div>
@@ -208,6 +214,18 @@ registerRoute({
       if (!confirm("¿Eliminar este documento?")) return;
       deleteDocument(doc!.id);
       navigate("/informes");
+    });
+
+    el.querySelector("#btn-ordenes")?.addEventListener("click", () => {
+      const content = refreshPreview();
+      setOrdenesFromCasePending({
+        patientId: doc!.patientId,
+        caseContent: content,
+        sourceDocumentId: doc!.id,
+        headerId: selectedHeader?.id ?? doc!.headerId,
+        sourceTypeLabel: DocumentTypeLabels[doc!.type],
+      });
+      navigate("/ordenes/desde-caso");
     });
 
     bindNavButtons(el);

@@ -150,7 +150,7 @@ private fun RedactarHero(onTap: () -> Unit) {
             Text("Redactar", style = MaterialTheme.typography.headlineMedium.copy(color = Color.White))
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "Historia clínica, informe o reposo con dictado por voz",
+                "Historia clínica, informe, reposo u órdenes médicas",
                 style = MaterialTheme.typography.bodyMedium.copy(color = Color.White.copy(alpha = 0.85f)),
             )
             Spacer(modifier = Modifier.height(20.dp))

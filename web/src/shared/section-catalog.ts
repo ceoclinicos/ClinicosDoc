@@ -17,6 +17,7 @@ export const SectionCatalog = {
   RECOMENDACIONES: "Recomendaciones",
   DIAS_REPOSO: "Días de reposo indicados",
   INDICACIONES: "Indicaciones",
+  ORDENES: "Órdenes",
 } as const;
 
 export function catalogFor(type: DocumentType): string[] {
@@ -54,6 +55,8 @@ export function catalogFor(type: DocumentType): string[] {
         SectionCatalog.INDICACIONES,
         SectionCatalog.OBSERVACIONES,
       ];
+    case "ordenesMedicas":
+      return [SectionCatalog.DATOS_PACIENTE, SectionCatalog.ORDENES];
   }
 }
 
@@ -70,6 +73,7 @@ export function defaultSectionsFor(type: DocumentType): string[] {
       ];
     case "historiaClinica":
     case "reposo":
+    case "ordenesMedicas":
       return catalogFor(type);
   }
 }
@@ -98,13 +102,16 @@ export function isLegacyInformeAllChecked(sections: string[]): boolean {
 
 export function normalizeTemplateSections(type: DocumentType, sections: string[]): string[] {
   const catalog = catalogFor(type);
-  const mapped = sections.map((s) =>
-    s.trim().toLowerCase() === "recomendaciones" ? SectionCatalog.PLAN : s,
-  );
-  const ordered = mapped.filter((s) => catalog.includes(s));
-  const unique = [...new Set(ordered)];
-  if (!unique.includes(SectionCatalog.DATOS_PACIENTE) && catalog.includes(SectionCatalog.DATOS_PACIENTE)) {
-    unique.unshift(SectionCatalog.DATOS_PACIENTE);
+  const mapped = sections
+    .map((s) => (s.trim().toLowerCase() === "recomendaciones" ? SectionCatalog.PLAN : s.trim()))
+    .filter((s) => s.length > 0);
+  // Conserva secciones personalizadas fuera del catálogo
+  const unique = [...new Set(mapped)];
+  if (
+    !unique.includes(SectionCatalog.DATOS_PACIENTE) &&
+    catalog.includes(SectionCatalog.DATOS_PACIENTE)
+  ) {
+    return [SectionCatalog.DATOS_PACIENTE, ...unique.filter((s) => s !== SectionCatalog.DATOS_PACIENTE)];
   }
   return unique.length ? unique : defaultSectionsFor(type);
 }

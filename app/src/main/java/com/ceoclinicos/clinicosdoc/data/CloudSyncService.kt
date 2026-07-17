@@ -202,12 +202,66 @@ object CloudSyncService {
 
     suspend fun findEmergencyFichaByCedula(cedula: String): EmergencyFicha? {
         val db = FirebaseFirestore.getInstance()
-        for (key in CedulaNormalizer.lookupKeys(cedula)) {
-            val snap = db.collection(FirestorePaths.PORTAL_PACIENTES).document(key).get().await()
-            if (!snap.exists()) continue
-            val ficha = snap.toEmergencyFicha()
-            if (ficha != null && ficha.activo) return ficha
+        val keys = CedulaNormalizer.lookupKeys(cedula)
+        // 1) pacientes/{key}
+        for (key in keys) {
+            try {
+                val snap = db.collection(FirestorePaths.PORTAL_PACIENTES).document(key).get().await()
+                if (!snap.exists()) continue
+                snap.toEmergencyFicha()?.takeIf { it.activo }?.let { return it }
+            } catch (_: Exception) {
+                /* seguir */
+            }
         }
+        // 2) Query por campo cedula / patientCedula
+        for (key in keys) {
+            for (field in listOf("cedula", "fichaEmergencia.patientCedula", "patientCedula")) {
+                try {
+                    val snap = db.collection(FirestorePaths.PORTAL_PACIENTES)
+                        .whereEqualTo(field, key)
+                        .limit(3)
+                        .get()
+                        .await()
+                    for (doc in snap.documents) {
+                        doc.toEmergencyFicha()?.takeIf { it.activo }?.let { return it }
+                    }
+                } catch (_: Exception) {
+                    /* índice / campo */
+                }
+            }
+        }
+        // 3) Índice legado fichas_emergencia_cedula → users/emg_* o fichas_emergencia
+        for (key in keys) {
+            try {
+                val idx = db.collection(FirestorePaths.FICHAS_EMERGENCIA_CEDULA).document(key).get().await()
+                if (!idx.exists()) continue
+                val publicId = (idx.getString("publicId")).orEmpty().trim()
+                if (publicId.isNotBlank()) {
+                    findEmergencyFichaByPublicId(publicId)?.let { return it }
+                }
+                idx.toEmergencyFicha()?.takeIf { it.activo }?.let { return it }
+            } catch (_: Exception) {
+                /* colección legada */
+            }
+        }
+        return null
+    }
+
+    suspend fun findEmergencyFichaByPublicId(publicId: String): EmergencyFicha? {
+        if (publicId.isBlank() || publicId.startsWith("legacy_")) return null
+        val db = FirebaseFirestore.getInstance()
+        try {
+            val users = db.collection("users").document("emg_$publicId").get().await()
+            if (users.exists()) {
+                users.toEmergencyFicha()?.takeIf { it.activo }?.let { return it }
+            }
+        } catch (_: Exception) { /* */ }
+        try {
+            val legacy = db.collection(FirestorePaths.FICHAS_EMERGENCIA).document(publicId).get().await()
+            if (legacy.exists()) {
+                legacy.toEmergencyFicha()?.takeIf { it.activo }?.let { return it }
+            }
+        } catch (_: Exception) { /* */ }
         return null
     }
 
@@ -405,10 +459,23 @@ object CloudSyncService {
 
     @Suppress("UNCHECKED_CAST")
     private fun com.google.firebase.firestore.DocumentSnapshot.toEmergencyFicha(): EmergencyFicha? {
-        val raw = data?.get("fichaEmergencia") as? Map<*, *> ?: return null
+        val data = data ?: return null
+        @Suppress("UNCHECKED_CAST")
+        val raw = (data["fichaEmergencia"] as? Map<*, *>)
+            ?: data.takeIf {
+                it.containsKey("publicId") || it.containsKey("tipoSangre") || it.containsKey("alergias")
+            }
+            ?: return null
         if (raw["activo"] == false) return null
-        val publicId = (raw["publicId"] as? String).orEmpty()
-        if (publicId.isBlank()) return null
+        val publicId = (raw["publicId"] as? String).orEmpty().trim()
+        val nombre = (raw["nombre"] as? String).orEmpty().trim()
+        val tipoSangre = (raw["tipoSangre"] as? String).orEmpty().trim()
+        val hasMedical = nombre.isNotBlank() || tipoSangre.isNotBlank() ||
+            !(raw["alergias"] as? String).isNullOrBlank() ||
+            !(raw["condiciones"] as? String).isNullOrBlank() ||
+            !(raw["medicamentos"] as? String).isNullOrBlank() ||
+            ((raw["contactos"] as? List<*>)?.isNotEmpty() == true)
+        if (publicId.isBlank() && !hasMedical) return null
         val contactosRaw = raw["contactos"] as? List<*> ?: emptyList<Any>()
         val contactos = contactosRaw.mapNotNull { item ->
             val m = item as? Map<*, *> ?: return@mapNotNull null
@@ -418,11 +485,12 @@ object CloudSyncService {
                 parentesco = (m["parentesco"] as? String).orEmpty(),
             )
         }
+        val cedula = (raw["patientCedula"] as? String).orEmpty().ifBlank { this.id }
         return EmergencyFicha(
-            publicId = publicId,
-            patientCedula = (raw["patientCedula"] as? String).orEmpty().ifBlank { id },
-            nombre = (raw["nombre"] as? String).orEmpty(),
-            tipoSangre = (raw["tipoSangre"] as? String).orEmpty().ifBlank { "Desconocido" },
+            publicId = publicId.ifBlank { "legacy_${CedulaNormalizer.normalize(cedula)}" },
+            patientCedula = cedula,
+            nombre = nombre.ifBlank { "Paciente" },
+            tipoSangre = tipoSangre.ifBlank { "Desconocido" },
             alergias = (raw["alergias"] as? String).orEmpty(),
             condiciones = (raw["condiciones"] as? String).orEmpty(),
             medicamentos = (raw["medicamentos"] as? String).orEmpty(),
@@ -457,6 +525,7 @@ object CloudSyncService {
             headerId = dto.headerId,
             headerSnapshot = dto.headerSnapshot?.toHeaderModel(),
             membrete = dto.toMembrete(),
+            sourceDocumentId = dto.sourceDocumentId,
         )
     }
 
@@ -470,6 +539,7 @@ object CloudSyncService {
             isDefault = dto.isDefault ?: false,
             enabledPhysicalExamSystemIds = dto.enabledPhysicalExamSystemIds.orEmpty(),
             physicalExamTextOverrides = dto.physicalExamTextOverrides.orEmpty(),
+            sectionDefaultTexts = dto.sectionDefaultTexts.orEmpty(),
             enfermedadActualEjemplo = dto.enfermedadActualEjemplo.orEmpty(),
             sectionLayoutOrder = dto.sectionLayoutOrder.orEmpty(),
         )
@@ -581,6 +651,7 @@ object CloudSyncService {
         doctorId = doctorId,
         doctorNombre = doctorNombre,
         patientFirestoreKey = patientFirestoreKey,
+        sourceDocumentId = sourceDocumentId,
     )
 
     private fun DocumentHeader.toSyncDto() = DocumentHeaderDto(
@@ -606,6 +677,7 @@ object CloudSyncService {
         isDefault = isDefault,
         enabledPhysicalExamSystemIds = enabledPhysicalExamSystemIds,
         physicalExamTextOverrides = physicalExamTextOverrides,
+        sectionDefaultTexts = sectionDefaultTexts,
         enfermedadActualEjemplo = enfermedadActualEjemplo,
         sectionLayoutOrder = sectionLayoutOrder,
     )

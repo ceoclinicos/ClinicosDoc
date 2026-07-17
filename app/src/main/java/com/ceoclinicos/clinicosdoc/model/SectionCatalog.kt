@@ -19,6 +19,7 @@ object SectionCatalog {
     const val HABITOS_PSICOBIOLOGICOS = "Hábitos psicobiológicos"
     const val DIAS_REPOSO = "Días de reposo indicados"
     const val INDICACIONES = "Indicaciones"
+    const val ORDENES = OrdenesMedicasDefaults.SECTION_ORDENES
 
     val all = listOf(
         MOTIVO_CONSULTA,
@@ -39,6 +40,7 @@ object SectionCatalog {
         HABITOS_PSICOBIOLOGICOS,
         DIAS_REPOSO,
         INDICACIONES,
+        ORDENES,
     )
 
     /** Secciones disponibles para elegir/ordenar por tipo de documento. */
@@ -73,20 +75,26 @@ object SectionCatalog {
             INDICACIONES,
             OBSERVACIONES,
         )
+        DocumentType.ORDENES_MEDICAS -> listOf(
+            DATOS_PACIENTE,
+            ORDENES,
+        )
     }
 
     fun requiresLockedPatientSection(documentType: DocumentType): Boolean =
         catalogFor(documentType).firstOrNull() == DATOS_PACIENTE
 
-    /** Asegura «Datos del paciente» primero y solo secciones válidas del catálogo. */
+    /** Asegura «Datos del paciente» primero; permite secciones personalizadas fuera del catálogo. */
     fun normalizeActive(documentType: DocumentType, sections: List<String>): List<String> {
         val catalog = catalogFor(documentType).toSet()
         val mapped = sections.map { s ->
-            if (s.equals(RECOMENDACIONES, ignoreCase = true)) PLAN else s
-        }
-        val filtered = mapped.filter { it in catalog }
-        if (!requiresLockedPatientSection(documentType)) return filtered
-        val withoutLocked = filtered.filterNot { it == DATOS_PACIENTE }
+            if (s.equals(RECOMENDACIONES, ignoreCase = true)) PLAN else s.trim()
+        }.filter { it.isNotBlank() }
+        val unique = mapped.distinct()
+        // Catálogo + personalizadas (no descartar custom)
+        val kept = unique.filter { it in catalog || it !in catalog }
+        if (!requiresLockedPatientSection(documentType)) return kept
+        val withoutLocked = kept.filterNot { it == DATOS_PACIENTE }
         return listOf(DATOS_PACIENTE) + withoutLocked
     }
 
@@ -129,6 +137,10 @@ object SectionCatalog {
             DIAS_REPOSO,
             INDICACIONES,
             OBSERVACIONES,
+        )
+        DocumentType.ORDENES_MEDICAS -> listOf(
+            DATOS_PACIENTE,
+            ORDENES,
         )
     }
 }

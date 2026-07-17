@@ -7,7 +7,11 @@ object SectionDefaults {
         "- Motivo de consulta: SOLO síntomas principales (máximo 3), unidos con \"y\"/\"e\". " +
             "Ejemplo: \"diarrea y vómito\". PROHIBIDO frases largas, \"consulta por…\", evolución, antecedentes o diagnóstico."
 
-    fun textFor(section: String): String = when {
+    fun textFor(section: String, overrides: Map<String, String> = emptyMap()): String {
+        overrides.entries.firstOrNull { it.key.equals(section, ignoreCase = true) }
+            ?.value?.trim()?.takeIf { it.isNotEmpty() }
+            ?.let { return it }
+        return when {
         section.equals(SectionCatalog.MOTIVO_CONSULTA, ignoreCase = true) ->
             "Evaluación médica."
         section.equals(SectionCatalog.ENFERMEDAD_ACTUAL, ignoreCase = true) ->
@@ -45,10 +49,13 @@ object SectionDefaults {
             "Días de reposo a indicar según criterio médico."
         section.equals(SectionCatalog.INDICACIONES, ignoreCase = true) ->
             "Indicaciones médicas según evolución."
+        section.equals(SectionCatalog.ORDENES, ignoreCase = true) ->
+            OrdenesMedicasDefaults.MOLDE_EJEMPLO
         else -> "Sin datos adicionales referidos."
+        }
     }
 
-    fun promptBlock(sections: List<String>): String {
+    fun promptBlock(sections: List<String>, overrides: Map<String, String> = emptyMap()): String {
         val clinical = sections.filterNot {
             it.equals(SectionCatalog.DATOS_PACIENTE, ignoreCase = true)
         }
@@ -56,7 +63,7 @@ object SectionDefaults {
         return buildString {
             appendLine("TEXTOS PREDETERMINADOS (usar SOLO si la sección está activa y el dictado NO aporta datos para ella):")
             clinical.forEach { section ->
-                appendLine("- $section → \"${textFor(section)}\"")
+                appendLine("- $section → \"${textFor(section, overrides)}\"")
             }
             appendLine("Si el dictado sí aporta datos, prioriza el dictado y mejora la redacción.")
             appendLine("NO uses la frase \"No referido\" cuando exista texto predeterminado arriba.")

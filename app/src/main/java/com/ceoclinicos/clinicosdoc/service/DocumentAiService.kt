@@ -4,10 +4,12 @@ import android.content.Context
 import com.ceoclinicos.clinicosdoc.config.AiConfig
 import com.ceoclinicos.clinicosdoc.data.EnfermedadActualStorage
 import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
+import com.ceoclinicos.clinicosdoc.data.TemplateStorage
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
 import com.ceoclinicos.clinicosdoc.model.DocumentType
+import com.ceoclinicos.clinicosdoc.model.OrdenesMedicasDefaults
 import com.ceoclinicos.clinicosdoc.model.Patient
 import com.ceoclinicos.clinicosdoc.model.ReportSessionConfig
 import com.ceoclinicos.clinicosdoc.model.SectionCatalog
@@ -80,7 +82,7 @@ object DocumentAiService {
             appendLine()
             appendLine("Instrucciones obligatorias:")
             appendLine("1. Mejora la redacción del dictado: corrige errores, ordena ideas y usa lenguaje médico apropiado.")
-            appendLine("2. NO incluyas título del documento (INFORME MÉDICO, HISTORIA CLÍNICA, REPOSO MÉDICO).")
+            appendLine("2. NO incluyas título del documento (INFORME MÉDICO, HISTORIA CLÍNICA, REPOSO MÉDICO, ÓRDENES MÉDICAS).")
             appendLine("3. NO incluyas encabezado institucional ni identificación del paciente.")
             appendLine("4. NO incluyas sección \"Datos del paciente\".")
             appendLine("5. Responde SOLO con el cuerpo clínico redactado.")
@@ -112,7 +114,7 @@ object DocumentAiService {
                     appendLine("- Examen físico: lo que EXPLORA el médico. DEBE incluir TODOS los sistemas activos; solo modifica los dictados y conserva el texto base en el resto.")
                     appendLine("- Diagnóstico: lista numerada al final; términos clínicos o CIE según el dictado.")
                     appendLine()
-                    appendLine(SectionDefaults.promptBlock(effectiveSections))
+                    appendLine(SectionDefaults.promptBlock(effectiveSections, effectiveTemplate.sectionDefaultTexts))
                     appendLine("Omite de la respuesta las secciones que la plantilla no liste.")
                     if (physicalExamBlock.isNotBlank()) {
                         appendLine()
@@ -155,7 +157,7 @@ object DocumentAiService {
                     appendLine("- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.")
                     appendLine("- Plan (si está en la plantilla): lista numerada de conducta/tratamiento (observación, fármacos, controles). Solo según dictado.")
                     appendLine()
-                    appendLine(SectionDefaults.promptBlock(effectiveSections))
+                    appendLine(SectionDefaults.promptBlock(effectiveSections, effectiveTemplate.sectionDefaultTexts))
                     if (physicalExamBlock.isNotBlank()) {
                         appendLine()
                         appendLine(physicalExamBlock)
@@ -168,7 +170,18 @@ object DocumentAiService {
                     appendLine("Secciones en orden:")
                     appendLine(sectionsList)
                     appendLine("Cada sección con **título:** y contenido.")
-                    appendLine(SectionDefaults.promptBlock(effectiveSections))
+                    appendLine(SectionDefaults.promptBlock(effectiveSections, effectiveTemplate.sectionDefaultTexts))
+                }
+                DocumentType.ORDENES_MEDICAS -> {
+                    val molde = effectiveTemplate.sectionDefaultTexts.entries
+                        .firstOrNull {
+                            it.key.equals(OrdenesMedicasDefaults.SECTION_ORDENES, ignoreCase = true)
+                        }?.value
+                        ?: SectionDefaults.textFor(
+                            OrdenesMedicasDefaults.SECTION_ORDENES,
+                            effectiveTemplate.sectionDefaultTexts,
+                        )
+                    appendLine(OrdenesMedicasDefaults.promptGuidelines(molde))
                 }
             }
 
@@ -180,6 +193,75 @@ object DocumentAiService {
 
         val raw = AiService.sendPrompt(prompt = prompt, systemMessage = system, maxTokens = 4096)
         return sanitizeDocumentContent(raw, examSystems)
+    }
+
+    /** Genera hoja de órdenes a partir de un informe/HC ya redactado. */
+    suspend fun generateOrdenesFromCase(
+        context: Context,
+        patient: Patient,
+        doctor: DoctorProfile,
+        caseContent: String,
+        notes: String = "",
+        modo: OrdenesMedicasDefaults.Modo = OrdenesMedicasDefaults.Modo.ORDENES,
+        header: DocumentHeader? = null,
+    ): String {
+        AiConfig.load(context.applicationContext)
+        val template = TemplateStorage.forType(context, DocumentType.ORDENES_MEDICAS)
+            .firstOrNull { it.isDefault }
+            ?: TemplateStorage.forType(context, DocumentType.ORDENES_MEDICAS).firstOrNull()
+            ?: DocumentTemplate(
+                id = "ordenes-default",
+                name = "Órdenes médicas",
+                documentType = DocumentType.ORDENES_MEDICAS,
+                sections = SectionCatalog.defaultsFor(DocumentType.ORDENES_MEDICAS),
+                sectionDefaultTexts = mapOf(
+                    OrdenesMedicasDefaults.SECTION_ORDENES to OrdenesMedicasDefaults.MOLDE_EJEMPLO,
+                ),
+            )
+        val molde = template.sectionDefaultTexts.entries
+            .firstOrNull { it.key.equals(OrdenesMedicasDefaults.SECTION_ORDENES, ignoreCase = true) }
+            ?.value
+            ?: OrdenesMedicasDefaults.MOLDE_EJEMPLO
+        val headerBlock = header?.toPlainTextBlock()
+
+        val system = """
+            Eres un asistente médico que redacta órdenes / tratamiento en español.
+            Te basas en el caso clínico ya redactado (informe o historia).
+            No inventes diagnósticos ni fármacos que contradigan el caso.
+            Usa terminología médica apropiada para Venezuela/Latinoamérica.
+        """.trimIndent()
+
+        val prompt = buildString {
+            appendLine("Genera ÓRDENES MÉDICAS (${modo.label}) a partir del caso clínico.")
+            appendLine()
+            appendLine("DATOS DEL MÉDICO (referencia, no incluir): ${doctor.nombre} · ${doctor.especialidad}")
+            appendLine("DATOS DEL PACIENTE (referencia, no incluir): ${patient.nombre}, ${patient.edad} años, ${patient.sexo.ifBlank { "—" }}")
+            appendLine()
+            appendLine("CASO CLÍNICO (informe/historia ya redactado — base para las órdenes):")
+            appendLine("\"\"\"")
+            appendLine(caseContent.trim())
+            appendLine("\"\"\"")
+            if (notes.isNotBlank()) {
+                appendLine()
+                appendLine("NOTAS / DICTADO ADICIONAL DEL MÉDICO (priorizar):")
+                appendLine("\"\"\"")
+                appendLine(notes.trim())
+                appendLine("\"\"\"")
+            }
+            appendLine()
+            appendLine("Instrucciones:")
+            appendLine("1. NO incluyas título ÓRDENES MÉDICAS ni membrete del paciente.")
+            appendLine("2. Responde SOLO con [[SECTION:Órdenes]] y la lista numerada.")
+            appendLine()
+            appendLine(OrdenesMedicasDefaults.promptGuidelines(molde, modo))
+            if (!headerBlock.isNullOrBlank()) {
+                appendLine()
+                appendLine("Referencia del médico (no duplicar): $headerBlock")
+            }
+        }
+
+        val raw = AiService.sendPrompt(prompt = prompt, systemMessage = system, maxTokens = 2048)
+        return sanitizeDocumentContent(raw, emptyList())
     }
 
     suspend fun regenerateSection(

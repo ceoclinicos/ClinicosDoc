@@ -12,12 +12,13 @@ export const FirestorePaths = {
   SUB_DRAFTS: "drafts",
 } as const;
 
-export type DocumentType = "historiaClinica" | "informe" | "reposo";
+export type DocumentType = "historiaClinica" | "informe" | "reposo" | "ordenesMedicas";
 
 export const DocumentTypeLabels: Record<DocumentType, string> = {
   historiaClinica: "Historia clínica",
   informe: "Informe",
   reposo: "Reposo",
+  ordenesMedicas: "Órdenes médicas",
 };
 
 export interface Patient {
@@ -40,6 +41,8 @@ export interface DocumentTemplate {
   enabledPhysicalExamSystemIds: string[];
   /** Ejemplo de estilo editable para Enfermedad actual (IA). */
   enfermedadActualEjemplo?: string;
+  /** Textos predeterminados por sección (paridad con examen físico). */
+  sectionDefaultTexts?: Record<string, string>;
 }
 
 export interface PhysicalExamSystem {
@@ -83,12 +86,15 @@ export interface ClinicalDocument {
   headerId?: string;
   headerSnapshot?: DocumentHeader;
   membrete?: PatientMembrete;
+  /** Documento clínico de origen (informe/HC). */
+  sourceDocumentId?: string;
 }
 
 export const DocumentReportTitles: Record<DocumentType, string> = {
   historiaClinica: "HISTORIA CLÍNICA",
   informe: "INFORME MÉDICO",
   reposo: "REPOSO MÉDICO",
+  ordenesMedicas: "ÓRDENES MÉDICAS",
 };
 
 export interface ClinicalDraft {

@@ -1,6 +1,7 @@
 import type { DocumentSection } from "./document-parser";
 import { parseDocumentSections, serializeDocumentSections } from "./document-parser";
 import { SectionCatalog } from "../shared/section-catalog";
+import { ORDENES_MOLDE_EJEMPLO } from "../shared/ordenes-medicas";
 
 const DEFAULT_BODY: Record<string, string> = {
   [SectionCatalog.MOTIVO_CONSULTA]: "Evaluación médica.",
@@ -27,6 +28,7 @@ const DEFAULT_BODY: Record<string, string> = {
     "Impresión diagnóstica pendiente de correlacionar con evolución clínica.",
   [SectionCatalog.DIAS_REPOSO]: "Días de reposo a indicar según criterio médico.",
   [SectionCatalog.INDICACIONES]: "Indicaciones médicas según evolución.",
+  [SectionCatalog.ORDENES]: ORDENES_MOLDE_EJEMPLO,
 };
 
 function norm(s: string): string {

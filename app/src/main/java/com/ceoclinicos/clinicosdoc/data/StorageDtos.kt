@@ -44,6 +44,7 @@ internal data class ClinicalDocumentDto(
     val doctorId: String? = null,
     val doctorNombre: String? = null,
     val patientFirestoreKey: String? = null,
+    val sourceDocumentId: String? = null,
 )
 
 internal data class DocumentHeaderDto(
@@ -69,6 +70,7 @@ internal data class DocumentTemplateDto(
     val isDefault: Boolean?,
     val enabledPhysicalExamSystemIds: List<String>? = null,
     val physicalExamTextOverrides: Map<String, String>? = null,
+    val sectionDefaultTexts: Map<String, String>? = null,
     val enfermedadActualEjemplo: String? = null,
     val sectionLayoutOrder: List<String>? = null,
 )

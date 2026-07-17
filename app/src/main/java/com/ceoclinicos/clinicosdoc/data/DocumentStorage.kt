@@ -74,6 +74,7 @@ object DocumentStorage {
         membreteSexo = membrete?.sexo,
         membreteFechaNacimiento = membrete?.fechaNacimiento,
         membreteFecha = membrete?.fecha,
+        sourceDocumentId = sourceDocumentId,
     )
 
     private fun ClinicalDocumentDto.toModel() = ClinicalDocument(
@@ -90,6 +91,7 @@ object DocumentStorage {
         headerId = headerId,
         headerSnapshot = headerSnapshot?.toModel(),
         membrete = toMembrete(),
+        sourceDocumentId = sourceDocumentId,
     )
 
     private fun ClinicalDocumentDto.toMembrete(): PatientMembrete? {

@@ -28,6 +28,8 @@ object FirestorePaths {
 
     /** Registro portal pacientes (modo paciente / ficha emergencia). */
     const val PORTAL_PACIENTES = "pacientes"
+    const val FICHAS_EMERGENCIA = "fichas_emergencia"
+    const val FICHAS_EMERGENCIA_CEDULA = "fichas_emergencia_cedula"
 
     // Colecciones planas legadas (no usar en sync nuevo):
     const val DOCUMENTS = "${PREFIX}documents"

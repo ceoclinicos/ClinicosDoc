@@ -71,6 +71,7 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
     var layoutOrder by remember { mutableStateOf<List<String>>(emptyList()) }
     var enabledExamIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var examCatalog by remember { mutableStateOf<List<PhysicalExamSystem>>(emptyList()) }
+    var sectionDefaultTexts by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     LaunchedEffect(templateId) {
         examCatalog = PhysicalExamCatalogStorage.loadAll(context)
@@ -82,6 +83,7 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
             enabledExamIds = it.enabledPhysicalExamSystemIds.ifEmpty {
                 PhysicalExamDefaults.defaultEnabledIds
             }
+            sectionDefaultTexts = it.sectionDefaultTexts
         }
     }
 
@@ -125,10 +127,12 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
                 documentType = docType,
                 layoutOrder = layoutOrder,
                 activeSections = sections,
+                sectionDefaultTexts = sectionDefaultTexts,
                 onStateChange = { order, active ->
                     layoutOrder = order
                     sections = active
                 },
+                onSectionDefaultTextsChange = { sectionDefaultTexts = it },
             )
             if (docType == DocumentType.INFORME ||
                 sections.any { it.equals(SectionCatalog.EXAMEN_FISICO, ignoreCase = true) }
@@ -159,6 +163,7 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
                                 enabledExamIds,
                                 examCatalog,
                             ),
+                            sectionDefaultTexts = sectionDefaultTexts,
                         ),
                     )
                     Toast.makeText(context, "Plantilla guardada", Toast.LENGTH_SHORT).show()

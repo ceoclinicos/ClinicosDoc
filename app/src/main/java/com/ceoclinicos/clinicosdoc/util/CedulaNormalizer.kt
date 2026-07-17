@@ -16,12 +16,16 @@ object CedulaNormalizer {
             keys += digits
             keys += "V$digits"
             keys += "E$digits"
+            keys += "V-$digits"
+            keys += "E-$digits"
         }
         if (raw.startsWith("V") && raw.drop(1).all { it.isDigit() }) {
             keys += raw.drop(1)
+            keys += "V-${raw.drop(1)}"
         }
         if (raw.startsWith("E") && raw.drop(1).all { it.isDigit() }) {
             keys += raw.drop(1)
+            keys += "E-${raw.drop(1)}"
         }
         return keys.toList()
     }

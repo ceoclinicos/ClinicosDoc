@@ -35,6 +35,7 @@ function sub(userId: string, name: string) {
 function asDocType(raw: string): DocumentType {
   if (raw === "historiaClinica" || raw === "HISTORIA_CLINICA") return "historiaClinica";
   if (raw === "reposo" || raw === "REPOSO") return "reposo";
+  if (raw === "ordenesMedicas" || raw === "ORDENES_MEDICAS") return "ordenesMedicas";
   return "informe";
 }
 
@@ -54,7 +55,17 @@ function parseTemplate(data: DocumentData, id: string): DocumentTemplate | null 
     enfermedadActualEjemplo: data.enfermedadActualEjemplo
       ? String(data.enfermedadActualEjemplo)
       : undefined,
+    sectionDefaultTexts: parseSectionDefaultTexts(data.sectionDefaultTexts),
   };
+}
+
+function parseSectionDefaultTexts(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "string" && v.trim()) out[k] = v;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function parseHeader(data: DocumentData, id: string): DocumentHeader | null {
@@ -126,6 +137,7 @@ function parseDocument(data: DocumentData, id: string): ClinicalDocument | null 
       ? (data.headerSnapshot as ClinicalDocument["headerSnapshot"])
       : undefined,
     membrete,
+    sourceDocumentId: data.sourceDocumentId ? String(data.sourceDocumentId) : undefined,
   };
 }
 
@@ -200,6 +212,7 @@ export async function pushTemplate(t: DocumentTemplate, userId = userIdOrThrow()
     physicalExamTextOverrides: {},
     enfermedadActualEjemplo: t.enfermedadActualEjemplo ?? "",
     sectionLayoutOrder: t.sections,
+    sectionDefaultTexts: t.sectionDefaultTexts ?? {},
   });
 }
 
@@ -267,6 +280,7 @@ export async function pushDocument(d: ClinicalDocument, userId = userIdOrThrow()
     membreteFechaNacimiento: d.membrete?.fechaNacimiento ?? null,
     membreteFecha: d.membrete?.fecha ?? null,
     doctorId: userId,
+    sourceDocumentId: d.sourceDocumentId ?? null,
   });
 }
 
