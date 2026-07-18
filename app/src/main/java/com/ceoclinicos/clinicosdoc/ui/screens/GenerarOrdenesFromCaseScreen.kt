@@ -1,4 +1,4 @@
-package com.ceoclinicos.clinicosdoc.ui.screens
+﻿package com.ceoclinicos.clinicosdoc.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
@@ -93,10 +93,16 @@ fun GenerarOrdenesFromCaseScreen(
     ) { padding ->
         if (patient == null || doctor == null) {
             Column(
-                Modifier.fillMaxSize().padding(padding).padding(24.dp),
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("No se encontró el paciente o el perfil del médico.", color = TextSecondary)
+                Text(
+                    "No se encontro el paciente o el perfil del medico.",
+                    color = TextSecondary,
+                )
             }
             return@AppScaffold
         }
@@ -109,7 +115,7 @@ fun GenerarOrdenesFromCaseScreen(
                 .padding(24.dp),
         ) {
             Text(
-                "${patient.nombre} · C.I. ${patient.cedula}",
+                "${patient.nombre} Â· C.I. ${patient.cedula}",
                 style = MaterialTheme.typography.titleMedium,
             )
             if (pending.sourceTypeLabel.isNotBlank()) {
@@ -121,22 +127,24 @@ fun GenerarOrdenesFromCaseScreen(
             }
 
             if (generated == null) {
-                Spacer(Modifier = Modifier.height(16.dp))
-                Text("Caso clínico (editable)", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(16.dp))
+                Text("Caso clinico (editable)", style = MaterialTheme.typography.titleSmall)
                 Text(
                     "Revisa o ajusta el texto antes de generar.",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
                 )
-                Spacer(Modifier = Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = caseText,
                     onValueChange = { caseText = it },
-                    modifier = Modifier.fillMaxWidth().height(220.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp),
                     maxLines = 20,
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(Modifier.height(16.dp))
                 Text("Tipo de hoja", style = MaterialTheme.typography.titleSmall)
                 OrdenesMedicasDefaults.Modo.entries.forEach { option ->
                     Row(
@@ -155,25 +163,27 @@ fun GenerarOrdenesFromCaseScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("Notas / dictado adicional (opcional)", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Notas / dictado adicional (opcional)",
+                    style = MaterialTheme.typography.titleSmall,
+                )
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    modifier = Modifier.fillMaxWidth().height(100.dp),
-                    placeholder = { Text("Ej. agregar ceftriaxona, oxígeno 2 L…") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp),
+                    placeholder = { Text("Ej. agregar ceftriaxona, oxigeno 2 L...") },
                     maxLines = 6,
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(Modifier.height(20.dp))
                 PremiumPrimaryButton(
-                    label = if (generating) "Generando…" else "Generar órdenes",
-                    icon = Icons.Default.AutoAwesome,
-                    loading = generating,
-                    modifier = Modifier.fillMaxWidth(),
+                    label = if (generating) "Generando..." else "Generar ordenes",
                     onClick = {
                         if (caseText.isBlank()) {
-                            Toast.makeText(context, "El caso clínico está vacío", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "El caso clinico esta vacio", Toast.LENGTH_SHORT).show()
                             return@PremiumPrimaryButton
                         }
                         generating = true
@@ -199,16 +209,19 @@ fun GenerarOrdenesFromCaseScreen(
                             }
                         }
                     },
+                    modifier = Modifier.fillMaxWidth(),
+                    loading = generating,
+                    icon = Icons.Default.AutoAwesome,
                 )
             } else {
-                Spacer(Modifier = Modifier.height(12.dp))
+                Spacer(Modifier.height(12.dp))
                 Text(modo.label, style = MaterialTheme.typography.labelLarge, color = Teal)
-                Spacer(Modifier = Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
                 EditableDocumentContent(
                     content = generated.orEmpty(),
                     onContentChange = { generated = it },
                 )
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(Modifier.height(12.dp))
                 DocumentPdfActions(
                     document = ClinicalDocument(
                         id = "preview-ordenes",
@@ -227,12 +240,9 @@ fun GenerarOrdenesFromCaseScreen(
                         sourceDocumentId = pending.sourceDocumentId,
                     ),
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(Modifier.height(16.dp))
                 PremiumPrimaryButton(
                     label = "Guardar documento",
-                    icon = Icons.Default.Save,
-                    loading = saving,
-                    modifier = Modifier.fillMaxWidth(),
                     onClick = {
                         val content = generated ?: return@PremiumPrimaryButton
                         saving = true
@@ -258,12 +268,16 @@ fun GenerarOrdenesFromCaseScreen(
                                 ),
                             )
                             saving = false
-                            Toast.makeText(context, "Órdenes guardadas", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Ordenes guardadas", Toast.LENGTH_SHORT).show()
                             onSaved(id)
                         }
                     },
+                    modifier = Modifier.fillMaxWidth(),
+                    loading = saving,
+                    icon = Icons.Default.Save,
                 )
             }
         }
     }
 }
+

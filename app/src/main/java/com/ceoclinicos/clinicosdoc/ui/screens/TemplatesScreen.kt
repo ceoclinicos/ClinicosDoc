@@ -38,21 +38,28 @@ import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TemplatesScreen(onBack: () -> Unit, onEditTemplate: (String, Boolean) -> Unit) {
+fun TemplatesScreen(
+    onBack: () -> Unit,
+    onEditTemplate: (String, Boolean) -> Unit,
+    title: String = "Plantillas",
+    filterTypes: List<DocumentType> = DocumentType.informesYHistorias,
+) {
     val context = LocalContext.current
     var templates by remember { mutableStateOf<List<DocumentTemplate>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
 
     fun reload() {
+        TemplateStorage.ensureAllTypesPresent(context)
         val all = TemplateStorage.loadAll(context)
-        templates = DocumentType.entries.mapNotNull { type ->
+        templates = filterTypes.mapNotNull { type ->
             all.firstOrNull { it.documentType == type && it.isDefault }
                 ?: all.firstOrNull { it.documentType == type }
+                ?: TemplateStorage.ensureTemplateForType(context, type)
         }
         loading = false
     }
 
-    LaunchedEffect(Unit) { reload() }
+    LaunchedEffect(filterTypes) { reload() }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -64,7 +71,7 @@ fun TemplatesScreen(onBack: () -> Unit, onEditTemplate: (String, Boolean) -> Uni
     }
 
     AppScaffold(
-        title = "Plantillas",
+        title = title,
         onBack = onBack,
     ) { padding ->
         if (loading) {

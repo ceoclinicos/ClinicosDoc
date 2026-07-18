@@ -147,6 +147,7 @@ fun ClinicosDocNavHost() {
         composable(Routes.PLANTILLAS_HUB) {
             PlantillasHubScreen(
                 onOpenDocumentTemplates = { navController.navigate(Routes.TEMPLATES) },
+                onOpenRecetasTemplates = { navController.navigate(Routes.TEMPLATES_RECETAS) },
                 onOpenHeaders = { navController.navigate(Routes.HEADERS) },
                 onOpenPhysicalExamCatalog = { navController.navigate(Routes.PHYSICAL_EXAM_CATALOG) },
                 onBack = { navController.popBackStack() },
@@ -168,6 +169,18 @@ fun ClinicosDocNavHost() {
                 onEditTemplate = { id, isNew ->
                     navController.navigate(Routes.templateEdit(id, isNew))
                 },
+                title = "Informes y historias",
+                filterTypes = DocumentType.informesYHistorias,
+            )
+        }
+        composable(Routes.TEMPLATES_RECETAS) {
+            TemplatesScreen(
+                onBack = { navController.popBackStack() },
+                onEditTemplate = { id, isNew ->
+                    navController.navigate(Routes.templateEdit(id, isNew))
+                },
+                title = "Recetas",
+                filterTypes = DocumentType.recetasYOrdenes,
             )
         }
         composable(
@@ -226,11 +239,9 @@ fun ClinicosDocNavHost() {
             DraftsScreen(
                 onBack = { navController.popBackStack() },
                 onOpenDraft = { draft ->
-                    val templates = TemplateStorage.forType(context, draft.documentType)
+                    val template = TemplateStorage.ensureTemplateForType(context, draft.documentType)
                     val templateId = draft.templateId
-                        ?: templates.firstOrNull { it.isDefault }?.id
-                        ?: templates.firstOrNull()?.id
-                        ?: return@DraftsScreen
+                        ?: template.id
                     navController.navigate(
                         Routes.redactar(
                             DocumentType.storageName(draft.documentType),
@@ -315,9 +326,16 @@ fun ClinicosDocNavHost() {
                 onDismiss = { showDocTypeSheet = false },
                 onSelect = { type ->
                     showDocTypeSheet = false
-                    val templates = TemplateStorage.forType(context, type)
-                    if (templates.isEmpty()) return@DocumentTypeSheet
-                    val template = templates.firstOrNull { it.isDefault } ?: templates.first()
+                    val template = try {
+                        TemplateStorage.ensureTemplateForType(context, type)
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(
+                            context,
+                            e.message ?: "No se pudo abrir la plantilla",
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                        return@DocumentTypeSheet
+                    }
                     val headers = HeaderStorage.loadAll(context)
                     val header = headers.firstOrNull { it.isDefault } ?: headers.firstOrNull()
                     navController.navigate(

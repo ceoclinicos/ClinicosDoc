@@ -164,6 +164,48 @@ a {
   font-size: 1.5rem;
 }
 
+.page-actions {
+  position: relative;
+}
+
+.tools-wrap {
+  position: relative;
+}
+
+.tools-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 11rem;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.tools-menu[hidden] {
+  display: none;
+}
+
+.tools-menu button {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.tools-menu button:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
 .lead {
   color: var(--text-secondary);
 }

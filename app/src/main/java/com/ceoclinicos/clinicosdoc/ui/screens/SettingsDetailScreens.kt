@@ -75,16 +75,21 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
 
     LaunchedEffect(templateId) {
         examCatalog = PhysicalExamCatalogStorage.loadAll(context)
-        template = TemplateStorage.loadAll(context).firstOrNull { it.id == templateId }
-        template?.let {
-            name = it.name
-            sections = it.normalizedSections()
-            layoutOrder = it.resolvedLayoutOrder()
-            enabledExamIds = it.enabledPhysicalExamSystemIds.ifEmpty {
-                PhysicalExamDefaults.defaultEnabledIds
-            }
-            sectionDefaultTexts = it.sectionDefaultTexts
+        TemplateStorage.ensureAllTypesPresent(context)
+        val found = TemplateStorage.loadAll(context).firstOrNull { it.id == templateId }
+        if (found == null) {
+            Toast.makeText(context, "No se encontró la plantilla", Toast.LENGTH_SHORT).show()
+            onBack()
+            return@LaunchedEffect
         }
+        template = found
+        name = found.name
+        sections = found.normalizedSections()
+        layoutOrder = found.resolvedLayoutOrder()
+        enabledExamIds = found.enabledPhysicalExamSystemIds.ifEmpty {
+            PhysicalExamDefaults.defaultEnabledIds
+        }
+        sectionDefaultTexts = found.sectionDefaultTexts
     }
 
     if (template == null) {

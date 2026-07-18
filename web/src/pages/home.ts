@@ -81,6 +81,7 @@ function medicoHome(): HTMLElement {
         <button type="button" class="tile tile-full" data-type="informe">Informe</button>
         <button type="button" class="tile tile-full" data-type="reposo">Reposo</button>
         <button type="button" class="tile tile-full" data-type="ordenesMedicas">Órdenes médicas</button>
+        <button type="button" class="tile tile-full" data-type="receta">Receta</button>
         <button type="submit" class="btn btn-ghost" value="cancel">Cancelar</button>
       </form>
     </dialog>

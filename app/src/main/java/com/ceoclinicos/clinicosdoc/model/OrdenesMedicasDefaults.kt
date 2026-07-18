@@ -79,9 +79,9 @@ object OrdenesMedicasDefaults {
             ${modeGuidelines(modo)}
 
             MOLDE DE ESTILO (personalizable por el médico; imita redacción y nivel de detalle, NO copies el caso del ejemplo si no aplica):
-            """"
+            ---
             $molde
-            """"
+            ---
         """.trimIndent()
     }
 }

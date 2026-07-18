@@ -48,9 +48,11 @@ object SectionDefaults {
         section.equals(SectionCatalog.DIAS_REPOSO, ignoreCase = true) ->
             "Días de reposo a indicar según criterio médico."
         section.equals(SectionCatalog.INDICACIONES, ignoreCase = true) ->
-            "Indicaciones médicas según evolución."
+            RecetaDefaults.MOLDE_INDICACIONES
         section.equals(SectionCatalog.ORDENES, ignoreCase = true) ->
             OrdenesMedicasDefaults.MOLDE_EJEMPLO
+        section.equals(SectionCatalog.RECIPE, ignoreCase = true) ->
+            RecetaDefaults.MOLDE_RECIPE
         else -> "Sin datos adicionales referidos."
         }
     }

@@ -69,7 +69,11 @@ object CloudSyncService {
         SyncCoordinator.withoutSync {
             if (patients.isNotEmpty()) PatientStorage.saveAllLocal(context, patients)
             if (documents.isNotEmpty()) DocumentStorage.saveAllLocal(context, documents)
-            if (templates.isNotEmpty()) TemplateStorage.saveAllLocal(context, templates)
+            if (templates.isNotEmpty()) {
+                TemplateStorage.saveAllLocal(context, templates)
+                // Tras sync: recrear tipos nuevos que no estén en la nube (ej. Órdenes médicas)
+                TemplateStorage.ensureAllTypesPresent(context)
+            }
             if (headers.isNotEmpty()) {
                 HeaderStorage.saveAllLocal(context, mergeHeaderLogos(context, headers))
             }

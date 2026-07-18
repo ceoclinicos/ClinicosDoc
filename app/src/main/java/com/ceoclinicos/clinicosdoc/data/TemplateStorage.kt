@@ -5,6 +5,7 @@ import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
 import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.OrdenesMedicasDefaults
 import com.ceoclinicos.clinicosdoc.model.PhysicalExamDefaults
+import com.ceoclinicos.clinicosdoc.model.RecetaDefaults
 import com.ceoclinicos.clinicosdoc.model.SectionCatalog
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -79,6 +80,29 @@ object TemplateStorage {
                     changed = true
                 }
             }
+            if (tpl.documentType == DocumentType.RECETA) {
+                val texts = tpl.sectionDefaultTexts.toMutableMap()
+                var seeded = false
+                if (texts.keys.none { it.equals(RecetaDefaults.SECTION_RECIPE, ignoreCase = true) }) {
+                    texts[RecetaDefaults.SECTION_RECIPE] = RecetaDefaults.MOLDE_RECIPE
+                    seeded = true
+                }
+                if (texts.keys.none { it.equals(RecetaDefaults.SECTION_INDICACIONES, ignoreCase = true) }) {
+                    texts[RecetaDefaults.SECTION_INDICACIONES] = RecetaDefaults.MOLDE_INDICACIONES
+                    seeded = true
+                }
+                if (seeded) {
+                    unique[index] = tpl.copy(
+                        sectionDefaultTexts = texts,
+                        sections = SectionCatalog.defaultsFor(DocumentType.RECETA),
+                        sectionLayoutOrder = SectionCatalog.initialLayoutOrder(
+                            DocumentType.RECETA,
+                            SectionCatalog.defaultsFor(DocumentType.RECETA),
+                        ),
+                    )
+                    changed = true
+                }
+            }
         }
         if (changed) {
             saveAllLocal(context, unique)
@@ -88,10 +112,15 @@ object TemplateStorage {
 
     private fun defaultTemplateFor(type: DocumentType): DocumentTemplate {
         val sections = SectionCatalog.defaultsFor(type)
-        val texts = if (type == DocumentType.ORDENES_MEDICAS) {
-            mapOf(OrdenesMedicasDefaults.SECTION_ORDENES to OrdenesMedicasDefaults.MOLDE_EJEMPLO)
-        } else {
-            emptyMap()
+        val texts = when (type) {
+            DocumentType.ORDENES_MEDICAS -> mapOf(
+                OrdenesMedicasDefaults.SECTION_ORDENES to OrdenesMedicasDefaults.MOLDE_EJEMPLO,
+            )
+            DocumentType.RECETA -> mapOf(
+                RecetaDefaults.SECTION_RECIPE to RecetaDefaults.MOLDE_RECIPE,
+                RecetaDefaults.SECTION_INDICACIONES to RecetaDefaults.MOLDE_INDICACIONES,
+            )
+            else -> emptyMap()
         }
         return DocumentTemplate(
             id = UUID.randomUUID().toString(),
@@ -216,6 +245,25 @@ object TemplateStorage {
     fun defaultForType(context: Context, type: DocumentType): DocumentTemplate? =
         forType(context, type).firstOrNull { it.isDefault }
             ?: forType(context, type).firstOrNull()
+
+    /**
+     * Garantiza una plantilla por tipo (útil tras sync o al añadir tipos nuevos como Órdenes).
+     * No es suspend: se puede llamar desde UI.
+     */
+    fun ensureAllTypesPresent(context: Context): List<DocumentTemplate> {
+        enforceOneTemplatePerType(context)
+        return loadAll(context)
+    }
+
+    /** Devuelve la plantilla del tipo, creándola si falta. */
+    fun ensureTemplateForType(context: Context, type: DocumentType): DocumentTemplate {
+        ensureAllTypesPresent(context)
+        return defaultForType(context, type)
+            ?: run {
+                val created = defaultTemplateFor(type)
+                upsert(context, created)
+            }
+    }
 
     fun saveAllLocal(context: Context, templates: List<DocumentTemplate>) {
         val json = gson.toJson(templates.map { it.toDto() })

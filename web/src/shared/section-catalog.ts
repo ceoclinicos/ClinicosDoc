@@ -18,6 +18,7 @@ export const SectionCatalog = {
   DIAS_REPOSO: "Días de reposo indicados",
   INDICACIONES: "Indicaciones",
   ORDENES: "Órdenes",
+  RECIPE: "Recipe",
 } as const;
 
 export function catalogFor(type: DocumentType): string[] {
@@ -57,6 +58,8 @@ export function catalogFor(type: DocumentType): string[] {
       ];
     case "ordenesMedicas":
       return [SectionCatalog.DATOS_PACIENTE, SectionCatalog.ORDENES];
+    case "receta":
+      return [SectionCatalog.DATOS_PACIENTE, SectionCatalog.RECIPE, SectionCatalog.INDICACIONES];
   }
 }
 
@@ -74,6 +77,7 @@ export function defaultSectionsFor(type: DocumentType): string[] {
     case "historiaClinica":
     case "reposo":
     case "ordenesMedicas":
+    case "receta":
       return catalogFor(type);
   }
 }

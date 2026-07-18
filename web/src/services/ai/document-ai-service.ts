@@ -11,7 +11,16 @@ import { sanitizeDocumentContent, ensurePhysicalExamSystems } from "./document-s
 import { buildPhysicalExamBlock, resolveSystemsForReport } from "./physical-exam-prompt";
 import { MOTIVO_CONSULTA_STYLE, sectionDefaultsPromptBlock } from "./section-defaults";
 import { ORDENES_SECTION, ordenesMedicasPromptBlock, type OrdenesModo } from "../../shared/ordenes-medicas";
+import {
+  RECETA_INDICACIONES_SECTION,
+  RECETA_MOLDE_INDICACIONES,
+  RECETA_MOLDE_RECIPE,
+  RECIPE_SECTION,
+  recetaPromptBlock,
+  type RecetaFuente,
+} from "../../shared/receta";
 import { templateForType } from "../clinical-store";
+import { parseDocumentSections, serializeDocumentSections } from "../document-parser";
 
 export interface DoctorInfo {
   nombre: string;
@@ -159,6 +168,20 @@ function buildPrompt(
         ([k]) => k.toLowerCase() === ORDENES_SECTION.toLowerCase(),
       )?.[1];
     lines.push(ordenesMedicasPromptBlock(molde));
+  } else if (template.documentType === "receta") {
+    const moldeRecipe =
+      template.sectionDefaultTexts?.[RECIPE_SECTION] ??
+      Object.entries(template.sectionDefaultTexts ?? {}).find(
+        ([k]) => k.toLowerCase() === RECIPE_SECTION.toLowerCase(),
+      )?.[1] ??
+      RECETA_MOLDE_RECIPE;
+    const moldeInd =
+      template.sectionDefaultTexts?.[RECETA_INDICACIONES_SECTION] ??
+      Object.entries(template.sectionDefaultTexts ?? {}).find(
+        ([k]) => k.toLowerCase() === RECETA_INDICACIONES_SECTION.toLowerCase(),
+      )?.[1] ??
+      RECETA_MOLDE_INDICACIONES;
+    lines.push(recetaPromptBlock(moldeRecipe, moldeInd));
   } else {
     lines.push(
       ...sectionList,
@@ -229,4 +252,140 @@ OBLIGATORIO: la respuesta empieza con [[SECTION:Órdenes]].`.trim();
   const raw = await sendPrompt({ prompt, systemMessage: system, maxTokens: 2048 });
   const sanitized = sanitizeDocumentContent(raw, []);
   return ensureTemplateSections(sanitized, [ORDENES_SECTION]);
+}
+
+/** Genera receta desde dictado, informe o diagnóstico (protocolos). */
+export async function generateReceta(options: {
+  patient: Patient;
+  doctor: DoctorInfo;
+  fuente: RecetaFuente;
+  input: string;
+  notes?: string;
+}): Promise<string> {
+  const { patient, doctor, fuente } = options;
+  const input = options.input.trim();
+  const notes = options.notes?.trim() ?? "";
+  const template = templateForType("receta");
+  const moldeRecipe =
+    template.sectionDefaultTexts?.[RECIPE_SECTION] ?? RECETA_MOLDE_RECIPE;
+  const moldeInd =
+    template.sectionDefaultTexts?.[RECETA_INDICACIONES_SECTION] ?? RECETA_MOLDE_INDICACIONES;
+  const fromDx = fuente === "diagnostico";
+
+  const system = fromDx
+    ? `Eres un asistente médico que redacta RECETAS en español.
+Te basas en el diagnóstico y en protocolos/guías clínicas habituales (primera línea VE/LatAm).
+Usa principios activos, dosis y duración típicas. Sé prudente.
+OBLIGATORIO: [[SECTION:Recipe]] e [[SECTION:Indicaciones]].`.trim()
+    : `Eres un asistente médico que redacta RECETAS en español.
+Te basas en el dictado o caso aportado. No inventes fármacos sin respaldo.
+OBLIGATORIO: [[SECTION:Recipe]] e [[SECTION:Indicaciones]].`.trim();
+
+  const label =
+    fuente === "diagnostico"
+      ? "DIAGNÓSTICO"
+      : fuente === "informe"
+        ? "CASO CLÍNICO (informe/historia)"
+        : "DICTADO / FÁRMACOS";
+
+  const prompt = [
+    fuente === "diagnostico"
+      ? "Genera RECETA MÉDICA según el DIAGNÓSTICO, usando protocolos y guías científicas habituales."
+      : fuente === "informe"
+        ? "Genera RECETA MÉDICA a partir del informe o historia clínica."
+        : "Genera RECETA MÉDICA a partir del dictado / lista de fármacos.",
+    "",
+    `DATOS DEL MÉDICO (referencia, no incluir): ${doctor.nombre} · ${doctor.especialidad}`,
+    `DATOS DEL PACIENTE (referencia, no incluir): ${patient.nombre}, ${patient.edad} años, ${patient.sexo || "—"}`,
+    "",
+    `${label}:`,
+    '"""',
+    input,
+    '"""',
+    notes ? ["", "NOTAS ADICIONALES (priorizar):", '"""', notes, '"""'].join("\n") : "",
+    "",
+    "Instrucciones:",
+    "1. NO incluyas título RECETA ni membrete del paciente.",
+    "2. Responde SOLO con [[SECTION:Recipe]] e [[SECTION:Indicaciones]].",
+    "",
+    recetaPromptBlock(moldeRecipe, moldeInd, fromDx),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const raw = await sendPrompt({ prompt, systemMessage: system, maxTokens: 2048 });
+  const sanitized = sanitizeDocumentContent(raw, []);
+  return ensureTemplateSections(sanitized, [RECIPE_SECTION, RECETA_INDICACIONES_SECTION]);
+}
+
+/** Agrega un fármaco (principio + presentación) a una receta existente. */
+export async function appendFarmacoToReceta(options: {
+  currentContent: string;
+  principioActivo: string;
+  presentacion: string;
+  concentracion?: string;
+  patient?: Patient;
+}): Promise<string> {
+  const principio = options.principioActivo.trim();
+  const presentacion = options.presentacion.trim();
+  const conc = options.concentracion?.trim() ?? "";
+  const drugLine = `${principio}${conc ? ` ${conc}` : ""} (${presentacion})`;
+
+  const sections = parseDocumentSections(options.currentContent);
+  let recipe = sections.find((s) => s.title.toLowerCase() === RECIPE_SECTION.toLowerCase());
+  let ind = sections.find(
+    (s) => s.title.toLowerCase() === RECETA_INDICACIONES_SECTION.toLowerCase(),
+  );
+  if (!recipe) {
+    recipe = { id: crypto.randomUUID(), title: RECIPE_SECTION, body: "" };
+    sections.unshift(recipe);
+  }
+  if (!ind) {
+    ind = { id: crypto.randomUUID(), title: RECETA_INDICACIONES_SECTION, body: "" };
+    sections.push(ind);
+  }
+
+  const system = `Completas UN fármaco para receta ambulatoria en español.
+Responde SOLO:
+RECIPE:
+...
+INDICACIONES:
+...`;
+
+  const prompt = [
+    "Agrega solo este fármaco:",
+    `- Principio activo: ${principio}`,
+    `- Presentación: ${presentacion}`,
+    conc ? `- Concentración: ${conc}` : "",
+    options.patient
+      ? `- Paciente: ${options.patient.edad} años, ${options.patient.sexo || "—"}`
+      : "",
+    "",
+    "Formato RECIPE ejemplo:",
+    drugLine,
+    "Dispóngase: N unidades.",
+    "",
+    "Formato INDICACIONES ejemplo:",
+    `${principio}:`,
+    "Tomar … vía … cada … por … días.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  let recipeAdd = `${drugLine}\nDispóngase: —.`;
+  let indAdd = `${principio}:\nTomar según indicación médica (${presentacion}).`;
+  try {
+    const raw = await sendPrompt({ prompt, systemMessage: system, maxTokens: 512 });
+    const cleaned = raw.replace(/```/g, "").trim();
+    const r = /RECIPE\s*:?\s*([\s\S]*?)(?=INDICACIONES\s*:|$)/i.exec(cleaned)?.[1]?.trim();
+    const i = /INDICACIONES\s*:?\s*([\s\S]*)$/i.exec(cleaned)?.[1]?.trim();
+    if (r) recipeAdd = r;
+    if (i) indAdd = i;
+  } catch {
+    /* fallback local */
+  }
+
+  recipe.body = [recipe.body.trim(), recipeAdd].filter(Boolean).join("\n\n");
+  ind.body = [ind.body.trim(), indAdd].filter(Boolean).join("\n\n");
+  return serializeDocumentSections(sections);
 }

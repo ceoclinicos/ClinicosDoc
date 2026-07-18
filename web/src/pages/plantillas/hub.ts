@@ -20,11 +20,11 @@ registerRoute({
         </button>
         <button type="button" class="tile tile-full" data-nav="/plantillas/documentos">
           <strong>Informes y historias</strong>
-          <span class="muted">Una plantilla por tipo de documento</span>
+          <span class="muted">Historia, informe y reposo</span>
         </button>
-        <button type="button" class="tile tile-full tile-muted" disabled>
+        <button type="button" class="tile tile-full" data-nav="/plantillas/recetas">
           <strong>Recetas</strong>
-          <span class="muted">Próximamente…</span>
+          <span class="muted">Órdenes médicas y recipe</span>
         </button>
       </div>
       `,

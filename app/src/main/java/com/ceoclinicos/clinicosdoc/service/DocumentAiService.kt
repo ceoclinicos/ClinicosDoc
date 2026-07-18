@@ -11,6 +11,7 @@ import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
 import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.OrdenesMedicasDefaults
 import com.ceoclinicos.clinicosdoc.model.Patient
+import com.ceoclinicos.clinicosdoc.model.RecetaDefaults
 import com.ceoclinicos.clinicosdoc.model.ReportSessionConfig
 import com.ceoclinicos.clinicosdoc.model.SectionCatalog
 import com.ceoclinicos.clinicosdoc.model.SectionDefaults
@@ -19,6 +20,7 @@ import com.ceoclinicos.clinicosdoc.util.cleanSectionBody
 import com.ceoclinicos.clinicosdoc.util.normalizeSectionTitle
 import com.ceoclinicos.clinicosdoc.util.parseDocumentSections
 import com.ceoclinicos.clinicosdoc.util.sanitizeDocumentContent
+import com.ceoclinicos.clinicosdoc.util.serializeDocumentSections
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -183,6 +185,19 @@ object DocumentAiService {
                         )
                     appendLine(OrdenesMedicasDefaults.promptGuidelines(molde))
                 }
+                DocumentType.RECETA -> {
+                    val moldeRecipe = effectiveTemplate.sectionDefaultTexts.entries
+                        .firstOrNull {
+                            it.key.equals(RecetaDefaults.SECTION_RECIPE, ignoreCase = true)
+                        }?.value
+                        ?: RecetaDefaults.MOLDE_RECIPE
+                    val moldeInd = effectiveTemplate.sectionDefaultTexts.entries
+                        .firstOrNull {
+                            it.key.equals(RecetaDefaults.SECTION_INDICACIONES, ignoreCase = true)
+                        }?.value
+                        ?: RecetaDefaults.MOLDE_INDICACIONES
+                    appendLine(RecetaDefaults.promptGuidelines(moldeRecipe, moldeInd))
+                }
             }
 
             if (!headerBlock.isNullOrBlank()) {
@@ -262,6 +277,228 @@ object DocumentAiService {
 
         val raw = AiService.sendPrompt(prompt = prompt, systemMessage = system, maxTokens = 2048)
         return sanitizeDocumentContent(raw, emptyList())
+    }
+
+    /**
+     * Genera receta desde dictado, informe/HC o diagnóstico (protocolos/guías).
+     */
+    suspend fun generateReceta(
+        context: Context,
+        patient: Patient,
+        doctor: DoctorProfile,
+        fuente: RecetaDefaults.Fuente,
+        input: String,
+        notes: String = "",
+        header: DocumentHeader? = null,
+    ): String {
+        AiConfig.load(context.applicationContext)
+        val template = TemplateStorage.forType(context, DocumentType.RECETA)
+            .firstOrNull { it.isDefault }
+            ?: TemplateStorage.forType(context, DocumentType.RECETA).firstOrNull()
+            ?: DocumentTemplate(
+                id = "receta-default",
+                name = "Receta",
+                documentType = DocumentType.RECETA,
+                sections = SectionCatalog.defaultsFor(DocumentType.RECETA),
+                sectionDefaultTexts = mapOf(
+                    RecetaDefaults.SECTION_RECIPE to RecetaDefaults.MOLDE_RECIPE,
+                    RecetaDefaults.SECTION_INDICACIONES to RecetaDefaults.MOLDE_INDICACIONES,
+                ),
+            )
+        val moldeRecipe = template.sectionDefaultTexts.entries
+            .firstOrNull { it.key.equals(RecetaDefaults.SECTION_RECIPE, ignoreCase = true) }
+            ?.value
+            ?: RecetaDefaults.MOLDE_RECIPE
+        val moldeInd = template.sectionDefaultTexts.entries
+            .firstOrNull { it.key.equals(RecetaDefaults.SECTION_INDICACIONES, ignoreCase = true) }
+            ?.value
+            ?: RecetaDefaults.MOLDE_INDICACIONES
+        val fromDiagnostico = fuente == RecetaDefaults.Fuente.DIAGNOSTICO
+        val headerBlock = header?.toPlainTextBlock()
+
+        val system = if (fromDiagnostico) {
+            """
+            Eres un asistente médico que redacta RECETAS en español.
+            Te basas en el diagnóstico indicado y en protocolos/guías clínicas habituales
+            (primera línea razonable para Venezuela/Latinoamérica).
+            Usa principios activos, dosis y duración típicas. Sé prudente y no inventes esquemas raros.
+            """.trimIndent()
+        } else {
+            """
+            Eres un asistente médico que redacta RECETAS en español.
+            Te basas en el dictado o caso clínico aportado. No inventes fármacos que no estén respaldados.
+            Usa terminología médica apropiada para Venezuela/Latinoamérica.
+            """.trimIndent()
+        }
+
+        val prompt = buildString {
+            when (fuente) {
+                RecetaDefaults.Fuente.DICTAR ->
+                    appendLine("Genera RECETA MÉDICA a partir del dictado / lista de fármacos del médico.")
+                RecetaDefaults.Fuente.INFORME ->
+                    appendLine("Genera RECETA MÉDICA a partir del informe o historia clínica (extrae tratamiento ambulatorio indicado).")
+                RecetaDefaults.Fuente.DIAGNOSTICO ->
+                    appendLine("Genera RECETA MÉDICA según el DIAGNÓSTICO, usando protocolos y guías científicas habituales.")
+            }
+            appendLine()
+            appendLine("DATOS DEL MÉDICO (referencia, no incluir): ${doctor.nombre} · ${doctor.especialidad}")
+            appendLine("DATOS DEL PACIENTE (referencia, no incluir): ${patient.nombre}, ${patient.edad} años, ${patient.sexo.ifBlank { "—" }}")
+            appendLine()
+            when (fuente) {
+                RecetaDefaults.Fuente.DIAGNOSTICO -> {
+                    appendLine("DIAGNÓSTICO:")
+                    appendLine("\"\"\"")
+                    appendLine(input.trim())
+                    appendLine("\"\"\"")
+                }
+                RecetaDefaults.Fuente.INFORME -> {
+                    appendLine("CASO CLÍNICO (informe/historia):")
+                    appendLine("\"\"\"")
+                    appendLine(input.trim())
+                    appendLine("\"\"\"")
+                }
+                RecetaDefaults.Fuente.DICTAR -> {
+                    appendLine("DICTADO / FÁRMACOS:")
+                    appendLine("\"\"\"")
+                    appendLine(input.trim())
+                    appendLine("\"\"\"")
+                }
+            }
+            if (notes.isNotBlank()) {
+                appendLine()
+                appendLine("NOTAS ADICIONALES DEL MÉDICO (priorizar):")
+                appendLine("\"\"\"")
+                appendLine(notes.trim())
+                appendLine("\"\"\"")
+            }
+            appendLine()
+            appendLine("Instrucciones:")
+            appendLine("1. NO incluyas título RECETA ni membrete del paciente.")
+            appendLine("2. Responde SOLO con [[SECTION:Recipe]] e [[SECTION:Indicaciones]].")
+            appendLine()
+            appendLine(
+                RecetaDefaults.promptGuidelines(
+                    moldeRecipe,
+                    moldeInd,
+                    allowProtocolInference = fromDiagnostico,
+                ),
+            )
+            if (!headerBlock.isNullOrBlank()) {
+                appendLine()
+                appendLine("Referencia del médico (no duplicar): $headerBlock")
+            }
+        }
+
+        val raw = AiService.sendPrompt(prompt = prompt, systemMessage = system, maxTokens = 2048)
+        return sanitizeDocumentContent(raw, emptyList())
+    }
+
+    /**
+     * Agrega un fármaco a una receta ya generada (completa dosis/cantidad con IA si hace falta).
+     */
+    suspend fun appendFarmacoToReceta(
+        context: Context,
+        currentContent: String,
+        principioActivo: String,
+        presentacion: String,
+        concentracion: String = "",
+        patient: Patient? = null,
+    ): String {
+        AiConfig.load(context.applicationContext)
+        val sections = parseDocumentSections(sanitizeDocumentContent(currentContent)).toMutableList()
+        var recipeIdx = sections.indexOfFirst {
+            it.title.equals(RecetaDefaults.SECTION_RECIPE, ignoreCase = true)
+        }
+        var indIdx = sections.indexOfFirst {
+            it.title.equals(RecetaDefaults.SECTION_INDICACIONES, ignoreCase = true)
+        }
+        if (recipeIdx < 0) {
+            sections.add(0, DocumentSection(title = RecetaDefaults.SECTION_RECIPE, body = ""))
+            recipeIdx = 0
+            if (indIdx >= 0) indIdx++
+        }
+        if (indIdx < 0) {
+            sections.add(DocumentSection(title = RecetaDefaults.SECTION_INDICACIONES, body = ""))
+            indIdx = sections.lastIndex
+        }
+
+        val conc = concentracion.trim()
+        val drugLine = buildString {
+            append(principioActivo.trim())
+            if (conc.isNotBlank()) append(" $conc")
+            append(" ($presentacion)")
+        }
+
+        val system = """
+            Eres un asistente médico. Completas UN fármaco para una receta ambulatoria en español.
+            Usa dosis/cantidad típicas según protocolos habituales si no se especifican.
+            Responde SOLO con dos bloques:
+            RECIPE:
+            (líneas del fármaco + Dispóngase)
+            INDICACIONES:
+            (nombre: + posología)
+        """.trimIndent()
+
+        val prompt = buildString {
+            appendLine("Agrega este fármaco a la receta (solo este, no reescribas los demás):")
+            appendLine("- Principio activo: ${principioActivo.trim()}")
+            appendLine("- Presentación: $presentacion")
+            if (conc.isNotBlank()) appendLine("- Concentración: $conc")
+            patient?.let {
+                appendLine("- Paciente: ${it.edad} años, ${it.sexo.ifBlank { "—" }}")
+            }
+            appendLine()
+            appendLine("Formato RECIPE (ejemplo):")
+            appendLine("$drugLine")
+            appendLine("Dispóngase: N unidades.")
+            appendLine()
+            appendLine("Formato INDICACIONES (ejemplo):")
+            appendLine("${principioActivo.trim()}:")
+            appendLine("Tomar … vía … cada … por … días.")
+        }
+
+        val raw = try {
+            AiService.sendPrompt(prompt = prompt, systemMessage = system, maxTokens = 512)
+        } catch (_: Exception) {
+            null
+        }
+
+        val (recipeAdd, indAdd) = parseFarmacoBlocks(raw, drugLine, principioActivo.trim(), presentacion)
+        sections[recipeIdx] = sections[recipeIdx].copy(
+            body = listOf(sections[recipeIdx].body.trim(), recipeAdd.trim())
+                .filter { it.isNotBlank() }
+                .joinToString("\n\n"),
+        )
+        sections[indIdx] = sections[indIdx].copy(
+            body = listOf(sections[indIdx].body.trim(), indAdd.trim())
+                .filter { it.isNotBlank() }
+                .joinToString("\n\n"),
+        )
+        return serializeDocumentSections(sections)
+    }
+
+    private fun parseFarmacoBlocks(
+        raw: String?,
+        fallbackDrugLine: String,
+        principio: String,
+        presentacion: String,
+    ): Pair<String, String> {
+        if (raw.isNullOrBlank()) {
+            return fallbackDrugLine + "\nDispóngase: —." to
+                "$principio:\nTomar según indicación médica ($presentacion)."
+        }
+        val cleaned = raw.replace("```", "").trim()
+        val recipeMatch = Regex(
+            """(?is)RECIPE\s*:?\s*(.*?)(?=INDICACIONES\s*:|$)""",
+        ).find(cleaned)
+        val indMatch = Regex(
+            """(?is)INDICACIONES\s*:?\s*(.*)$""",
+        ).find(cleaned)
+        val recipe = recipeMatch?.groupValues?.getOrNull(1)?.trim().orEmpty()
+            .ifBlank { "$fallbackDrugLine\nDispóngase: —." }
+        val ind = indMatch?.groupValues?.getOrNull(1)?.trim().orEmpty()
+            .ifBlank { "$principio:\nTomar según indicación médica ($presentacion)." }
+        return recipe to ind
     }
 
     suspend fun regenerateSection(

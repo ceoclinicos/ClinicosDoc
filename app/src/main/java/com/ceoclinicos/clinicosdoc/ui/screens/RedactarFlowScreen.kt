@@ -18,17 +18,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,11 +44,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -76,24 +82,26 @@ import com.ceoclinicos.clinicosdoc.data.HeaderStorage
 import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
 import com.ceoclinicos.clinicosdoc.data.PatientStorage
 import com.ceoclinicos.clinicosdoc.data.TemplateStorage
-import com.ceoclinicos.clinicosdoc.model.AiProvider
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
 import com.ceoclinicos.clinicosdoc.model.ClinicalDraft
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
 import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
+import com.ceoclinicos.clinicosdoc.model.OrdenesMedicasDefaults
 import com.ceoclinicos.clinicosdoc.model.Patient
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
 import com.ceoclinicos.clinicosdoc.model.PhysicalExamDefaults
 import com.ceoclinicos.clinicosdoc.model.PhysicalExamSystem
+import com.ceoclinicos.clinicosdoc.model.RecetaDefaults
 import com.ceoclinicos.clinicosdoc.model.ReportSessionConfig
-import com.ceoclinicos.clinicosdoc.service.AiService
 import com.ceoclinicos.clinicosdoc.service.DocumentAiService
+import com.ceoclinicos.clinicosdoc.service.DocumentPdfExporter
 import com.ceoclinicos.clinicosdoc.service.SpeechService
+import com.ceoclinicos.clinicosdoc.ui.components.AddFarmacoRecetaDialog
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
 import com.ceoclinicos.clinicosdoc.ui.components.DocumentHeaderSelector
-import com.ceoclinicos.clinicosdoc.ui.components.DocumentPdfActions
+import com.ceoclinicos.clinicosdoc.ui.components.DocumentPreviewDialog
 import com.ceoclinicos.clinicosdoc.ui.components.DocumentReportDateEditor
 import com.ceoclinicos.clinicosdoc.ui.components.EditableDocumentContent
 import com.ceoclinicos.clinicosdoc.ui.components.PatientMembreteEditor
@@ -102,6 +110,7 @@ import com.ceoclinicos.clinicosdoc.ui.theme.DividerColor
 import com.ceoclinicos.clinicosdoc.ui.theme.Navy
 import com.ceoclinicos.clinicosdoc.ui.theme.NavyLight
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
+import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
 import com.ceoclinicos.clinicosdoc.util.PermissionHelper
 import kotlinx.coroutines.launch
@@ -170,9 +179,12 @@ fun RedactarFlowScreen(
     var listening by remember { mutableStateOf(false) }
     var processing by remember { mutableStateOf(false) }
     var generatedContent by rememberSaveable { mutableStateOf<String?>(null) }
+    /** Si ya se guardó el documento en esta sesión, regenerar/guardar actualiza el mismo (no crea otro). */
+    var savedDocumentId by rememberSaveable { mutableStateOf<String?>(null) }
     var membrete by rememberSaveable(stateSaver = PatientMembreteSaver) { mutableStateOf(PatientMembrete()) }
     var error by remember { mutableStateOf<String?>(null) }
-    var showAiMenu by remember { mutableStateOf(false) }
+    var showToolsMenu by remember { mutableStateOf(false) }
+    var showPreview by remember { mutableStateOf(false) }
     var openEditHeaderId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTemplateId by rememberSaveable { mutableStateOf(templateId) }
     var showTemplatePicker by remember { mutableStateOf(false) }
@@ -188,6 +200,16 @@ fun RedactarFlowScreen(
     var activeSections by remember { mutableStateOf<List<String>>(emptyList()) }
     var sectionLayoutOrder by remember { mutableStateOf<List<String>>(emptyList()) }
     var sectionDefaultTexts by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    /** Órdenes: dictar o pasar informe/HC del mismo paciente. */
+    var ordenesUsarInforme by rememberSaveable { mutableStateOf(false) }
+    var ordenesModoName by rememberSaveable { mutableStateOf(OrdenesMedicasDefaults.Modo.ORDENES.name) }
+    var ordenesNotes by rememberSaveable { mutableStateOf("") }
+    var selectedSourceDocId by rememberSaveable { mutableStateOf<String?>(null) }
+    /** Receta: dictar, informe o diagnóstico. */
+    var recetaFuenteName by rememberSaveable { mutableStateOf(RecetaDefaults.Fuente.DICTAR.name) }
+    var diagnosticoText by rememberSaveable { mutableStateOf("") }
+    var showAddFarmaco by remember { mutableStateOf(false) }
+    var addingFarmaco by remember { mutableStateOf(false) }
 
     val sessionConfig = remember(
         enabledExamIds,
@@ -231,9 +253,11 @@ fun RedactarFlowScreen(
     }
 
     fun reloadTemplate() {
+        val ensured = TemplateStorage.ensureTemplateForType(context, documentType)
         availableTemplates = TemplateStorage.forType(context, documentType)
         template = availableTemplates.firstOrNull { it.id == selectedTemplateId }
             ?: availableTemplates.firstOrNull()
+            ?: ensured
         template?.let { selectedTemplateId = it.id }
     }
 
@@ -298,7 +322,69 @@ fun RedactarFlowScreen(
         }
     }
 
+    fun previewDocumentOrNull(): ClinicalDocument? {
+        val patient = selectedPatient ?: return null
+        val content = generatedContent ?: return null
+        return ClinicalDocument(
+            id = savedDocumentId ?: "preview",
+            patientId = patient.id,
+            patientNombre = patient.nombre,
+            patientCedula = patient.cedula,
+            type = documentType,
+            content = content,
+            rawDictation = dictation.trim(),
+            createdAt = Instant.now(),
+            templateId = template?.id,
+            templateName = template?.name,
+            headerId = header?.id,
+            headerSnapshot = header,
+            membrete = membrete,
+        )
+    }
+
     fun showMsg(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+
+    fun persistGeneratedDocument(content: String, showToast: Boolean = true): Boolean {
+        val patient = selectedPatient ?: return false
+        val tpl = template ?: return false
+        val id = savedDocumentId ?: UUID.randomUUID().toString()
+        val existing = savedDocumentId?.let { sid ->
+            DocumentStorage.loadAll(context).firstOrNull { it.id == sid }
+        }
+        val doc = ClinicalDocument(
+            id = id,
+            patientId = patient.id,
+            patientNombre = patient.nombre,
+            patientCedula = patient.cedula,
+            type = documentType,
+            content = content,
+            rawDictation = dictation.trim(),
+            createdAt = existing?.createdAt ?: Instant.now(),
+            templateId = tpl.id,
+            templateName = tpl.name,
+            headerId = header?.id,
+            headerSnapshot = header,
+            membrete = membrete,
+            sourceDocumentId = existing?.sourceDocumentId
+                ?: selectedSourceDocId?.takeIf {
+                    documentType == DocumentType.ORDENES_MEDICAS ||
+                        (documentType == DocumentType.RECETA &&
+                            recetaFuenteName == RecetaDefaults.Fuente.INFORME.name)
+                },
+        )
+        if (existing != null) {
+            DocumentStorage.update(context, doc)
+        } else {
+            DocumentStorage.add(context, doc)
+        }
+        savedDocumentId = id
+        currentDraftId?.let { DraftStorage.delete(context, it) }
+        currentDraftId = null
+        if (showToast) {
+            showMsg(if (existing != null) "Documento actualizado" else "Documento guardado")
+        }
+        return true
+    }
 
     fun saveDraft(showToast: Boolean = true): Boolean {
         val patient = selectedPatient
@@ -399,20 +485,49 @@ fun RedactarFlowScreen(
         onBack = onBack,
         actions = {
             Box {
-                IconButton(onClick = { showAiMenu = true }) {
-                    Icon(Icons.Default.SmartToy, contentDescription = "Proveedor IA")
+                IconButton(onClick = { showToolsMenu = true }) {
+                    Icon(Icons.Default.Build, contentDescription = "Herramientas")
                 }
-                DropdownMenu(expanded = showAiMenu, onDismissRequest = { showAiMenu = false }) {
-                    AiProvider.entries.forEach { provider ->
-                        DropdownMenuItem(
-                            text = { Text(provider.label) },
-                            onClick = {
-                                AiService.setProvider(context, provider)
-                                showMsg("IA: ${provider.label}")
-                                showAiMenu = false
-                            },
-                        )
-                    }
+                DropdownMenu(expanded = showToolsMenu, onDismissRequest = { showToolsMenu = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Vista previa") },
+                        leadingIcon = { Icon(Icons.Outlined.Visibility, contentDescription = null) },
+                        enabled = previewDocumentOrNull() != null,
+                        onClick = {
+                            showToolsMenu = false
+                            showPreview = true
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("PDF") },
+                        leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null) },
+                        enabled = previewDocumentOrNull() != null,
+                        onClick = {
+                            showToolsMenu = false
+                            val doc = previewDocumentOrNull() ?: return@DropdownMenuItem
+                            try {
+                                val file = DocumentPdfExporter.generate(context, doc)
+                                DocumentPdfExporter.sharePdf(context, file)
+                            } catch (_: Exception) {
+                                showMsg("Error al generar PDF")
+                            }
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Imprimir") },
+                        leadingIcon = { Icon(Icons.Outlined.Print, contentDescription = null) },
+                        enabled = previewDocumentOrNull() != null,
+                        onClick = {
+                            showToolsMenu = false
+                            val doc = previewDocumentOrNull() ?: return@DropdownMenuItem
+                            try {
+                                val file = DocumentPdfExporter.generate(context, doc)
+                                DocumentPdfExporter.printPdf(context, file, doc.typeLabel)
+                            } catch (_: Exception) {
+                                showMsg("Error al imprimir")
+                            }
+                        },
+                    )
                 }
             }
         },
@@ -562,6 +677,23 @@ fun RedactarFlowScreen(
                     .padding(24.dp),
             ) {
                 val patient = selectedPatient!!
+                val patientCaseDocs = remember(patient.id) {
+                    DocumentStorage.loadAll(context).filter {
+                        it.patientId == patient.id &&
+                            (it.type == DocumentType.INFORME || it.type == DocumentType.HISTORIA_CLINICA)
+                    }
+                }
+                val isOrdenes = documentType == DocumentType.ORDENES_MEDICAS
+                val isReceta = documentType == DocumentType.RECETA
+                val canUsarInforme = patientCaseDocs.isNotEmpty()
+                val recetaFuente = RecetaDefaults.Fuente.entries
+                    .firstOrNull { it.name == recetaFuenteName }
+                    ?: RecetaDefaults.Fuente.DICTAR
+                val showInformePicker = (isOrdenes && ordenesUsarInforme) ||
+                    (isReceta && recetaFuente == RecetaDefaults.Fuente.INFORME)
+                val showDiagnostico = isReceta && recetaFuente == RecetaDefaults.Fuente.DIAGNOSTICO
+                val showDictadoMic = !showInformePicker && !showDiagnostico
+
                 Box(modifier = Modifier.fillMaxWidth().background(Teal.copy(alpha = 0.08f), MaterialTheme.shapes.medium).padding(16.dp)) {
                     Column {
                         Text(patient.nombre, style = MaterialTheme.typography.labelLarge)
@@ -576,74 +708,286 @@ fun RedactarFlowScreen(
                     Text("Configurar plantilla")
                 }
                 Spacer(modifier = Modifier.height(20.dp))
-                Text("Dictado clínico", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = dictationField,
-                    onValueChange = {
-                        dictationField = it
-                        dictation = it.text
-                    },
-                    modifier = Modifier.fillMaxWidth().height(200.dp),
-                    placeholder = { Text("La transcripción aparecerá aquí...") },
-                    maxLines = 10,
-                )
-                Spacer(modifier = Modifier.height(20.dp))
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Box(
+
+                if (isOrdenes) {
+                    Text("Fuente del caso", style = MaterialTheme.typography.titleLarge)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
                         modifier = Modifier
-                            .size(80.dp)
-                            .background(
-                                if (listening) Brush.linearGradient(listOf(Color.Red.copy(alpha = 0.8f), Color.Red))
-                                else Brush.linearGradient(listOf(Teal, NavyLight)),
-                                CircleShape,
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = !ordenesUsarInforme,
+                                onClick = { ordenesUsarInforme = false },
+                                role = Role.RadioButton,
                             )
-                            .clickable(enabled = !processing) {
-                                if (listening) {
-                                    speechService.stopListening()
-                                    listening = false
-                                } else if (PermissionHelper.hasMicrophone(context)) {
-                                    listening = speechService.startListening(existingText = dictation) { text, _ ->
-                                        dictation = text
-                                    }
-                                    if (!listening) {
-                                        speechService.lastError?.let { error = it }
-                                    }
-                                } else {
-                                    micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            },
-                        contentAlignment = Alignment.Center,
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(
-                            if (listening) Icons.Default.Stop else Icons.Default.Mic,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(36.dp),
+                        RadioButton(selected = !ordenesUsarInforme, onClick = { ordenesUsarInforme = false })
+                        Text("Dictar", modifier = Modifier.padding(start = 8.dp))
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = ordenesUsarInforme,
+                                onClick = { if (canUsarInforme) ordenesUsarInforme = true },
+                                enabled = canUsarInforme,
+                                role = Role.RadioButton,
+                            )
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = ordenesUsarInforme,
+                            onClick = { if (canUsarInforme) ordenesUsarInforme = true },
+                            enabled = canUsarInforme,
+                        )
+                        Text(
+                            if (canUsarInforme) {
+                                "Pasar informe / historia"
+                            } else {
+                                "Pasar informe / historia (sin documentos de este paciente)"
+                            },
+                            modifier = Modifier.padding(start = 8.dp),
+                            color = if (canUsarInforme) Color.Unspecified else TextSecondary,
                         )
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
-                Text(
-                    if (listening) "Grabando... toca el botón para detener" else "Toca para dictar",
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+
+                if (isReceta) {
+                    Text("Cómo crear la receta", style = MaterialTheme.typography.titleLarge)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    RecetaDefaults.Fuente.entries.forEach { option ->
+                        val enabled = option != RecetaDefaults.Fuente.INFORME || canUsarInforme
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = recetaFuente == option,
+                                    onClick = {
+                                        if (enabled) recetaFuenteName = option.name
+                                    },
+                                    enabled = enabled,
+                                    role = Role.RadioButton,
+                                )
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = recetaFuente == option,
+                                onClick = { if (enabled) recetaFuenteName = option.name },
+                                enabled = enabled,
+                            )
+                            Text(
+                                when {
+                                    option == RecetaDefaults.Fuente.INFORME && !canUsarInforme ->
+                                        "${option.label} (sin documentos de este paciente)"
+                                    option == RecetaDefaults.Fuente.DIAGNOSTICO ->
+                                        "${option.label} — la IA propone tratamiento según guías"
+                                    else -> option.label
+                                },
+                                modifier = Modifier.padding(start = 8.dp),
+                                color = if (enabled) Color.Unspecified else TextSecondary,
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                if (showInformePicker && canUsarInforme) {
+                    Text("Informes de este paciente", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    patientCaseDocs.forEach { src ->
+                        val selected = selectedSourceDocId == src.id
+                        Card(
+                            onClick = {
+                                selectedSourceDocId = src.id
+                                dictation = src.content
+                                dictationField = TextFieldValue(src.content, TextRange(src.content.length))
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        ) {
+                            Row(
+                                Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = selected, onClick = {
+                                    selectedSourceDocId = src.id
+                                    dictation = src.content
+                                    dictationField = TextFieldValue(src.content, TextRange(src.content.length))
+                                })
+                                Text(
+                                    "${src.typeLabel} · ${src.createdAt.toString().take(19).replace('T', ' ')}",
+                                    modifier = Modifier.weight(1f).padding(start = 4.dp),
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Contexto (editable)", style = MaterialTheme.typography.titleSmall)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = dictationField,
+                        onValueChange = {
+                            dictationField = it
+                            dictation = it.text
+                        },
+                        modifier = Modifier.fillMaxWidth().height(180.dp),
+                        placeholder = { Text("Selecciona un informe arriba…") },
+                        maxLines = 12,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Notas / dictado adicional (opcional)", style = MaterialTheme.typography.titleSmall)
+                    OutlinedTextField(
+                        value = ordenesNotes,
+                        onValueChange = { ordenesNotes = it },
+                        modifier = Modifier.fillMaxWidth().height(90.dp),
+                        placeholder = { Text("Ej. agregar ceftriaxona…") },
+                        maxLines = 5,
+                    )
+                } else if (showDiagnostico) {
+                    Text("Diagnóstico", style = MaterialTheme.typography.titleLarge)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "La IA propondrá fármacos según protocolos y guías clínicas habituales.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = diagnosticoText,
+                        onValueChange = { diagnosticoText = it },
+                        modifier = Modifier.fillMaxWidth().height(140.dp),
+                        placeholder = { Text("Ej. Faringoamigdalitis aguda bacteriana") },
+                        maxLines = 8,
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Notas / restricciones (opcional)", style = MaterialTheme.typography.titleSmall)
+                    OutlinedTextField(
+                        value = ordenesNotes,
+                        onValueChange = { ordenesNotes = it },
+                        modifier = Modifier.fillMaxWidth().height(80.dp),
+                        placeholder = { Text("Ej. alergia a penicilina, preferir jarabe…") },
+                        maxLines = 4,
+                    )
+                } else if (showDictadoMic) {
+                    Text(
+                        if (isReceta) "Fármacos (dictar o escribir)" else "Dictado clínico",
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = dictationField,
+                        onValueChange = {
+                            dictationField = it
+                            dictation = it.text
+                        },
+                        modifier = Modifier.fillMaxWidth().height(200.dp),
+                        placeholder = {
+                            Text(
+                                if (isReceta) {
+                                    "Ej. amoxicilina clavulánico tabletas 7 días…"
+                                } else {
+                                    "La transcripción aparecerá aquí..."
+                                },
+                            )
+                        },
+                        maxLines = 10,
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .background(
+                                    if (listening) Brush.linearGradient(listOf(Color.Red.copy(alpha = 0.8f), Color.Red))
+                                    else Brush.linearGradient(listOf(Teal, NavyLight)),
+                                    CircleShape,
+                                )
+                                .clickable(enabled = !processing) {
+                                    if (listening) {
+                                        speechService.stopListening()
+                                        listening = false
+                                    } else if (PermissionHelper.hasMicrophone(context)) {
+                                        listening = speechService.startListening(existingText = dictation) { text, _ ->
+                                            dictation = text
+                                            dictationField = TextFieldValue(text, TextRange(text.length))
+                                        }
+                                        if (!listening) {
+                                            speechService.lastError?.let { error = it }
+                                        }
+                                    } else {
+                                        micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                    }
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                if (listening) Icons.Default.Stop else Icons.Default.Mic,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(36.dp),
+                            )
+                        }
+                    }
+                    Text(
+                        if (listening) "Grabando... toca el botón para detener" else "Toca para dictar",
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+
+                if (isOrdenes) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Tipo de hoja", style = MaterialTheme.typography.titleSmall)
+                    OrdenesMedicasDefaults.Modo.entries.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = ordenesModoName == option.name,
+                                    onClick = { ordenesModoName = option.name },
+                                    role = Role.RadioButton,
+                                )
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = ordenesModoName == option.name,
+                                onClick = { ordenesModoName = option.name },
+                            )
+                            Text(option.label, modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+
                 error?.let { Text(it, color = Color.Red, modifier = Modifier.padding(top = 16.dp)) }
                 Spacer(modifier = Modifier.height(16.dp))
-                OutlinedButton(
-                    onClick = { saveDraft() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Guardar borrador")
-                }
-                Spacer(modifier = Modifier.height(12.dp))
                 PremiumPrimaryButton(
                     label = "Procesar con IA",
                     icon = Icons.Default.AutoAwesome,
                     loading = processing,
                     onClick = {
-                        if (dictation.isBlank()) {
-                            showMsg("Dicta o escribe el contenido antes de procesar")
+                        val inputBlank = when {
+                            isReceta && recetaFuente == RecetaDefaults.Fuente.DIAGNOSTICO ->
+                                diagnosticoText.isBlank()
+                            else -> dictation.isBlank()
+                        }
+                        if (inputBlank) {
+                            showMsg(
+                                when {
+                                    isReceta && recetaFuente == RecetaDefaults.Fuente.DIAGNOSTICO ->
+                                        "Escribe el diagnóstico"
+                                    (isOrdenes && ordenesUsarInforme) ||
+                                        (isReceta && recetaFuente == RecetaDefaults.Fuente.INFORME) ->
+                                        "Selecciona o pega el informe como contexto"
+                                    isReceta -> "Dicta o escribe los fármacos"
+                                    else -> "Dicta o escribe el contenido antes de procesar"
+                                },
+                            )
                             return@PremiumPrimaryButton
                         }
                         val doc = doctor
@@ -657,18 +1001,61 @@ fun RedactarFlowScreen(
                             speechService.stopListening()
                             listening = false
                             try {
-                                generatedContent = DocumentAiService.generateDocument(
-                                    context = context,
-                                    template = template!!,
-                                    patient = selectedPatient!!,
-                                    doctor = doc,
-                                    dictation = dictation.trim(),
-                                    header = header,
-                                    sessionConfig = sessionConfig,
-                                )
+                                generatedContent = when {
+                                    isOrdenes -> {
+                                        val modo = OrdenesMedicasDefaults.Modo.entries
+                                            .firstOrNull { it.name == ordenesModoName }
+                                            ?: OrdenesMedicasDefaults.Modo.ORDENES
+                                        DocumentAiService.generateOrdenesFromCase(
+                                            context = context,
+                                            patient = selectedPatient!!,
+                                            doctor = doc,
+                                            caseContent = dictation.trim(),
+                                            notes = if (ordenesUsarInforme) ordenesNotes.trim() else "",
+                                            modo = modo,
+                                            header = header,
+                                        )
+                                    }
+                                    isReceta -> {
+                                        val fuente = RecetaDefaults.Fuente.entries
+                                            .firstOrNull { it.name == recetaFuenteName }
+                                            ?: RecetaDefaults.Fuente.DICTAR
+                                        val input = if (fuente == RecetaDefaults.Fuente.DIAGNOSTICO) {
+                                            diagnosticoText.trim()
+                                        } else {
+                                            dictation.trim()
+                                        }
+                                        DocumentAiService.generateReceta(
+                                            context = context,
+                                            patient = selectedPatient!!,
+                                            doctor = doc,
+                                            fuente = fuente,
+                                            input = input,
+                                            notes = when (fuente) {
+                                                RecetaDefaults.Fuente.DICTAR -> ""
+                                                else -> ordenesNotes.trim()
+                                            },
+                                            header = header,
+                                        )
+                                    }
+                                    else -> DocumentAiService.generateDocument(
+                                        context = context,
+                                        template = template!!,
+                                        patient = selectedPatient!!,
+                                        doctor = doc,
+                                        dictation = dictation.trim(),
+                                        header = header,
+                                        sessionConfig = sessionConfig,
+                                    )
+                                }
                                 membrete = PatientMembrete.fromPatient(selectedPatient!!)
                                 step = RedactarStep.RESULTADO
-                                saveDraft(showToast = false)
+                                val newContent = generatedContent
+                                if (savedDocumentId != null && !newContent.isNullOrBlank()) {
+                                    persistGeneratedDocument(newContent, showToast = true)
+                                } else {
+                                    saveDraft(showToast = false)
+                                }
                             } catch (e: Exception) {
                                 error = e.message?.removePrefix("Exception: ")
                             } finally {
@@ -754,8 +1141,8 @@ fun RedactarFlowScreen(
                         content = generatedContent.orEmpty(),
                         onContentChange = { generatedContent = it },
                         onRegenerateSection = { index, sections ->
-                            if (dictation.isBlank()) {
-                                showMsg("No hay dictado para regenerar esta sección")
+                            if (dictation.isBlank() && diagnosticoText.isBlank()) {
+                                showMsg("No hay dictado/diagnóstico para regenerar esta sección")
                                 return@EditableDocumentContent null
                             }
                             val patient = selectedPatient
@@ -767,7 +1154,7 @@ fun RedactarFlowScreen(
                                 template = tpl,
                                 patient = patient,
                                 doctor = doc,
-                                dictation = dictation.trim(),
+                                dictation = dictation.trim().ifBlank { diagnosticoText.trim() },
                                 sectionTitle = sections[index].title,
                                 currentSectionBody = sections[index].body,
                                 otherSections = sections.filterIndexed { i, _ -> i != index },
@@ -776,27 +1163,19 @@ fun RedactarFlowScreen(
                             )
                         },
                     )
+                    if (documentType == DocumentType.RECETA) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = { showAddFarmaco = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !addingFarmaco,
+                        ) {
+                            Text(if (addingFarmaco) "Agregando fármaco…" else "Agregar fármaco")
+                        }
+                    }
                     val patient = selectedPatient
                     val content = generatedContent
                     if (patient != null && content != null) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        DocumentPdfActions(
-                            document = ClinicalDocument(
-                                id = "preview",
-                                patientId = patient.id,
-                                patientNombre = patient.nombre,
-                                patientCedula = patient.cedula,
-                                type = documentType,
-                                content = content,
-                                rawDictation = dictation.trim(),
-                                createdAt = Instant.now(),
-                                templateId = template?.id,
-                                templateName = template?.name,
-                                headerId = header?.id,
-                                headerSnapshot = header,
-                                membrete = membrete,
-                            ),
-                        )
                         if (documentType == DocumentType.INFORME ||
                             documentType == DocumentType.HISTORIA_CLINICA
                         ) {
@@ -817,63 +1196,72 @@ fun RedactarFlowScreen(
                         }
                     }
                 }
-                Row(
+                OutlinedButton(
+                    onClick = { step = RedactarStep.DICTADO },
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp)
                         .padding(bottom = 12.dp),
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp),
                 ) {
-                    OutlinedButton(
-                        onClick = { step = RedactarStep.DICTADO },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text("Editar dictado")
-                    }
-                    OutlinedButton(
-                        onClick = { saveDraft() },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text("Guardar borrador")
-                    }
+                    Text("Editar dictado")
                 }
                 PremiumPrimaryButton(
-                    label = "Guardar documento",
+                    label = if (savedDocumentId != null) "Actualizar documento" else "Guardar documento",
                     icon = Icons.Default.Save,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp)
                         .padding(bottom = 24.dp),
                     onClick = {
-                        val patient = selectedPatient ?: return@PremiumPrimaryButton
                         val content = generatedContent ?: return@PremiumPrimaryButton
                         scope.launch {
-                            DocumentStorage.add(
-                                context,
-                                ClinicalDocument(
-                                    id = UUID.randomUUID().toString(),
-                                    patientId = patient.id,
-                                    patientNombre = patient.nombre,
-                                    patientCedula = patient.cedula,
-                                    type = documentType,
-                                    content = content,
-                                    rawDictation = dictation.trim(),
-                                    createdAt = Instant.now(),
-                                    templateId = template!!.id,
-                                    templateName = template!!.name,
-                                    headerId = header?.id,
-                                    headerSnapshot = header,
-                                    membrete = membrete,
-                                ),
-                            )
-                            currentDraftId?.let { DraftStorage.delete(context, it) }
-                            showMsg("Documento guardado")
-                            onBack()
+                            persistGeneratedDocument(content, showToast = true)
                         }
                     },
                 )
             }
         }
+    }
+
+    if (showPreview) {
+        previewDocumentOrNull()?.let { doc ->
+            DocumentPreviewDialog(
+                document = doc,
+                onDismiss = { showPreview = false },
+            )
+        }
+    }
+
+    if (showAddFarmaco) {
+        AddFarmacoRecetaDialog(
+            loading = addingFarmaco,
+            onDismiss = { if (!addingFarmaco) showAddFarmaco = false },
+            onConfirm = { principio, presentacion, concentracion ->
+                val current = generatedContent.orEmpty()
+                addingFarmaco = true
+                scope.launch {
+                    try {
+                        generatedContent = DocumentAiService.appendFarmacoToReceta(
+                            context = context,
+                            currentContent = current,
+                            principioActivo = principio,
+                            presentacion = presentacion,
+                            concentracion = concentracion,
+                            patient = selectedPatient,
+                        )
+                        showMsg("Fármaco agregado")
+                        showAddFarmaco = false
+                        if (savedDocumentId != null) {
+                            persistGeneratedDocument(generatedContent!!, showToast = false)
+                        }
+                    } catch (e: Exception) {
+                        showMsg(e.message ?: "No se pudo agregar el fármaco")
+                    } finally {
+                        addingFarmaco = false
+                    }
+                }
+            },
+        )
     }
 
     if (showTemplatePicker) {

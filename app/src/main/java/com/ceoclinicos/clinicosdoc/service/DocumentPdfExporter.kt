@@ -18,7 +18,10 @@ import android.print.PrintManager
 import android.print.PageRange
 import androidx.core.content.FileProvider
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
+import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
+import com.ceoclinicos.clinicosdoc.model.RecetaDefaults
+import com.ceoclinicos.clinicosdoc.model.SectionCatalog
 import com.ceoclinicos.clinicosdoc.util.normalizeSectionTitle
 import com.ceoclinicos.clinicosdoc.util.parseDocumentSections
 import com.ceoclinicos.clinicosdoc.util.sanitizeDocumentContent
@@ -29,12 +32,23 @@ import java.io.FileOutputStream
 object DocumentPdfExporter {
     private const val PAGE_WIDTH = 595
     private const val PAGE_HEIGHT = 842
+    /** A4 horizontal (landscape) para recetas. */
+    private const val LANDSCAPE_WIDTH = 842
+    private const val LANDSCAPE_HEIGHT = 595
     private const val MARGIN = 48f
+    private const val RECETA_MARGIN = 28f
     private const val LINE_HEIGHT = 18f
     private const val LOGO_SIZE = 70f
     private const val LOGO_GAP = 14f
 
     fun generate(context: Context, document: ClinicalDocument): File {
+        if (document.type == DocumentType.RECETA) {
+            return generateRecetaLandscape(context, document)
+        }
+        return generatePortrait(context, document)
+    }
+
+    private fun generatePortrait(context: Context, document: ClinicalDocument): File {
         val dir = File(context.filesDir, "informes_pdf").apply { mkdirs() }
         val file = File(dir, "informe_${document.id.take(8)}.pdf")
 
@@ -313,6 +327,195 @@ object DocumentPdfExporter {
                 drawSectionBody(section.body)
             }
         }
+
+        pdf.finishPage(page)
+        FileOutputStream(file).use { pdf.writeTo(it) }
+        pdf.close()
+        return file
+    }
+
+    /**
+     * Hoja A4 horizontal dividida a la mitad:
+     * izquierda = Recipe (dispóngase), derecha = Indicaciones.
+     * En cada mitad: encabezado, datos paciente, fármacos, fecha + firma abajo.
+     */
+    private fun generateRecetaLandscape(context: Context, document: ClinicalDocument): File {
+        val dir = File(context.filesDir, "informes_pdf").apply { mkdirs() }
+        val file = File(dir, "receta_${document.id.take(8)}.pdf")
+        val pdf = PdfDocument()
+        val pageInfo = PdfDocument.PageInfo.Builder(LANDSCAPE_WIDTH, LANDSCAPE_HEIGHT, 1).create()
+        val page = pdf.startPage(pageInfo)
+        val canvas = page.canvas
+
+        val bodyPaint = Paint().apply {
+            textSize = 10f
+            color = android.graphics.Color.BLACK
+            isAntiAlias = true
+        }
+        val boldPaint = Paint(bodyPaint).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val titlePaint = Paint().apply {
+            textSize = 12f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = android.graphics.Color.BLACK
+            isAntiAlias = true
+        }
+        val headerPaint = Paint().apply {
+            textSize = 11f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = android.graphics.Color.BLACK
+            isAntiAlias = true
+        }
+        val subPaint = Paint().apply {
+            textSize = 9f
+            color = android.graphics.Color.DKGRAY
+            isAntiAlias = true
+        }
+        val midX = LANDSCAPE_WIDTH / 2f
+        val halfGap = 10f
+        val lineH = 14f
+        val footerReserve = 52f
+
+        // Línea divisoria vertical al centro
+        val dividerPaint = Paint().apply {
+            color = android.graphics.Color.LTGRAY
+            strokeWidth = 1.2f
+        }
+        canvas.drawLine(midX, RECETA_MARGIN, midX, LANDSCAPE_HEIGHT - RECETA_MARGIN, dividerPaint)
+
+        val membrete = document.membrete ?: PatientMembrete.forDocument(document)
+        val sections = parseDocumentSections(sanitizeDocumentContent(document.content))
+        val recipeBody = sections.firstOrNull {
+            it.title.equals(RecetaDefaults.SECTION_RECIPE, ignoreCase = true) ||
+                it.title.equals("Rp", ignoreCase = true) ||
+                it.title.equals("Fármacos", ignoreCase = true)
+        }?.body.orEmpty().ifBlank {
+            sections.filterNot {
+                it.title.equals(RecetaDefaults.SECTION_INDICACIONES, ignoreCase = true) ||
+                    it.title.equals(SectionCatalog.DATOS_PACIENTE, ignoreCase = true)
+            }.joinToString("\n\n") { it.body }
+        }
+        val indicacionesBody = sections.firstOrNull {
+            it.title.equals(RecetaDefaults.SECTION_INDICACIONES, ignoreCase = true)
+        }?.body.orEmpty()
+
+        fun drawWrappedInHalf(
+            text: String,
+            left: Float,
+            right: Float,
+            startY: Float,
+            maxY: Float,
+            paint: Paint,
+        ): Float {
+            var y = startY
+            val maxW = right - left
+            text.lines().forEach { raw ->
+                val line = raw.trimEnd()
+                if (line.isBlank()) {
+                    y += lineH / 2
+                    return@forEach
+                }
+                val words = line.split(" ")
+                var current = StringBuilder()
+                fun flush() {
+                    if (current.isEmpty() || y > maxY) return
+                    canvas.drawText(current.toString(), left, y, paint)
+                    y += lineH
+                    current = StringBuilder()
+                }
+                for (word in words) {
+                    if (y > maxY) return y
+                    val candidate = if (current.isEmpty()) word else "$current $word"
+                    if (paint.measureText(candidate) > maxW) {
+                        flush()
+                        current = StringBuilder(word)
+                    } else {
+                        current = StringBuilder(candidate)
+                    }
+                }
+                flush()
+            }
+            return y
+        }
+
+        fun drawHalf(
+            left: Float,
+            right: Float,
+            halfTitle: String,
+            body: String,
+        ) {
+            var y = RECETA_MARGIN + 12f
+            val center = (left + right) / 2f
+            val maxContentY = LANDSCAPE_HEIGHT - RECETA_MARGIN - footerReserve
+
+            // Encabezado (por mitad)
+            document.headerSnapshot?.let { header ->
+                val logoPath = header.logoPath
+                var textLeft = left
+                if (!logoPath.isNullOrBlank()) {
+                    val logoFile = File(logoPath)
+                    if (logoFile.exists()) {
+                        BitmapFactory.decodeFile(logoPath)?.let { bitmap ->
+                            val size = 40
+                            val scaled = Bitmap.createScaledBitmap(bitmap, size, size, true)
+                            canvas.drawBitmap(scaled, left, y - 10f, null)
+                            textLeft = left + size + 8f
+                        }
+                    }
+                }
+                header.doctorName.takeIf { it.isNotBlank() }?.let {
+                    canvas.drawText(it, textLeft, y, headerPaint)
+                    y += lineH
+                }
+                header.subtitle.takeIf { it.isNotBlank() }?.let {
+                    canvas.drawText(it, textLeft, y, subPaint)
+                    y += lineH
+                }
+                header.description.takeIf { it.isNotBlank() }?.let {
+                    y = drawWrappedInHalf(it, textLeft, right, y, maxContentY, subPaint)
+                }
+                y += 6f
+                canvas.drawLine(left, y, right, y, dividerPaint)
+                y += 14f
+            }
+
+            // Título de la mitad
+            val titleW = titlePaint.measureText(halfTitle)
+            canvas.drawText(halfTitle, center - titleW / 2f, y, titlePaint)
+            y += lineH + 4f
+
+            // Datos del paciente: nombre, cédula, edad
+            canvas.drawText("Nombre: ${membrete.displayNombre()}", left, y, boldPaint)
+            y += lineH
+            canvas.drawText("C.I.: ${document.patientCedula.ifBlank { "—" }}", left, y, bodyPaint)
+            y += lineH
+            canvas.drawText("Edad: ${membrete.displayEdad()}", left, y, bodyPaint)
+            y += lineH + 8f
+
+            // Fármacos / indicaciones
+            drawWrappedInHalf(body, left, right, y, maxContentY, bodyPaint)
+
+            // Fecha y firma cerca del borde inferior
+            val footerY = LANDSCAPE_HEIGHT - RECETA_MARGIN - 8f
+            val fecha = membrete.displayFecha().takeIf { it != "—" }
+                ?: java.time.LocalDate.now().toString()
+            canvas.drawText("Fecha: $fecha", left, footerY - 22f, bodyPaint)
+            canvas.drawText("Firma: ____________________", left, footerY, bodyPaint)
+        }
+
+        drawHalf(
+            left = RECETA_MARGIN,
+            right = midX - halfGap,
+            halfTitle = "RECIPE",
+            body = recipeBody.ifBlank { RecetaDefaults.MOLDE_RECIPE },
+        )
+        drawHalf(
+            left = midX + halfGap,
+            right = LANDSCAPE_WIDTH - RECETA_MARGIN,
+            halfTitle = "INDICACIONES",
+            body = indicacionesBody.ifBlank { RecetaDefaults.MOLDE_INDICACIONES },
+        )
 
         pdf.finishPage(page)
         FileOutputStream(file).use { pdf.writeTo(it) }

@@ -3,6 +3,12 @@ import { DocumentTypeLabels, type ClinicalDocument, type ClinicalDraft, type Doc
 import { defaultSectionsFor, isLegacyInformeAllChecked, normalizeTemplateSections } from "../shared/section-catalog";
 import { ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT } from "../shared/enfermedad-actual";
 import { ORDENES_MOLDE_EJEMPLO, ORDENES_SECTION } from "../shared/ordenes-medicas";
+import {
+  RECETA_INDICACIONES_SECTION,
+  RECETA_MOLDE_INDICACIONES,
+  RECETA_MOLDE_RECIPE,
+  RECIPE_SECTION,
+} from "../shared/receta";
 import { PhysicalExamDefaults } from "../shared/physical-exam-defaults";
 import { loadExamCatalog, orderEnabledByCatalog } from "./exam-catalog";
 import { loadJson, saveJson } from "./local-store";
@@ -22,7 +28,13 @@ const KEY_HEADERS = "headers";
 const KEY_DOCUMENTS = "documents";
 const KEY_DRAFTS = "drafts";
 
-const DOC_TYPES: DocumentType[] = ["historiaClinica", "informe", "reposo", "ordenesMedicas"];
+const DOC_TYPES: DocumentType[] = [
+  "historiaClinica",
+  "informe",
+  "reposo",
+  "ordenesMedicas",
+  "receta",
+];
 
 function makeDefaultTemplates(): DocumentTemplate[] {
   const examIds = orderEnabledByCatalog(
@@ -38,8 +50,14 @@ function makeDefaultTemplates(): DocumentTemplate[] {
     enabledPhysicalExamSystemIds: examIds,
     enfermedadActualEjemplo:
       type === "informe" || type === "historiaClinica" ? ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT : "",
-    sectionDefaultTexts:
-      type === "ordenesMedicas" ? { [ORDENES_SECTION]: ORDENES_MOLDE_EJEMPLO } : undefined,
+    sectionDefaultTexts: (type === "ordenesMedicas"
+      ? { [ORDENES_SECTION]: ORDENES_MOLDE_EJEMPLO }
+      : type === "receta"
+        ? {
+            [RECIPE_SECTION]: RECETA_MOLDE_RECIPE,
+            [RECETA_INDICACIONES_SECTION]: RECETA_MOLDE_INDICACIONES,
+          }
+        : undefined) as Record<string, string> | undefined,
   }));
 }
 
@@ -74,6 +92,28 @@ export function loadTemplates(): DocumentTemplate[] {
         tpl = {
           ...tpl,
           sections: defaultSectionsFor("ordenesMedicas"),
+          sectionDefaultTexts: texts,
+        };
+        changed = true;
+      }
+    }
+    if (type === "receta") {
+      const texts = { ...(tpl.sectionDefaultTexts ?? {}) };
+      let seeded = false;
+      if (!Object.keys(texts).some((k) => k.toLowerCase() === RECIPE_SECTION.toLowerCase())) {
+        texts[RECIPE_SECTION] = RECETA_MOLDE_RECIPE;
+        seeded = true;
+      }
+      if (
+        !Object.keys(texts).some((k) => k.toLowerCase() === RECETA_INDICACIONES_SECTION.toLowerCase())
+      ) {
+        texts[RECETA_INDICACIONES_SECTION] = RECETA_MOLDE_INDICACIONES;
+        seeded = true;
+      }
+      if (seeded) {
+        tpl = {
+          ...tpl,
+          sections: defaultSectionsFor("receta"),
           sectionDefaultTexts: texts,
         };
         changed = true;

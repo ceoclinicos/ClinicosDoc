@@ -7,7 +7,11 @@ import {
   upsertTemplate,
 } from "../../services/clinical-store";
 import type { DocumentHeader, DocumentTemplate, DocumentType } from "../../shared/models";
-import { DocumentTypeLabels } from "../../shared/models";
+import {
+  DocumentTypeLabels,
+  DocumentTypesInformes,
+  DocumentTypesRecetas,
+} from "../../shared/models";
 import {
   ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT,
   resolveEnfermedadActualEjemplo,
@@ -194,11 +198,41 @@ registerRoute({
   title: "Plantillas de documentos",
   medicoOnly: true,
   render: () => {
-    const templates = loadTemplates();
+    const templates = loadTemplates().filter((t) =>
+      DocumentTypesInformes.includes(t.documentType),
+    );
     const el = page(
       "Informes y historias",
       `
       <p class="lead">Una plantilla por tipo. Toca para editar secciones.</p>
+      <ul class="list">${templates
+        .map(
+          (t) => `
+        <li class="list-item list-item-action" data-nav="/plantillas/documentos/${t.documentType}">
+          <strong>${t.name}</strong>
+          <span class="muted">${DocumentTypeLabels[t.documentType]} · ${t.sections.length} secciones</span>
+        </li>`,
+        )
+        .join("")}</ul>
+      `,
+    );
+    bindNavButtons(el);
+    return el;
+  },
+});
+
+registerRoute({
+  path: "/plantillas/recetas",
+  title: "Plantillas de recetas",
+  medicoOnly: true,
+  render: () => {
+    const templates = loadTemplates().filter((t) =>
+      DocumentTypesRecetas.includes(t.documentType),
+    );
+    const el = page(
+      "Recetas",
+      `
+      <p class="lead">Órdenes médicas y recipe. Toca para personalizar el molde.</p>
       <ul class="list">${templates
         .map(
           (t) => `
@@ -222,7 +256,7 @@ registerRoute({
   render: () => {
     const tipo = (window.location.hash.replace(/^#\/plantillas\/documentos\//, "").split("?")[0] ||
       "informe") as DocumentType;
-    if (!["historiaClinica", "informe", "reposo", "ordenesMedicas"].includes(tipo)) {
+    if (![...DocumentTypesInformes, ...DocumentTypesRecetas].includes(tipo)) {
       navigate("/plantillas/documentos");
       return page("Plantilla", `<p>Tipo inválido</p>`);
     }
@@ -268,7 +302,9 @@ registerRoute({
             : ""
         }
         <button type="submit" class="btn btn-primary">Guardar plantilla</button>
-        <button type="button" class="btn btn-ghost" data-nav="/plantillas/documentos">Volver</button>
+        <button type="button" class="btn btn-ghost" data-nav="${
+          DocumentTypesRecetas.includes(tipo) ? "/plantillas/recetas" : "/plantillas/documentos"
+        }">Volver</button>
       </form>
       `,
     );
@@ -315,7 +351,7 @@ registerRoute({
         isDefault: true,
       });
       alert("Plantilla guardada");
-      navigate("/plantillas/documentos");
+      navigate(DocumentTypesRecetas.includes(tipo) ? "/plantillas/recetas" : "/plantillas/documentos");
     });
 
     bindNavButtons(el);

@@ -20,6 +20,7 @@ object SectionCatalog {
     const val DIAS_REPOSO = "Días de reposo indicados"
     const val INDICACIONES = "Indicaciones"
     const val ORDENES = OrdenesMedicasDefaults.SECTION_ORDENES
+    const val RECIPE = RecetaDefaults.SECTION_RECIPE
 
     val all = listOf(
         MOTIVO_CONSULTA,
@@ -41,6 +42,7 @@ object SectionCatalog {
         DIAS_REPOSO,
         INDICACIONES,
         ORDENES,
+        RECIPE,
     )
 
     /** Secciones disponibles para elegir/ordenar por tipo de documento. */
@@ -78,6 +80,11 @@ object SectionCatalog {
         DocumentType.ORDENES_MEDICAS -> listOf(
             DATOS_PACIENTE,
             ORDENES,
+        )
+        DocumentType.RECETA -> listOf(
+            DATOS_PACIENTE,
+            RECIPE,
+            INDICACIONES,
         )
     }
 
@@ -141,6 +148,11 @@ object SectionCatalog {
         DocumentType.ORDENES_MEDICAS -> listOf(
             DATOS_PACIENTE,
             ORDENES,
+        )
+        DocumentType.RECETA -> listOf(
+            DATOS_PACIENTE,
+            RECIPE,
+            INDICACIONES,
         )
     }
 }

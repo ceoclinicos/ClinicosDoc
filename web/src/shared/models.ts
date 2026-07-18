@@ -12,14 +12,23 @@ export const FirestorePaths = {
   SUB_DRAFTS: "drafts",
 } as const;
 
-export type DocumentType = "historiaClinica" | "informe" | "reposo" | "ordenesMedicas";
+export type DocumentType =
+  | "historiaClinica"
+  | "informe"
+  | "reposo"
+  | "ordenesMedicas"
+  | "receta";
 
 export const DocumentTypeLabels: Record<DocumentType, string> = {
   historiaClinica: "Historia clínica",
   informe: "Informe",
   reposo: "Reposo",
   ordenesMedicas: "Órdenes médicas",
+  receta: "Receta",
 };
+
+export const DocumentTypesInformes: DocumentType[] = ["historiaClinica", "informe", "reposo"];
+export const DocumentTypesRecetas: DocumentType[] = ["ordenesMedicas", "receta"];
 
 export interface Patient {
   id: string;
@@ -95,6 +104,7 @@ export const DocumentReportTitles: Record<DocumentType, string> = {
   informe: "INFORME MÉDICO",
   reposo: "REPOSO MÉDICO",
   ordenesMedicas: "ÓRDENES MÉDICAS",
+  receta: "RECETA MÉDICA",
 };
 
 export interface ClinicalDraft {

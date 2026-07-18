@@ -5,6 +5,7 @@ object Routes {
     const val MAIN = "main"
     const val SETTINGS = "settings"
     const val TEMPLATES = "templates"
+    const val TEMPLATES_RECETAS = "templates_recetas"
     const val PLANTILLAS_HUB = "plantillas_hub"
     const val PHYSICAL_EXAM_CATALOG = "physical_exam_catalog"
     const val TEMPLATE_EDIT = "template_edit/{templateId}/{isNew}"

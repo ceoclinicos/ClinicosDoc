@@ -36,6 +36,7 @@ function asDocType(raw: string): DocumentType {
   if (raw === "historiaClinica" || raw === "HISTORIA_CLINICA") return "historiaClinica";
   if (raw === "reposo" || raw === "REPOSO") return "reposo";
   if (raw === "ordenesMedicas" || raw === "ORDENES_MEDICAS") return "ordenesMedicas";
+  if (raw === "receta" || raw === "RECETA") return "receta";
   return "informe";
 }
 
