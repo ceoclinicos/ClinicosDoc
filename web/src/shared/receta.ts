@@ -28,6 +28,16 @@ export const RECETA_MOLDE_RECIPE = [
   "Dispóngase: 20 tabletas.",
 ].join("\n");
 
+/** Títulos válidos de la sección Recipe (paridad PDF Android). */
+export function isRecipeSectionTitle(title: string): boolean {
+  const t = title.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return t === "recipe" || t === "rp" || t === "farmacos";
+}
+
+export function isRecetaIndicacionesTitle(title: string): boolean {
+  return title.trim().toLowerCase() === RECETA_INDICACIONES_SECTION.toLowerCase();
+}
+
 export const RECETA_MOLDE_INDICACIONES = [
   "Amoxicilina + Ácido Clavulánico:",
   "Tomar 1 tableta vía oral cada 12 horas por 7 días.",

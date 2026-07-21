@@ -1,6 +1,6 @@
 /** Persistencia local de plantillas, encabezados y documentos (paridad con la app). */
 import { DocumentTypeLabels, type ClinicalDocument, type ClinicalDraft, type DocumentHeader, type DocumentTemplate, type DocumentType } from "../shared/models";
-import { defaultSectionsFor, isLegacyInformeAllChecked, normalizeTemplateSections } from "../shared/section-catalog";
+import { defaultSectionsFor, isLegacyInformeAllChecked, normalizeTemplateSections, SectionCatalog } from "../shared/section-catalog";
 import { ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT } from "../shared/enfermedad-actual";
 import { ORDENES_MOLDE_EJEMPLO, ORDENES_SECTION } from "../shared/ordenes-medicas";
 import {
@@ -10,6 +10,7 @@ import {
   RECIPE_SECTION,
 } from "../shared/receta";
 import { PhysicalExamDefaults } from "../shared/physical-exam-defaults";
+import { defaultTextForSection } from "./ai/section-defaults";
 import { loadExamCatalog, orderEnabledByCatalog } from "./exam-catalog";
 import { loadJson, saveJson } from "./local-store";
 import {
@@ -36,11 +37,15 @@ const DOC_TYPES: DocumentType[] = [
   "receta",
 ];
 
-function makeDefaultTemplates(): DocumentTemplate[] {
-  const examIds = orderEnabledByCatalog(
+function defaultExamSystemIds(): string[] {
+  return orderEnabledByCatalog(
     PhysicalExamDefaults.map((s) => s.id),
     loadExamCatalog(),
   );
+}
+
+function makeDefaultTemplates(): DocumentTemplate[] {
+  const examIds = defaultExamSystemIds();
   return DOC_TYPES.map((type) => ({
     id: crypto.randomUUID(),
     name: `Plantilla ${DocumentTypeLabels[type]}`,
@@ -49,7 +54,9 @@ function makeDefaultTemplates(): DocumentTemplate[] {
     isDefault: true,
     enabledPhysicalExamSystemIds: examIds,
     enfermedadActualEjemplo:
-      type === "informe" || type === "historiaClinica" ? ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT : "",
+      type === "informe" || type === "historiaClinica" || type === "reposo"
+        ? ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT
+        : "",
     sectionDefaultTexts: (type === "ordenesMedicas"
       ? { [ORDENES_SECTION]: ORDENES_MOLDE_EJEMPLO }
       : type === "receta"
@@ -57,7 +64,9 @@ function makeDefaultTemplates(): DocumentTemplate[] {
             [RECIPE_SECTION]: RECETA_MOLDE_RECIPE,
             [RECETA_INDICACIONES_SECTION]: RECETA_MOLDE_INDICACIONES,
           }
-        : undefined) as Record<string, string> | undefined,
+        : type === "reposo"
+          ? { [SectionCatalog.DIAS_REPOSO]: defaultTextForSection(SectionCatalog.DIAS_REPOSO) }
+          : undefined) as Record<string, string> | undefined,
   }));
 }
 
@@ -115,6 +124,38 @@ export function loadTemplates(): DocumentTemplate[] {
           ...tpl,
           sections: defaultSectionsFor("receta"),
           sectionDefaultTexts: texts,
+        };
+        changed = true;
+      }
+    }
+    if (type === "reposo") {
+      const defaults = defaultSectionsFor("reposo");
+      const missingCore = defaults.some(
+        (d) => !tpl.sections.some((s) => s.toLowerCase() === d.toLowerCase()),
+      );
+      const texts = { ...(tpl.sectionDefaultTexts ?? {}) };
+      const diasKey = Object.keys(texts).find(
+        (k) => k.toLowerCase() === SectionCatalog.DIAS_REPOSO.toLowerCase(),
+      );
+      const diasVal = (diasKey ? texts[diasKey] : "")?.trim() ?? "";
+      const needsDiasText =
+        !diasVal ||
+        diasVal.toLowerCase() === "días de reposo a indicar según criterio médico.".toLowerCase();
+      if (missingCore || needsDiasText) {
+        if (needsDiasText) {
+          if (diasKey) delete texts[diasKey];
+          texts[SectionCatalog.DIAS_REPOSO] = defaultTextForSection(SectionCatalog.DIAS_REPOSO);
+        }
+        tpl = {
+          ...tpl,
+          sections: missingCore ? defaults : tpl.sections,
+          sectionDefaultTexts: texts,
+          enabledPhysicalExamSystemIds:
+            tpl.enabledPhysicalExamSystemIds?.length
+              ? tpl.enabledPhysicalExamSystemIds
+              : defaultExamSystemIds(),
+          enfermedadActualEjemplo:
+            tpl.enfermedadActualEjemplo?.trim() || ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT,
         };
         changed = true;
       }

@@ -49,10 +49,12 @@ fun TemplateConfigStep(
     onContinue: () -> Unit,
 ) {
     val showPhysicalExam = documentType == DocumentType.INFORME ||
+        documentType == DocumentType.REPOSO ||
         activeSections.any { it.equals(SectionCatalog.EXAMEN_FISICO, ignoreCase = true) }
     val showSectionEditor = SectionCatalog.catalogFor(documentType).isNotEmpty()
     val showEnfermedadActual = documentType == DocumentType.HISTORIA_CLINICA ||
-        documentType == DocumentType.INFORME
+        documentType == DocumentType.INFORME ||
+        documentType == DocumentType.REPOSO
 
     Column(
         modifier = Modifier

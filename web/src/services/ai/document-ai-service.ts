@@ -2,6 +2,7 @@ import { DocumentTypeLabels } from "../../shared/models";
 import type { DocumentTemplate, DocumentType, Patient } from "../../shared/models";
 import { SectionCatalog, defaultSectionsFor } from "../../shared/section-catalog";
 import {
+  ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT,
   enfermedadActualPromptBlock,
   resolveEnfermedadActualEjemplo,
 } from "../../shared/enfermedad-actual";
@@ -12,6 +13,8 @@ import { buildPhysicalExamBlock, resolveSystemsForReport } from "./physical-exam
 import { MOTIVO_CONSULTA_STYLE, sectionDefaultsPromptBlock } from "./section-defaults";
 import { ORDENES_SECTION, ordenesMedicasPromptBlock, type OrdenesModo } from "../../shared/ordenes-medicas";
 import {
+  isRecipeSectionTitle,
+  isRecetaIndicacionesTitle,
   RECETA_INDICACIONES_SECTION,
   RECETA_MOLDE_INDICACIONES,
   RECETA_MOLDE_RECIPE,
@@ -20,7 +23,8 @@ import {
   type RecetaFuente,
 } from "../../shared/receta";
 import { templateForType } from "../clinical-store";
-import { parseDocumentSections, serializeDocumentSections } from "../document-parser";
+import { parseDocumentSections, serializeDocumentSections, type DocumentSection } from "../document-parser";
+import { isPhysicalExamTitle } from "../vital-signs";
 
 export interface DoctorInfo {
   nombre: string;
@@ -49,6 +53,15 @@ export function clinicalSectionsOf(template: DocumentTemplate): string[] {
       SectionCatalog.ENFERMEDAD_ACTUAL,
       SectionCatalog.EXAMEN_FISICO,
       SectionCatalog.DIAGNOSTICO,
+    ];
+  }
+  if (template.documentType === "reposo") {
+    return [
+      SectionCatalog.MOTIVO_CONSULTA,
+      SectionCatalog.ENFERMEDAD_ACTUAL,
+      SectionCatalog.EXAMEN_FISICO,
+      SectionCatalog.DIAGNOSTICO,
+      SectionCatalog.DIAS_REPOSO,
     ];
   }
   return defaultSectionsFor(template.documentType).filter(
@@ -141,10 +154,12 @@ function buildPrompt(
       sectionDefaultsPromptBlock(effective, template.sectionDefaultTexts ?? {}),
     );
     if (physicalExamBlock) lines.push("", physicalExamBlock);
-  } else if (template.documentType === "informe") {
+  } else if (template.documentType === "informe" || template.documentType === "reposo") {
     const sexoTexto = sexoLabel(patient.sexo);
+    const tipoGuia =
+      template.documentType === "reposo" ? "Para REPOSO MÉDICO (misma estructura clínica del informe):" : "Para INFORME MÉDICO:";
     lines.push(
-      "Para INFORME MÉDICO:",
+      tipoGuia,
       "Formato: línea [[SECTION:Nombre exacto]] y contenido debajo. PROHIBIDO usar **.",
       "",
       ...sectionList,
@@ -155,6 +170,11 @@ function buildPrompt(
       "- Signos vitales: solo si hay valores dictados; si no, omitir esa línea.",
       "- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.",
       "- Plan (si está en la plantilla): lista numerada de conducta/tratamiento (ej. observación, fármacos EV, control de signos). Solo según dictado.",
+      ...(template.documentType === "reposo"
+        ? [
+            "- Días de reposo indicados: conserva el texto predeterminado de la plantilla (días y redacción) salvo que el dictado indique otro número de días u otra fórmula.",
+          ]
+        : []),
       "",
       enfermedadActualPromptBlock(ejemplo),
       "",
@@ -332,10 +352,8 @@ export async function appendFarmacoToReceta(options: {
   const drugLine = `${principio}${conc ? ` ${conc}` : ""} (${presentacion})`;
 
   const sections = parseDocumentSections(options.currentContent);
-  let recipe = sections.find((s) => s.title.toLowerCase() === RECIPE_SECTION.toLowerCase());
-  let ind = sections.find(
-    (s) => s.title.toLowerCase() === RECETA_INDICACIONES_SECTION.toLowerCase(),
-  );
+  let recipe = sections.find((s) => isRecipeSectionTitle(s.title));
+  let ind = sections.find((s) => isRecetaIndicacionesTitle(s.title));
   if (!recipe) {
     recipe = { id: crypto.randomUUID(), title: RECIPE_SECTION, body: "" };
     sections.unshift(recipe);
@@ -388,4 +406,183 @@ INDICACIONES:
   recipe.body = [recipe.body.trim(), recipeAdd].filter(Boolean).join("\n\n");
   ind.body = [ind.body.trim(), indAdd].filter(Boolean).join("\n\n");
   return serializeDocumentSections(sections);
+}
+
+function normalizeSectionTitle(title: string): string {
+  return title.trim();
+}
+
+function sectionStyleHint(title: string): string {
+  const t = title.trim();
+  if (t.toLowerCase() === SectionCatalog.MOTIVO_CONSULTA.toLowerCase()) return MOTIVO_CONSULTA_STYLE;
+  if (t.toLowerCase() === SectionCatalog.ENFERMEDAD_ACTUAL.toLowerCase()) {
+    return "- Enfermedad actual: narrativa cronológica con tiempos, evolución y tratamientos del dictado.";
+  }
+  if (/antecedentes personales/i.test(t)) return '- Antecedentes personales: "Niega..." para negativos; no inventar.';
+  if (/antecedentes familiares/i.test(t)) return "- Antecedentes familiares: relaciones y causas si se conocen.";
+  if (/hábitos|habitos/i.test(t)) return "- Hábitos psicobiológicos: solo lo referido en el dictado.";
+  if (/examen funcional/i.test(t)) return "- Examen funcional: lo que REFIERE el paciente por sistemas.";
+  return "- Redacta con lenguaje semiológico apropiado al título de la sección.";
+}
+
+function enfermedadActualHintBlock(
+  template: DocumentTemplate,
+  sectionTitle: string,
+): string {
+  const applies =
+    (template.documentType === "historiaClinica" ||
+      template.documentType === "informe" ||
+      template.documentType === "reposo") &&
+    (!sectionTitle ||
+      sectionTitle.toLowerCase() === SectionCatalog.ENFERMEDAD_ACTUAL.toLowerCase());
+  if (!applies) return "";
+  const sample = resolveEnfermedadActualEjemplo(template.enfermedadActualEjemplo).trim() ||
+    ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT;
+  return [
+    enfermedadActualPromptBlock(sample),
+    "",
+  ].join("\n");
+}
+
+function extractRegeneratedSectionBody(raw: string, sectionTitle: string): string {
+  const sanitized = sanitizeDocumentContent(raw, []);
+  const parsed = parseDocumentSections(sanitized);
+  const normalized = normalizeSectionTitle(sectionTitle);
+  const matching = parsed.find((section) => {
+    const title = normalizeSectionTitle(section.title);
+    if (!normalized) return !title;
+    return title.toLowerCase() === normalized.toLowerCase();
+  });
+  if (matching?.body.trim()) return matching.body.trim();
+  if (parsed.length === 1 && parsed[0].body.trim()) return parsed[0].body.trim();
+  return sanitized
+    .split("\n")
+    .filter((line) => !/^\[\[SECTION:[^\]]+]]\s*$/.test(line.trim()))
+    .join("\n")
+    .trim();
+}
+
+/** Regenera una sola sección con IA (paridad DocumentAiService.regenerateSection). */
+export async function regenerateSection(options: {
+  template: DocumentTemplate;
+  patient: Patient;
+  doctor: DoctorInfo;
+  dictation: string;
+  sectionTitle: string;
+  currentSectionBody: string;
+  otherSections: DocumentSection[];
+}): Promise<string> {
+  const {
+    template,
+    patient,
+    dictation,
+    sectionTitle,
+    currentSectionBody,
+    otherSections,
+  } = options;
+  const normalizedTitle = normalizeSectionTitle(sectionTitle);
+  const isPhysicalExam =
+    isPhysicalExamTitle(normalizedTitle) ||
+    /^examen\s+f[ií]sico$/i.test(normalizedTitle);
+  const isDiagnostico =
+    normalizedTitle.toLowerCase() === SectionCatalog.DIAGNOSTICO.toLowerCase() ||
+    /^diagn[oó]stico$/i.test(normalizedTitle);
+  const isInformeIntro = template.documentType === "informe" && !normalizedTitle;
+  const physicalExamBlock = buildPhysicalExamBlock(template);
+  const systems = resolveSystemsForReport(template);
+
+  const system = `
+Eres un asistente médico que redacta documentos clínicos en español.
+Regeneras UNA sola sección sin inventar hallazgos que contradigan el dictado.
+Usa terminología médica apropiada para Venezuela/Latinoamérica.`.trim();
+
+  const lines: string[] = [
+    `Regenera SOLO una sección del ${DocumentTypeLabels[template.documentType]}.`,
+    `Plantilla: "${template.name}".`,
+    "",
+    "DATOS DEL PACIENTE (referencia, NO incluir en el texto):",
+    `- Edad: ${patient.edad} años, Sexo: ${patient.sexo || "—"}`,
+    "",
+    "DICTADO DEL MÉDICO (fuente principal):",
+    '"""',
+    dictation,
+    '"""',
+    "",
+  ];
+
+  if (otherSections.length) {
+    lines.push("OTRAS SECCIONES DEL DOCUMENTO (solo contexto; NO las regeneres ni copies):");
+    for (const section of otherSections) {
+      const title = normalizeSectionTitle(section.title) || "(inicio sin título)";
+      const preview = section.body.trim().slice(0, 280);
+      lines.push(`- ${title}: ${preview}${section.body.length > 280 ? "…" : ""}`);
+    }
+    lines.push("");
+  }
+
+  if (currentSectionBody.trim()) {
+    lines.push("TEXTO ACTUAL DE LA SECCIÓN (puedes mejorarlo; no estás obligado a copiarlo):");
+    lines.push(currentSectionBody);
+    lines.push("");
+  }
+
+  lines.push(
+    `SECCIÓN A REGENERAR: ${normalizedTitle || "Inicio del informe (párrafo narrativo sin título)"}`,
+    "",
+    "REGLAS OBLIGATORIAS:",
+    "- Responde SOLO con el contenido de ESA sección.",
+    "- NO incluyas [[SECTION:...]], **títulos** ni otras secciones.",
+    "- NO incluyas nombre ni cédula del paciente.",
+    "- NO inventes síntomas, signos ni diagnósticos no presentes en el dictado.",
+    "- Mejora redacción, ortografía y semiología según el dictado.",
+    "",
+  );
+
+  const eaHint = enfermedadActualHintBlock(template, normalizedTitle);
+  if (eaHint) lines.push(eaHint);
+
+  if (isInformeIntro) {
+    const sexoTexto = sexoLabel(patient.sexo);
+    lines.push(
+      "Tipo: párrafo inicial del INFORME MÉDICO (sin título).",
+      `- Inicia: "Se trata de paciente ${sexoTexto} de ${patient.edad} años de edad..."`,
+      "- Motivo, evento, síntomas y conducta SOLO según el dictado.",
+    );
+  } else if (isPhysicalExam) {
+    lines.push(
+      "Tipo: EXAMEN FÍSICO.",
+      "- Incluye TODOS los sistemas activos, aunque el dictado solo mencione uno.",
+      "- Sistemas no dictados → texto base intacto. Solo edita los mencionados.",
+      "- Signos vitales SOLO si hay valores dictados (ej. TA: 120/80 mmHg | FC: 82 lpm).",
+      "- Signos en 0 o no dictados: omitirlos.",
+    );
+    if (physicalExamBlock) {
+      lines.push("", physicalExamBlock);
+    }
+  } else if (isDiagnostico) {
+    lines.push(
+      "Tipo: DIAGNÓSTICO.",
+      "- Lista numerada (1. 2. 3.); mínimo 1, máximo 4 según el dictado.",
+    );
+  } else if (template.documentType === "historiaClinica") {
+    lines.push("Tipo: sección de HISTORIA CLÍNICA.", sectionStyleHint(normalizedTitle));
+    if (isPhysicalExam && physicalExamBlock) {
+      lines.push("", physicalExamBlock);
+    }
+  } else {
+    lines.push(`Tipo: sección "${normalizedTitle || "contenido"}".`);
+    if (!currentSectionBody.trim()) {
+      lines.push('- Si el dictado no trae datos para esta sección, escribe "No referido".');
+    }
+  }
+
+  const raw = await sendPrompt({ prompt: lines.join("\n"), systemMessage: system, maxTokens: 2048 });
+  let body = extractRegeneratedSectionBody(raw, normalizedTitle);
+  if (isPhysicalExam && systems.length) {
+    body = ensurePhysicalExamSystems(
+      `[[SECTION:${SectionCatalog.EXAMEN_FISICO}]]\n${body}`,
+      systems,
+    ).replace(/^\[\[SECTION:[^\]]+]]\s*\n?/, "");
+  }
+  return body;
 }

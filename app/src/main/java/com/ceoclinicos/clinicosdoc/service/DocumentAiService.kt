@@ -168,11 +168,48 @@ object DocumentAiService {
                 DocumentType.REPOSO -> {
                     val effectiveSections = effectiveTemplate.normalizedSections()
                         .filterNot { it.equals(SectionCatalog.DATOS_PACIENTE, ignoreCase = true) }
-                    val sectionsList = effectiveSections.joinToString("\n") { "- $it" }
-                    appendLine("Secciones en orden:")
-                    appendLine(sectionsList)
-                    appendLine("Cada sección con **título:** y contenido.")
+                        .ifEmpty {
+                            listOf(
+                                SectionCatalog.MOTIVO_CONSULTA,
+                                SectionCatalog.ENFERMEDAD_ACTUAL,
+                                SectionCatalog.EXAMEN_FISICO,
+                                SectionCatalog.DIAGNOSTICO,
+                                SectionCatalog.DIAS_REPOSO,
+                            )
+                        }
+                    val sexoTexto = when (patient.sexo.lowercase()) {
+                        "masculino", "m" -> "masculino"
+                        "femenino", "f" -> "femenino"
+                        else -> patient.sexo.ifBlank { "de sexo no referido" }
+                    }
+                    appendLine("Para REPOSO MÉDICO usa la misma estructura clínica del informe.")
+                    appendLine("El encabezado institucional lo coloca la app; tú generas SOLO el cuerpo.")
+                    appendLine("Genera UNA sección por cada ítem de la plantilla, en el orden exacto indicado.")
+                    appendLine("Formato: línea [[SECTION:Nombre exacto]] y contenido debajo. PROHIBIDO usar **.")
+                    appendLine("NO incluyas \"Datos del paciente\" ni nombre/cédula.")
+                    appendLine()
+                    appendLine("Secciones de la plantilla (orden obligatorio):")
+                    effectiveSections.forEach { appendLine("- $it") }
+                    appendLine()
+                    appendLine("Guía de estilo:")
+                    appendLine(SectionDefaults.MOTIVO_CONSULTA_STYLE)
+                    appendLine(
+                        "- Enfermedad actual: narrativa al estilo del ejemplo. " +
+                            "Inicie con paciente $sexoTexto de ${patient.edad} años; " +
+                            "natural/procedente, diagnóstico de base o sin patológicos, inicio con fecha, hechos del dictado y cierre en el centro.",
+                    )
+                    appendLine("- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto.")
+                    appendLine("- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.")
+                    appendLine(
+                        "- Días de reposo indicados: conserva el texto predeterminado de la plantilla " +
+                            "(días y redacción) salvo que el dictado indique otro número de días u otra fórmula.",
+                    )
+                    appendLine()
                     appendLine(SectionDefaults.promptBlock(effectiveSections, effectiveTemplate.sectionDefaultTexts))
+                    if (physicalExamBlock.isNotBlank()) {
+                        appendLine()
+                        appendLine(physicalExamBlock)
+                    }
                 }
                 DocumentType.ORDENES_MEDICAS -> {
                     val molde = effectiveTemplate.sectionDefaultTexts.entries

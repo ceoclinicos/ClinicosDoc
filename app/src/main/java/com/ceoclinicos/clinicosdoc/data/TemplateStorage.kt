@@ -7,6 +7,7 @@ import com.ceoclinicos.clinicosdoc.model.OrdenesMedicasDefaults
 import com.ceoclinicos.clinicosdoc.model.PhysicalExamDefaults
 import com.ceoclinicos.clinicosdoc.model.RecetaDefaults
 import com.ceoclinicos.clinicosdoc.model.SectionCatalog
+import com.ceoclinicos.clinicosdoc.model.SectionDefaults
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.UUID
@@ -16,7 +17,7 @@ object TemplateStorage {
     private const val KEY = "document_templates_json"
     private const val INITIALIZED_KEY = "templates_initialized"
     private const val HC_SECTIONS_VERSION_KEY = "hc_template_sections_version"
-    private const val HC_SECTIONS_VERSION = 8
+    private const val HC_SECTIONS_VERSION = 9
     const val MAX_PER_TYPE = 1
     private val gson = Gson()
 
@@ -103,6 +104,36 @@ object TemplateStorage {
                     changed = true
                 }
             }
+            if (tpl.documentType == DocumentType.REPOSO) {
+                val defaults = SectionCatalog.defaultsFor(DocumentType.REPOSO)
+                val missingCore = defaults.any { d ->
+                    tpl.sections.none { it.equals(d, ignoreCase = true) }
+                }
+                val texts = tpl.sectionDefaultTexts.toMutableMap()
+                val diasKey = texts.keys.firstOrNull { it.equals(SectionCatalog.DIAS_REPOSO, ignoreCase = true) }
+                val diasVal = diasKey?.let { texts[it] }.orEmpty().trim()
+                val needsDiasText = diasVal.isEmpty() ||
+                    diasVal.equals("Días de reposo a indicar según criterio médico.", ignoreCase = true)
+                if (missingCore || needsDiasText) {
+                    if (needsDiasText) {
+                        if (diasKey != null) texts.remove(diasKey)
+                        texts[SectionCatalog.DIAS_REPOSO] = SectionDefaults.DIAS_REPOSO_DEFAULT
+                    }
+                    unique[index] = tpl.copy(
+                        sections = if (missingCore) defaults else tpl.sections,
+                        sectionLayoutOrder = if (missingCore) {
+                            SectionCatalog.initialLayoutOrder(DocumentType.REPOSO, defaults)
+                        } else {
+                            tpl.sectionLayoutOrder
+                        },
+                        sectionDefaultTexts = texts,
+                        enabledPhysicalExamSystemIds = tpl.enabledPhysicalExamSystemIds.ifEmpty {
+                            PhysicalExamDefaults.defaultEnabledIds
+                        },
+                    )
+                    changed = true
+                }
+            }
         }
         if (changed) {
             saveAllLocal(context, unique)
@@ -119,6 +150,9 @@ object TemplateStorage {
             DocumentType.RECETA -> mapOf(
                 RecetaDefaults.SECTION_RECIPE to RecetaDefaults.MOLDE_RECIPE,
                 RecetaDefaults.SECTION_INDICACIONES to RecetaDefaults.MOLDE_INDICACIONES,
+            )
+            DocumentType.REPOSO -> mapOf(
+                SectionCatalog.DIAS_REPOSO to SectionDefaults.DIAS_REPOSO_DEFAULT,
             )
             else -> emptyMap()
         }
@@ -178,6 +212,13 @@ object TemplateStorage {
                     }
                     SectionCatalog.normalizeActive(DocumentType.INFORME, base + extras)
                 }
+                tpl.documentType == DocumentType.REPOSO -> {
+                    val base = SectionCatalog.defaultsFor(DocumentType.REPOSO)
+                    val extras = renamed.filter {
+                        it !in base && it in SectionCatalog.catalogFor(DocumentType.REPOSO)
+                    }
+                    SectionCatalog.normalizeActive(DocumentType.REPOSO, base + extras)
+                }
                 tpl.documentType == DocumentType.HISTORIA_CLINICA -> {
                     val normalized = SectionCatalog.normalizeActive(tpl.documentType, renamed)
                     if (SectionCatalog.EXAMEN_FISICO !in normalized) {
@@ -194,10 +235,10 @@ object TemplateStorage {
                 else -> SectionCatalog.normalizeActive(tpl.documentType, renamed)
             }
 
-            val desiredOrder = if (tpl.documentType == DocumentType.INFORME) {
-                SectionCatalog.catalogFor(DocumentType.INFORME)
-            } else {
-                null
+            val desiredOrder = when (tpl.documentType) {
+                DocumentType.INFORME -> SectionCatalog.catalogFor(DocumentType.INFORME)
+                DocumentType.REPOSO -> SectionCatalog.catalogFor(DocumentType.REPOSO)
+                else -> null
             }
 
             val updated = tpl.copy(
@@ -320,7 +361,8 @@ object TemplateStorage {
 
     private fun defaultExamSystemsFor(type: DocumentType): List<String> =
         when (type) {
-            DocumentType.INFORME, DocumentType.HISTORIA_CLINICA -> PhysicalExamDefaults.defaultEnabledIds
+            DocumentType.INFORME, DocumentType.HISTORIA_CLINICA, DocumentType.REPOSO ->
+                PhysicalExamDefaults.defaultEnabledIds
             else -> emptyList()
         }
 

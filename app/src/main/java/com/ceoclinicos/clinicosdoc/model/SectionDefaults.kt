@@ -7,6 +7,9 @@ object SectionDefaults {
         "- Motivo de consulta: SOLO síntomas principales (máximo 3), unidos con \"y\"/\"e\". " +
             "Ejemplo: \"diarrea y vómito\". PROHIBIDO frases largas, \"consulta por…\", evolución, antecedentes o diagnóstico."
 
+    const val DIAS_REPOSO_DEFAULT =
+        "Nota: En vista de la sintomatología del paciente se indican cumplir 3 días de reposo médico completo."
+
     fun textFor(section: String, overrides: Map<String, String> = emptyMap()): String {
         overrides.entries.firstOrNull { it.key.equals(section, ignoreCase = true) }
             ?.value?.trim()?.takeIf { it.isNotEmpty() }
@@ -46,7 +49,7 @@ object SectionDefaults {
         section.equals(SectionCatalog.RECOMENDACIONES, ignoreCase = true) ->
             "Seguimiento médico según evolución clínica."
         section.equals(SectionCatalog.DIAS_REPOSO, ignoreCase = true) ->
-            "Días de reposo a indicar según criterio médico."
+            DIAS_REPOSO_DEFAULT
         section.equals(SectionCatalog.INDICACIONES, ignoreCase = true) ->
             RecetaDefaults.MOLDE_INDICACIONES
         section.equals(SectionCatalog.ORDENES, ignoreCase = true) ->

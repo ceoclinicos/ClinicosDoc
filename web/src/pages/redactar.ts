@@ -29,7 +29,9 @@ import {
   readVitalsFromForm,
   vitalSignsFieldsHtml,
 } from "../services/vital-signs";
-import { loadJson } from "../services/local-store";
+import { loadJson, saveJson } from "../services/local-store";
+import { findPatientByCedula, matchesCedula, normalizeCedula } from "../services/cedula";
+import { canSync, findPatientByCedulaAnywhere, pushPatient, syncQuiet } from "../services/cloud-sync";
 import { isSpeechSupported, startDictation } from "../services/speech";
 import { getProfessionalSession } from "../registro/session";
 import type {
@@ -48,9 +50,10 @@ import {
 } from "../shared/enfermedad-actual";
 import { ORDENES_MODO_LABELS, type OrdenesModo } from "../shared/ordenes-medicas";
 import {
-  RECETA_PRESENTACIONES,
   type RecetaFuente,
 } from "../shared/receta";
+import { openFarmacoDialog } from "../ui/farmaco-dialog";
+import { bindSectionRegenerateButtons, sectionRegenerateButtonHtml } from "../ui/section-regenerate";
 import { bindNavButtons, page } from "./helpers";
 import { setOrdenesFromCasePending } from "./generar-ordenes";
 
@@ -108,8 +111,10 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
   let selectedSourceDocId: string | null = null;
   let recetaFuente: RecetaFuente = "dictar";
   let diagnosticoText = "";
+  let cedulaSearch = "";
+  let patientSearchMessage = "";
 
-  const patients = loadJson<Patient[]>("patients", []);
+  let patients = loadJson<Patient[]>("patients", []);
   let selectedPatient: Patient | null =
     patients.find((p) => p.id === existingDraft?.patientId) ?? null;
 
@@ -131,6 +136,28 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
 
   if (existingDraft && !existingDraft.generatedContent) {
     step = existingDraft.dictation ? "dictado" : "paciente";
+  }
+
+  /** Dictado efectivo para IA/regenerar (incluye diagnóstico en receta por protocolos). */
+  function effectiveDictation(): string {
+    return dictation.trim() || diagnosticoText.trim();
+  }
+
+  function upsertPatientInList(patient: Patient): Patient {
+    const idx = patients.findIndex(
+      (p) => p.id === patient.id || normalizeCedula(p.cedula) === normalizeCedula(patient.cedula),
+    );
+    let saved = patient;
+    if (idx >= 0) {
+      saved = { ...patient, id: patients[idx].id };
+      patients[idx] = saved;
+    } else {
+      saved = { ...patient, id: crypto.randomUUID() };
+      patients.unshift(saved);
+    }
+    saveJson("patients", patients);
+    if (canSync()) syncQuiet(() => pushPatient(saved));
+    return saved;
   }
 
   function patientCaseDocs(): ClinicalDocument[] {
@@ -206,10 +233,15 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
   }
 
   function renderPaciente(): void {
-    const patientOptions = patients
+    const q = normalizeCedula(cedulaSearch);
+    const filtered = q
+      ? patients.filter((p) => matchesCedula(p.cedula, cedulaSearch))
+      : patients;
+
+    const patientOptions = filtered
       .map(
         (p) =>
-          `<option value="${p.id}" ${selectedPatient?.id === p.id ? "selected" : ""}>${p.nombre} (${p.cedula})</option>`,
+          `<option value="${p.id}" ${selectedPatient?.id === p.id ? "selected" : ""}>${escapeHtml(p.nombre)} (${escapeHtml(p.cedula)})</option>`,
       )
       .join("");
 
@@ -224,9 +256,16 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       <p class="step-badge">1 / 4 · Paciente</p>
       <p class="lead">¿Para qué paciente es este ${DocumentTypeLabels[docType].toLowerCase()}?</p>
       <div class="grid-2" style="margin-bottom:1rem">${typeBtns}</div>
+      <div class="search-row">
+        <label class="search-label">Buscar por cédula
+          <input type="text" id="cedula-search" value="${escapeHtml(cedulaSearch)}" placeholder="Ej. V-12345678" inputmode="numeric" />
+        </label>
+        <button type="button" class="btn btn-secondary" id="btn-cedula-search">Buscar</button>
+      </div>
+      <p class="muted" id="patient-search-msg">${escapeHtml(patientSearchMessage)}</p>
       <form class="form" id="setup-form">
         <label>Paciente
-          <select name="patientId" required ${patients.length ? "" : "disabled"}>
+          <select name="patientId" required ${filtered.length ? "" : "disabled"}>
             <option value="">Selecciona…</option>
             ${patientOptions}
           </select>
@@ -239,7 +278,8 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
           <label>Especialidad<input name="docEsp" required value="${escapeHtml(doctor?.especialidad ?? "Médico general")}" /></label>
           <label>MPPS<input name="docMpps" value="${escapeHtml(doctor?.mpps ?? "")}" /></label>
         </fieldset>
-        <button type="submit" class="btn btn-primary" ${patients.length ? "" : "disabled"}>Continuar a plantilla</button>
+        <button type="submit" class="btn btn-primary" ${filtered.length ? "" : "disabled"}>Continuar a plantilla</button>
+        <button type="button" class="btn btn-ghost" data-nav="/pacientes/nuevo">Agregar paciente</button>
         <button type="button" class="btn btn-ghost" data-nav="/">Cancelar</button>
       </form>
     `;
@@ -250,6 +290,20 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         workingTemplate = structuredClone(templateForType(docType));
         renderPaciente();
       });
+    });
+
+    root.querySelector("#cedula-search")?.addEventListener("input", (e) => {
+      cedulaSearch = (e.target as HTMLInputElement).value;
+      patientSearchMessage = "";
+      renderPaciente();
+    });
+
+    root.querySelector("#btn-cedula-search")?.addEventListener("click", () => void searchPatientByCedula());
+    root.querySelector("#cedula-search")?.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "Enter") {
+        e.preventDefault();
+        void searchPatientByCedula();
+      }
     });
 
     root.querySelector("#setup-form")?.addEventListener("submit", (e) => {
@@ -273,6 +327,40 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     bindNavButtons(root);
   }
 
+  async function searchPatientByCedula(): Promise<void> {
+    const input = root.querySelector("#cedula-search") as HTMLInputElement | null;
+    cedulaSearch = input?.value.trim() ?? "";
+    if (!cedulaSearch) {
+      patientSearchMessage = "Ingresa una cédula válida";
+      renderPaciente();
+      return;
+    }
+    patientSearchMessage = "Buscando…";
+    renderPaciente();
+
+    const local = findPatientByCedula(patients, cedulaSearch);
+    let found: Patient | null = local ?? null;
+    if (!found) {
+      try {
+        found = await findPatientByCedulaAnywhere(cedulaSearch);
+      } catch {
+        /* sin conexión */
+      }
+    }
+
+    if (found) {
+      const saved = upsertPatientInList(found);
+      selectedPatient = saved;
+      patientSearchMessage = `Seleccionado: ${saved.nombre}`;
+      workingTemplate = structuredClone(templateForType(docType));
+      step = "plantilla";
+      render();
+    } else {
+      patientSearchMessage = "No se encontró paciente con esa cédula";
+      renderPaciente();
+    }
+  }
+
   function renderPlantilla(): void {
     let draftExamIds = orderEnabledByCatalog(
       workingTemplate.enabledPhysicalExamSystemIds?.length
@@ -284,7 +372,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     let draftSectionTexts: Record<string, string> = {
       ...(workingTemplate.sectionDefaultTexts ?? {}),
     };
-    const needsExam = docType === "historiaClinica" || docType === "informe";
+    const needsExam = docType === "historiaClinica" || docType === "informe" || docType === "reposo";
     const showEjemplo = needsExam;
     const ejemploActual = resolveEnfermedadActualEjemplo(workingTemplate.enfermedadActualEjemplo);
 
@@ -681,7 +769,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       patientCedula: selectedPatient.cedula,
       type: docType,
       content: generatedContent,
-      rawDictation: dictation,
+      rawDictation: effectiveDictation(),
       createdAt: existing?.createdAt ?? new Date().toISOString(),
       templateId: workingTemplate.id,
       templateName: workingTemplate.name,
@@ -718,6 +806,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       )
       .join("");
 
+    const canRegenerate = Boolean(effectiveDictation());
     const sectionsHtml = sections
       .map((sec, i) => {
         const isExam = isPhysicalExamTitle(sec.title);
@@ -734,6 +823,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
               <span class="field-label">${isExam ? "Resto del examen físico" : "Contenido"}</span>
               <textarea class="sec-body" rows="${isExam ? 8 : 5}">${escapeHtml(bodyText)}</textarea>
             </div>
+            ${canRegenerate ? sectionRegenerateButtonHtml(i) : ""}
           </div>`;
       })
       .join("");
@@ -820,6 +910,33 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
 
     root.querySelector("#sections-editor")?.addEventListener("input", () => refreshPreview());
 
+    const doctor = loadDoctorProfile();
+    if (canRegenerate && selectedPatient && doctor) {
+      bindSectionRegenerateButtons(root, {
+        rawDictation: effectiveDictation(),
+        template: workingTemplate,
+        patient: selectedPatient,
+        doctor,
+        getSections: () => {
+          const boxes = Array.from(root.querySelectorAll(".section-edit")) as HTMLElement[];
+          return boxes.map((box, i) => {
+            const title = (box.querySelector(".sec-title") as HTMLInputElement).value.trim();
+            let body = (box.querySelector(".sec-body") as HTMLTextAreaElement).value;
+            if (isPhysicalExamTitle(title) || box.querySelector(".vitals-editor")) {
+              body = applyVitalsToBody(body, readVitalsFromForm(box, `vs${i}`));
+            }
+            return { id: sections[i]?.id ?? crypto.randomUUID(), title, body };
+          });
+        },
+        applySectionBody: (index, body) => {
+          const box = root.querySelector(`.section-edit[data-sec-idx="${index}"]`);
+          const ta = box?.querySelector(".sec-body") as HTMLTextAreaElement | null;
+          if (ta) ta.value = body;
+        },
+        onAfterRegenerate: () => refreshPreview(),
+      });
+    }
+
     root.querySelector("#btn-add-section")?.addEventListener("click", () => {
       collectContent();
       sections = [...sections, { id: crypto.randomUUID(), title: "", body: "" }];
@@ -828,21 +945,15 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     });
 
     root.querySelector("#btn-add-farmaco")?.addEventListener("click", async () => {
-      const principio = prompt("Principio activo:");
-      if (!principio?.trim()) return;
-      const presentacion =
-        prompt(
-          `Presentación (${RECETA_PRESENTACIONES.join(", ")}):`,
-          "Tabletas",
-        )?.trim() || "Tabletas";
-      const concentracion = prompt("Concentración (opcional):")?.trim() ?? "";
+      const picked = await openFarmacoDialog();
+      if (!picked) return;
       try {
         collectContent();
         generatedContent = await appendFarmacoToReceta({
           currentContent: generatedContent,
-          principioActivo: principio.trim(),
-          presentacion,
-          concentracion,
+          principioActivo: picked.principioActivo,
+          presentacion: picked.presentacion,
+          concentracion: picked.concentracion,
           patient: selectedPatient ?? undefined,
         });
         if (savedDocumentId) persistGeneratedDocument({ showAlert: false, navigateAfter: false });
@@ -902,7 +1013,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       patientNombre: selectedPatient.nombre,
       patientCedula: selectedPatient.cedula,
       documentType: docType,
-      dictation,
+      dictation: effectiveDictation(),
       templateId: workingTemplate.id,
       templateName: workingTemplate.name,
       headerId: selectedHeader?.id,

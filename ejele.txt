@@ -1,0 +1,13 @@
+1. Qué falta actualizar en la web
+Ya alineado (no tocar): reposo (secciones + nota 3 días + IA + examen), receta (PDF landscape, fuentes, moldes), órdenes (modos + desde informe/HC), regenerar mismo doc (savedDocumentId), menú herramientas, hub plantillas, sync de tipos.
+
+Sí falta / incompleto:
+
+Regenerar sección con IA — en app existe en el detalle del informe; en web solo edición manual.
+Defaults de Receta — section-defaults e ensure-sections aún usan texto genérico de Indicaciones y no el molde Recipe.
+Aliases PDF Receta — app acepta Recipe / Rp / Fármacos; web solo Recipe.
+UI “Agregar fármaco” — web usa prompt() encadenados; app tiene diálogo con presentaciones.
+Lookup global de pacientes por cédula al crear — app busca en nube/global; web al alta es formulario vacío (portal solo en búsqueda).
+Ensure plantillas justo tras sync login — app fuerza tipos; web depende de loadTemplates() después.
+Copy home — subtítulo no menciona Receta (menor).
+Nada de eso lo he tocado aún.

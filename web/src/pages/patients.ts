@@ -1,4 +1,4 @@
-import { registerRoute } from "../app/router";
+import { registerRoute, navigate } from "../app/router";
 import {
   bindBirthDateSelects,
   birthDateFieldsHtml,
@@ -8,7 +8,7 @@ import {
 import { findPatientByCedula, matchesCedula, normalizeCedula } from "../services/cedula";
 import { getFichaByCedula, renderFichaHtml } from "../services/emergency-ficha";
 import { loadJson, saveJson } from "../services/local-store";
-import { canSync, pushPatient, syncQuiet } from "../services/cloud-sync";
+import { canSync, findGlobalByCedula, pushPatient, syncQuiet } from "../services/cloud-sync";
 import { getPaciente } from "../registro/store";
 import type { Patient } from "../shared/models";
 import { bindNavButtons, emptyState, page } from "./helpers";
@@ -226,50 +226,150 @@ registerRoute({
   title: "Nuevo paciente",
   medicoOnly: true,
   render: () => {
-    const el = page(
-      "Nuevo paciente",
-      `
-      <form class="form" id="patient-form">
-        <label>Nombre<input name="nombre" required /></label>
-        <label>Cédula<input name="cedula" required /></label>
-        <label>Sexo
-          <select name="sexo" required>
-            ${sexOptionsHtml()}
-          </select>
-        </label>
-        ${birthDateFieldsHtml("nac")}
-        <p class="muted" id="edad-hint">La edad se calcula automáticamente con la fecha de nacimiento.</p>
-        <button type="submit" class="btn btn-primary">Guardar</button>
-      </form>
-      `,
-    );
+    let step: "cedula" | "formulario" = "cedula";
+    let foundPatients: Patient[] = [];
+    let searchMessage = "";
+    let prefilledCedula = "";
 
-    bindBirthDateSelects(el, "nac");
+    const el = page("Nuevo paciente", `<div id="nuevo-root"></div>`);
+    const root = el.querySelector("#nuevo-root") as HTMLElement;
 
-    el.querySelector("#patient-form")?.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const fd = new FormData(e.target as HTMLFormElement);
-      try {
-        const sexo = String(fd.get("sexo") ?? "").trim();
-        if (sexo !== "Masculino" && sexo !== "Femenino") {
-          throw new Error("Seleccione el sexo");
+    function renderStep(): void {
+      if (step === "cedula") {
+        root.innerHTML = `
+          <p class="muted">Primero busca por cédula en la base de datos (tu lista, global y portal).</p>
+          <div class="search-row">
+            <label class="search-label">Cédula *
+              <input type="text" id="nuevo-cedula" value="${escapeAttr(prefilledCedula)}" placeholder="Ej. V-12345678" />
+            </label>
+            <button type="button" class="btn btn-primary" id="nuevo-buscar">Buscar en base de datos</button>
+          </div>
+          <p class="muted" id="nuevo-msg">${escapeHtml(searchMessage)}</p>
+          <div id="nuevo-found"></div>
+          <button type="button" class="btn btn-ghost" data-nav="/pacientes">Volver</button>`;
+
+        const foundBox = root.querySelector("#nuevo-found") as HTMLElement;
+        if (foundPatients.length) {
+          foundBox.innerHTML = foundPatients
+            .map(
+              (p) => `
+            <div class="card-panel" style="margin-top:12px">
+              <strong>${escapeHtml(p.nombre)}</strong>
+              <p class="muted">C.I. ${escapeHtml(p.cedula)} · ${p.edad} años · ${escapeHtml(p.sexo || "—")}</p>
+              <button type="button" class="btn btn-primary btn-sm btn-use-patient" data-id="${escapeAttr(p.id)}">Usar este paciente</button>
+            </div>`,
+            )
+            .join("");
+          foundBox.querySelectorAll(".btn-use-patient").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const id = (btn as HTMLElement).dataset.id;
+              const p = foundPatients.find((x) => x.id === id);
+              if (!p) return;
+              const saved = upsertLocalPatient({ ...p, id: crypto.randomUUID() });
+              navigate("/pacientes");
+              void saved;
+            });
+          });
         }
-        const birth = parseBirthFromForm(fd, "nac");
-        const patient: Patient = {
-          id: crypto.randomUUID(),
-          nombre: String(fd.get("nombre")).trim(),
-          cedula: String(fd.get("cedula")).trim(),
-          edad: birth.age,
-          sexo,
-          fechaNacimiento: birth.iso,
-          createdAt: new Date().toISOString(),
-        };
-        upsertLocalPatient(patient);
-        window.location.hash = "/pacientes";
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Datos incompletos");
+
+        root.querySelector("#nuevo-buscar")?.addEventListener("click", () => void runSearch());
+        root.querySelector("#nuevo-cedula")?.addEventListener("keydown", (e) => {
+          if ((e as KeyboardEvent).key === "Enter") void runSearch();
+        });
+      } else {
+        root.innerHTML = `
+          <p class="muted">Completa los datos del paciente nuevo.</p>
+          <form class="form" id="patient-form">
+            <label>Nombre<input name="nombre" required /></label>
+            <label>Cédula<input name="cedula" required value="${escapeAttr(prefilledCedula)}" /></label>
+            <label>Sexo
+              <select name="sexo" required>${sexOptionsHtml()}</select>
+            </label>
+            ${birthDateFieldsHtml("nac")}
+            <p class="muted" id="edad-hint">La edad se calcula automáticamente con la fecha de nacimiento.</p>
+            <button type="submit" class="btn btn-primary">Guardar</button>
+            <button type="button" class="btn btn-ghost" id="nuevo-back">Volver a búsqueda</button>
+          </form>`;
+        bindBirthDateSelects(root, "nac");
+        root.querySelector("#nuevo-back")?.addEventListener("click", () => {
+          step = "cedula";
+          renderStep();
+          bindNavButtons(el);
+        });
+        root.querySelector("#patient-form")?.addEventListener("submit", (e) => {
+          e.preventDefault();
+          const fd = new FormData(e.target as HTMLFormElement);
+          try {
+            const sexo = String(fd.get("sexo") ?? "").trim();
+            if (sexo !== "Masculino" && sexo !== "Femenino") {
+              throw new Error("Seleccione el sexo");
+            }
+            const birth = parseBirthFromForm(fd, "nac");
+            const patient: Patient = {
+              id: crypto.randomUUID(),
+              nombre: String(fd.get("nombre")).trim(),
+              cedula: String(fd.get("cedula")).trim(),
+              edad: birth.age,
+              sexo,
+              fechaNacimiento: birth.iso,
+              createdAt: new Date().toISOString(),
+            };
+            upsertLocalPatient(patient);
+            window.location.hash = "/pacientes";
+          } catch (err) {
+            alert(err instanceof Error ? err.message : "Datos incompletos");
+          }
+        });
       }
-    });
+      bindNavButtons(el);
+    }
+
+    async function runSearch(): Promise<void> {
+      const input = root.querySelector("#nuevo-cedula") as HTMLInputElement;
+      prefilledCedula = input?.value.trim() ?? "";
+      if (!prefilledCedula) {
+        searchMessage = "Ingresa una cédula válida";
+        foundPatients = [];
+        renderStep();
+        return;
+      }
+      const msg = root.querySelector("#nuevo-msg");
+      if (msg) msg.textContent = "Buscando…";
+      const local = findPatientByCedula(loadPatients(), prefilledCedula);
+      let remote: Patient[] = [];
+      let portal: Patient | null = null;
+      try {
+        remote = await findGlobalByCedula(prefilledCedula);
+      } catch {
+        /* offline */
+      }
+      try {
+        portal = await findPortalPatient(prefilledCedula);
+      } catch {
+        /* offline */
+      }
+      const merged: Patient[] = [];
+      if (local) merged.push(local);
+      merged.push(...remote);
+      if (portal) merged.push(portal);
+      foundPatients = merged.filter(
+        (p, i, arr) =>
+          arr.findIndex(
+            (x) =>
+              normalizeCedula(x.cedula) === normalizeCedula(p.cedula) &&
+              x.nombre.toLowerCase() === p.nombre.toLowerCase(),
+          ) === i,
+      );
+      if (foundPatients.length) {
+        searchMessage = "Paciente encontrado. Puedes usarlo o registrar uno nuevo con otros datos.";
+      } else {
+        searchMessage = "No existe. Completa los datos para registrarlo.";
+        step = "formulario";
+      }
+      renderStep();
+    }
+
+    renderStep();
     return el;
   },
 });

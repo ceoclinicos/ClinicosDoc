@@ -3,10 +3,10 @@ import type { ClinicalDocument, DocumentHeader, DocumentType, PatientMembrete } 
 import { DocumentReportTitles, DocumentTypeLabels } from "../shared/models";
 import { parseDocumentSections } from "./document-parser";
 import {
-  RECIPE_SECTION,
-  RECETA_INDICACIONES_SECTION,
   RECETA_MOLDE_INDICACIONES,
   RECETA_MOLDE_RECIPE,
+  isRecipeSectionTitle,
+  isRecetaIndicacionesTitle,
 } from "../shared/receta";
 
 function escapeHtml(s: string): string {
@@ -112,6 +112,42 @@ export function buildFullDocumentHtml(options: {
   `;
 }
 
+function capitalizeFirst(text: string): string {
+  const t = text.trim().replace(/^[•\-]\s*/, "");
+  if (!t) return t;
+  return t.charAt(0).toLocaleUpperCase("es") + t.slice(1);
+}
+
+function formatRecetaMedsHtml(body: string, opts: { omitDisponase?: boolean; extraGap?: boolean }): string {
+  const blocks = body
+    .trim()
+    .split(/\n\s*\n+/)
+    .map((b) =>
+      b
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .filter(
+          (l) =>
+            !opts.omitDisponase ||
+            (!/disp[oó]ngase/i.test(l) && !/disponase/i.test(l)),
+        ),
+    )
+    .filter((b) => b.length > 0);
+
+  const gapClass = opts.extraGap ? "receta-med receta-med-spaced" : "receta-med";
+  return `<ul class="receta-meds">${blocks
+    .map((lines) => {
+      const name = capitalizeFirst(lines[0] ?? "");
+      const rest = lines
+        .slice(1)
+        .map((l) => `<div class="receta-med-line">${escapeHtml(capitalizeFirst(l))}</div>`)
+        .join("");
+      return `<li class="${gapClass}"><strong>${escapeHtml(name)}</strong>${rest}</li>`;
+    })
+    .join("")}</ul>`;
+}
+
 function buildRecetaLandscapeHtml(options: {
   content: string;
   header?: DocumentHeader | null;
@@ -120,36 +156,35 @@ function buildRecetaLandscapeHtml(options: {
 }): string {
   const sections = parseDocumentSections(options.content);
   const recipe =
-    sections.find((s) => s.title.toLowerCase() === RECIPE_SECTION.toLowerCase())?.body ??
-    RECETA_MOLDE_RECIPE;
+    sections.find((s) => isRecipeSectionTitle(s.title))?.body ?? RECETA_MOLDE_RECIPE;
   const indicaciones =
-    sections.find((s) => s.title.toLowerCase() === RECETA_INDICACIONES_SECTION.toLowerCase())
-      ?.body ?? RECETA_MOLDE_INDICACIONES;
+    sections.find((s) => isRecetaIndicacionesTitle(s.title))?.body ??
+    RECETA_MOLDE_INDICACIONES;
   const m = options.membrete;
   const patientBlock = `
     <div class="receta-patient">
-      <div><strong>Nombre:</strong> ${escapeHtml(m?.nombre || "—")}</div>
-      <div><strong>C.I.:</strong> ${escapeHtml(options.patientCedula || "—")}</div>
-      <div><strong>Edad:</strong> ${escapeHtml(m?.edad ? `${m.edad}` : "—")}</div>
+      <strong>Nombre:</strong> ${escapeHtml(m?.nombre || "—")}
+      &nbsp;&nbsp;Edad: ${escapeHtml(m?.edad ? `${m.edad}` : "—")}
+      &nbsp;&nbsp;C.I.: ${escapeHtml(options.patientCedula || "—")}
     </div>`;
   const footer = `
     <div class="receta-footer">
       <div>Fecha: ${escapeHtml(m?.fecha || new Date().toLocaleDateString("es-VE"))}</div>
       <div>Firma: ____________________</div>
     </div>`;
-  const half = (title: string, body: string) => `
+  const half = (title: string, body: string, isRecipe: boolean) => `
     <div class="receta-half">
       ${renderHeaderHtml(options.header)}
       <h2 class="receta-half-title">${escapeHtml(title)}</h2>
       ${patientBlock}
-      <pre class="print-body">${escapeHtml(body)}</pre>
+      ${formatRecetaMedsHtml(body, { omitDisponase: isRecipe, extraGap: isRecipe })}
       ${footer}
     </div>`;
   return `
     <div class="print-doc print-receta">
-      ${half("RECIPE", recipe)}
+      ${half("RECIPE", recipe, true)}
       <div class="receta-divider"></div>
-      ${half("INDICACIONES", indicaciones)}
+      ${half("INDICACIONES", indicaciones, false)}
     </div>
   `;
 }
@@ -202,7 +237,45 @@ export function printClinicalDocument(doc: {
       margin: 0.5rem 0;
       font-weight: 700;
     }
-    .receta-patient { font-size: 10.5pt; margin-bottom: 0.75rem; }
+    .print-receta .print-header {
+      position: relative;
+      text-align: center;
+    }
+    .print-receta .print-header-logo {
+      position: absolute;
+      left: 0;
+      top: 0;
+      margin: 0;
+    }
+    .receta-meds {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      flex: 1;
+      font-size: 10.5pt;
+    }
+    .receta-med {
+      position: relative;
+      padding-left: 1.1em;
+      margin: 0 0 0.35em;
+    }
+    .receta-med-spaced {
+      margin-bottom: 1.25em;
+    }
+    .receta-med::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      font-weight: 700;
+    }
+    .receta-med strong { font-weight: 700; }
+    .receta-med-line { margin-top: 0.15em; font-weight: 400; }
+    .receta-patient {
+      font-size: 10.5pt;
+      margin-bottom: 0.75rem;
+      font-weight: 400;
+    }
+    .receta-patient strong { font-weight: 700; }
     .receta-footer {
       margin-top: auto;
       padding-top: 1rem;

@@ -1,6 +1,11 @@
 /** Textos / estilos predeterminados de secciones (paridad con SectionDefaults.kt). */
 import { SectionCatalog } from "../../shared/section-catalog";
 import { ORDENES_MOLDE_EJEMPLO } from "../../shared/ordenes-medicas";
+import {
+  RECETA_MOLDE_INDICACIONES,
+  RECETA_MOLDE_RECIPE,
+  RECIPE_SECTION,
+} from "../../shared/receta";
 
 export const MOTIVO_CONSULTA_STYLE =
   '- Motivo de consulta: SOLO síntomas principales (máximo 3), unidos con "y"/"e". ' +
@@ -46,8 +51,11 @@ export function defaultTextForSection(
   if (s === SectionCatalog.OBSERVACIONES.toLowerCase()) return "Sin observaciones adicionales.";
   if (s === SectionCatalog.CONCLUSIONES.toLowerCase()) return "Conclusiones según hallazgos de la evaluación.";
   if (s === SectionCatalog.RECOMENDACIONES.toLowerCase()) return "Seguimiento médico según evolución clínica.";
-  if (s === SectionCatalog.DIAS_REPOSO.toLowerCase()) return "Días de reposo a indicar según criterio médico.";
-  if (s === SectionCatalog.INDICACIONES.toLowerCase()) return "Indicaciones médicas según evolución.";
+  if (s === SectionCatalog.DIAS_REPOSO.toLowerCase()) {
+    return "Nota: En vista de la sintomatología del paciente se indican cumplir 3 días de reposo médico completo.";
+  }
+  if (s === SectionCatalog.INDICACIONES.toLowerCase()) return RECETA_MOLDE_INDICACIONES;
+  if (s === RECIPE_SECTION.toLowerCase()) return RECETA_MOLDE_RECIPE;
   if (s === SectionCatalog.ORDENES.toLowerCase()) {
     return ORDENES_MOLDE_EJEMPLO;
   }

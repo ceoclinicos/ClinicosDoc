@@ -4,7 +4,9 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  query,
   setDoc,
+  where,
   type DocumentData,
 } from "firebase/firestore";
 import { getDb } from "../registro/firebase";
@@ -20,6 +22,7 @@ import {
   type PhysicalExamSystem,
 } from "../shared/models";
 import { PhysicalExamDefaults, orderEnabledIds } from "../shared/physical-exam-defaults";
+import { cedulaLookupKeys, normalizeCedula } from "./cedula";
 import { loadJson, saveJson } from "./local-store";
 
 function userIdOrThrow(): string {
@@ -167,6 +170,94 @@ async function fetchAll<T>(
 ): Promise<T[]> {
   const snap = await getDocs(sub(userId, subName));
   return snap.docs.map((d) => parse(d.data(), d.id)).filter((x): x is T => x != null);
+}
+
+function parseGlobalPatient(data: DocumentData, id: string): Patient | null {
+  if (!data.nombre || !data.cedula) return null;
+  return {
+    id: String(data.id ?? id),
+    nombre: String(data.nombre),
+    cedula: String(data.cedula),
+    edad: Number(data.edad) || 0,
+    sexo: String(data.sexo ?? ""),
+    fechaNacimiento: String(data.fechaNacimiento ?? ""),
+    createdAt: String(data.createdAt ?? new Date().toISOString()),
+    whatsapp: String(data.whatsapp ?? ""),
+  };
+}
+
+/** Pacientes globales compartidos entre médicos (paridad CloudSyncService Android). */
+export async function findGlobalByCedula(cedula: string): Promise<Patient[]> {
+  const key = normalizeCedula(cedula).replace(/[\s.-]/g, "");
+  if (!key) return [];
+  const col = collection(getDb(), FirestorePaths.GLOBAL_PATIENTS);
+  const found: Patient[] = [];
+
+  try {
+    const byKey = await getDocs(query(col, where("cedulaKey", "==", key)));
+    byKey.docs.forEach((d) => {
+      const p = parseGlobalPatient(d.data(), d.id);
+      if (p) found.push(p);
+    });
+    if (found.length) return dedupePatients(found);
+  } catch {
+    /* índice / permisos */
+  }
+
+  for (const variant of cedulaLookupKeys(cedula)) {
+    try {
+      const snap = await getDocs(query(col, where("cedula", "==", variant)));
+      snap.docs.forEach((d) => {
+        const p = parseGlobalPatient(d.data(), d.id);
+        if (p) found.push(p);
+      });
+      if (found.length) break;
+    } catch {
+      /* seguir */
+    }
+  }
+
+  const digits = cedula.replace(/\D/g, "");
+  return dedupePatients(
+    found.filter(
+      (p) =>
+        p.cedula.replace(/\D/g, "") === digits ||
+        normalizeCedula(p.cedula).replace(/[\s.-]/g, "") === key,
+    ),
+  );
+}
+
+function dedupePatients(list: Patient[]): Patient[] {
+  const seen = new Set<string>();
+  return list.filter((p) => {
+    const k = p.cedula.replace(/\D/g, "") + p.nombre.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+/** Global de médicos; si no, portal modo paciente (`pacientes/{cedula}`). */
+export async function findPatientByCedulaAnywhere(cedula: string): Promise<Patient | null> {
+  const global = await findGlobalByCedula(cedula);
+  if (global[0]) return global[0];
+  try {
+    const { getPaciente } = await import("../registro/store");
+    const reg = await getPaciente(cedula);
+    if (!reg) return null;
+    return {
+      id: `portal_${normalizeCedula(reg.cedula)}`,
+      nombre: reg.nombre,
+      cedula: reg.cedula,
+      edad: Number(reg.edad) || 0,
+      sexo: reg.sexo || "",
+      fechaNacimiento: reg.fechaNacimiento || "",
+      createdAt: reg.createdAt || new Date().toISOString(),
+      whatsapp: reg.telefono || undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Pull por colección: si hay datos en nube se usan; si no, se sube lo local. */

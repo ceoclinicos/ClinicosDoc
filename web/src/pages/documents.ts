@@ -6,6 +6,8 @@ import {
   loadDocuments,
   loadHeaders,
   saveDocument,
+  templateForType,
+  loadTemplates,
 } from "../services/clinical-store";
 import type { ClinicalDocument, DocumentHeader } from "../shared/models";
 import { DocumentReportTitles, DocumentTypeLabels } from "../shared/models";
@@ -22,6 +24,10 @@ import {
   readVitalsFromForm,
   vitalSignsFieldsHtml,
 } from "../services/vital-signs";
+import { loadDoctorProfile } from "../services/doctor-local";
+import { loadJson } from "../services/local-store";
+import type { Patient } from "../shared/models";
+import { bindSectionRegenerateButtons, sectionRegenerateButtonHtml } from "../ui/section-regenerate";
 import { bindNavButtons, emptyState, page } from "./helpers";
 import { setOrdenesFromCasePending } from "./generar-ordenes";
 
@@ -73,6 +79,13 @@ registerRoute({
       defaultHeader();
 
     let sections = parseDocumentSections(doc.content);
+    const canRegenerate = Boolean(doc.rawDictation?.trim());
+    const patient =
+      loadJson<Patient[]>("patients", []).find((p) => p.id === doc!.patientId) ?? null;
+    const template =
+      (doc.templateId ? loadTemplates().find((t) => t.id === doc!.templateId) : null) ??
+      templateForType(doc.type);
+    const doctor = loadDoctorProfile();
 
     const sectionsHtml = sections
       .map((sec, i) => {
@@ -90,6 +103,7 @@ registerRoute({
               <span class="field-label">${isExam ? "Resto del examen físico" : "Contenido"}</span>
               <textarea class="sec-body" rows="${isExam ? 8 : 5}">${escapeHtml(bodyText)}</textarea>
             </div>
+            ${canRegenerate ? sectionRegenerateButtonHtml(i) : ""}
           </div>`;
       })
       .join("");
@@ -174,6 +188,33 @@ registerRoute({
     });
 
     el.querySelector("#sections-editor")?.addEventListener("input", () => refreshPreview());
+
+    if (canRegenerate && patient && doctor) {
+      bindSectionRegenerateButtons(el, {
+        rawDictation: doc.rawDictation ?? "",
+        template,
+        patient,
+        doctor,
+        getSections: () => {
+          const boxes = Array.from(el.querySelectorAll(".section-edit")) as HTMLElement[];
+          return boxes.map((box, i) => {
+            const title = (box.querySelector(".sec-title") as HTMLInputElement).value.trim();
+            let body = (box.querySelector(".sec-body") as HTMLTextAreaElement).value;
+            if (isPhysicalExamTitle(title) || box.querySelector(".vitals-editor")) {
+              body = applyVitalsToBody(body, readVitalsFromForm(box, `vs${i}`));
+            }
+            return { id: sections[i]?.id ?? crypto.randomUUID(), title, body };
+          });
+        },
+        applySectionBody: (index, body) => {
+          const box = el.querySelector(`.section-edit[data-sec-idx="${index}"]`);
+          const ta = box?.querySelector(".sec-body") as HTMLTextAreaElement | null;
+          if (ta) ta.value = body;
+        },
+        onAfterRegenerate: () => refreshPreview(),
+      });
+    }
+
     el.querySelector("#btn-scroll-preview")?.addEventListener("click", () => {
       el.querySelector("#preview-heading")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });

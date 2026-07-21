@@ -51,8 +51,13 @@ export function catalogFor(type: DocumentType): string[] {
     case "reposo":
       return [
         SectionCatalog.DATOS_PACIENTE,
+        SectionCatalog.MOTIVO_CONSULTA,
+        SectionCatalog.ENFERMEDAD_ACTUAL,
+        SectionCatalog.EXAMEN_FISICO,
         SectionCatalog.DIAGNOSTICO,
         SectionCatalog.DIAS_REPOSO,
+        SectionCatalog.CONCLUSIONES,
+        SectionCatalog.PLAN,
         SectionCatalog.INDICACIONES,
         SectionCatalog.OBSERVACIONES,
       ];
@@ -74,8 +79,17 @@ export function defaultSectionsFor(type: DocumentType): string[] {
         SectionCatalog.EXAMEN_FISICO,
         SectionCatalog.DIAGNOSTICO,
       ];
-    case "historiaClinica":
     case "reposo":
+      // Igual al informe + días de reposo
+      return [
+        SectionCatalog.DATOS_PACIENTE,
+        SectionCatalog.MOTIVO_CONSULTA,
+        SectionCatalog.ENFERMEDAD_ACTUAL,
+        SectionCatalog.EXAMEN_FISICO,
+        SectionCatalog.DIAGNOSTICO,
+        SectionCatalog.DIAS_REPOSO,
+      ];
+    case "historiaClinica":
     case "ordenesMedicas":
     case "receta":
       return catalogFor(type);

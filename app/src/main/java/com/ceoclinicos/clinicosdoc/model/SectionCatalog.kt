@@ -72,8 +72,13 @@ object SectionCatalog {
         )
         DocumentType.REPOSO -> listOf(
             DATOS_PACIENTE,
+            MOTIVO_CONSULTA,
+            ENFERMEDAD_ACTUAL,
+            EXAMEN_FISICO,
             DIAGNOSTICO,
             DIAS_REPOSO,
+            CONCLUSIONES,
+            PLAN,
             INDICACIONES,
             OBSERVACIONES,
         )
@@ -138,12 +143,14 @@ object SectionCatalog {
             EXAMEN_FISICO,
             DIAGNOSTICO,
         )
+        // Reposo: mismo núcleo del informe + días de reposo
         DocumentType.REPOSO -> listOf(
             DATOS_PACIENTE,
+            MOTIVO_CONSULTA,
+            ENFERMEDAD_ACTUAL,
+            EXAMEN_FISICO,
             DIAGNOSTICO,
             DIAS_REPOSO,
-            INDICACIONES,
-            OBSERVACIONES,
         )
         DocumentType.ORDENES_MEDICAS -> listOf(
             DATOS_PACIENTE,

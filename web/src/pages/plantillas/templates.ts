@@ -270,8 +270,8 @@ registerRoute({
     );
     let draftSections = [...template.sections];
     let draftSectionTexts: Record<string, string> = { ...(template.sectionDefaultTexts ?? {}) };
-    const needsExam = tipo === "historiaClinica" || tipo === "informe";
-    const showEjemplo = tipo === "historiaClinica" || tipo === "informe";
+    const needsExam = tipo === "historiaClinica" || tipo === "informe" || tipo === "reposo";
+    const showEjemplo = tipo === "historiaClinica" || tipo === "informe" || tipo === "reposo";
     const ejemploActual = resolveEnfermedadActualEjemplo(template.enfermedadActualEjemplo);
     const el = page(
       `Plantilla ${DocumentTypeLabels[tipo]}`,

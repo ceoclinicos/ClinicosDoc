@@ -400,7 +400,65 @@ object DocumentPdfExporter {
             it.title.equals(RecetaDefaults.SECTION_INDICACIONES, ignoreCase = true)
         }?.body.orEmpty()
 
-        fun drawWrappedInHalf(
+        fun drawCenteredWrapped(
+            text: String,
+            left: Float,
+            right: Float,
+            startY: Float,
+            maxY: Float,
+            paint: Paint,
+        ): Float {
+            var y = startY
+            val maxW = right - left
+            val center = (left + right) / 2f
+            text.lines().forEach { raw ->
+                val line = raw.trim()
+                if (line.isBlank()) {
+                    y += lineH / 2
+                    return@forEach
+                }
+                val words = line.split(" ")
+                var current = StringBuilder()
+                fun flush() {
+                    if (current.isEmpty() || y > maxY) return
+                    val t = current.toString()
+                    val tw = paint.measureText(t)
+                    canvas.drawText(t, center - tw / 2f, y, paint)
+                    y += lineH
+                    current = StringBuilder()
+                }
+                for (word in words) {
+                    if (y > maxY) return y
+                    val candidate = if (current.isEmpty()) word else "$current $word"
+                    if (paint.measureText(candidate) > maxW) {
+                        flush()
+                        current = StringBuilder(word)
+                    } else {
+                        current = StringBuilder(candidate)
+                    }
+                }
+                flush()
+            }
+            return y
+        }
+
+        fun capitalizeFirst(text: String): String {
+            val t = text.trim().removePrefix("•").removePrefix("-").trim()
+            if (t.isEmpty()) return t
+            return t.replaceFirstChar { ch ->
+                if (ch.isLowerCase()) ch.titlecase() else ch.toString()
+            }
+        }
+
+        fun splitMedicationBlocks(body: String): List<List<String>> =
+            body.trim()
+                .split(Regex("\n\\s*\n+"))
+                .map { block ->
+                    block.lines().map { it.trim() }.filter { it.isNotEmpty() }
+                }
+                .filter { it.isNotEmpty() }
+
+        fun drawWrappedAt(
             text: String,
             left: Float,
             right: Float,
@@ -439,43 +497,90 @@ object DocumentPdfExporter {
             return y
         }
 
+        fun drawMedicationBlocks(
+            body: String,
+            left: Float,
+            right: Float,
+            startY: Float,
+            maxY: Float,
+            extraGapBetween: Boolean,
+            omitDisponase: Boolean,
+        ): Float {
+            var y = startY
+            val bullet = "• "
+            val bulletW = boldPaint.measureText(bullet)
+            val blocks = splitMedicationBlocks(body).map { lines ->
+                if (omitDisponase) {
+                    lines.filterNot {
+                        it.contains("dispóngase", ignoreCase = true) ||
+                            it.contains("disponase", ignoreCase = true)
+                    }
+                } else {
+                    lines
+                }
+            }.filter { it.isNotEmpty() }
+            blocks.forEachIndexed { index, lines ->
+                if (index > 0) {
+                    // Recipe: un salto extra entre fármacos; Indicaciones: sin ese extra
+                    y += if (extraGapBetween) lineH * 2 else lineH / 2
+                }
+                if (y > maxY) return y
+                val name = capitalizeFirst(lines.first())
+                canvas.drawText(bullet, left, y, boldPaint)
+                y = drawWrappedAt(name, left + bulletW, right, y, maxY, boldPaint)
+                lines.drop(1).forEach { rest ->
+                    if (y > maxY) return y
+                    y = drawWrappedAt(
+                        capitalizeFirst(rest),
+                        left + bulletW,
+                        right,
+                        y,
+                        maxY,
+                        bodyPaint,
+                    )
+                }
+            }
+            return y
+        }
+
         fun drawHalf(
             left: Float,
             right: Float,
             halfTitle: String,
             body: String,
+            isRecipeHalf: Boolean,
         ) {
             var y = RECETA_MARGIN + 12f
             val center = (left + right) / 2f
             val maxContentY = LANDSCAPE_HEIGHT - RECETA_MARGIN - footerReserve
 
-            // Encabezado (por mitad)
+            // Encabezado: logo a la izquierda (como antes); textos centrados
             document.headerSnapshot?.let { header ->
                 val logoPath = header.logoPath
-                var textLeft = left
+                var headerTop = y
+                var logoBottom = headerTop
                 if (!logoPath.isNullOrBlank()) {
                     val logoFile = File(logoPath)
                     if (logoFile.exists()) {
                         BitmapFactory.decodeFile(logoPath)?.let { bitmap ->
                             val size = 40
                             val scaled = Bitmap.createScaledBitmap(bitmap, size, size, true)
-                            canvas.drawBitmap(scaled, left, y - 10f, null)
-                            textLeft = left + size + 8f
+                            canvas.drawBitmap(scaled, left, headerTop - 10f, null)
+                            logoBottom = headerTop - 10f + size
                         }
                     }
                 }
+                var textY = headerTop
                 header.doctorName.takeIf { it.isNotBlank() }?.let {
-                    canvas.drawText(it, textLeft, y, headerPaint)
-                    y += lineH
+                    textY = drawCenteredWrapped(it, left, right, textY, maxContentY, headerPaint)
                 }
                 header.subtitle.takeIf { it.isNotBlank() }?.let {
-                    canvas.drawText(it, textLeft, y, subPaint)
-                    y += lineH
+                    textY = drawCenteredWrapped(it, left, right, textY, maxContentY, subPaint)
                 }
                 header.description.takeIf { it.isNotBlank() }?.let {
-                    y = drawWrappedInHalf(it, textLeft, right, y, maxContentY, subPaint)
+                    textY = drawCenteredWrapped(it, left, right, textY, maxContentY, subPaint)
                 }
-                y += 6f
+                y = maxOf(textY, logoBottom) + 6f
                 canvas.drawLine(left, y, right, y, dividerPaint)
                 y += 14f
             }
@@ -485,16 +590,32 @@ object DocumentPdfExporter {
             canvas.drawText(halfTitle, center - titleW / 2f, y, titlePaint)
             y += lineH + 4f
 
-            // Datos del paciente: nombre, cédula, edad
-            canvas.drawText("Nombre: ${membrete.displayNombre()}", left, y, boldPaint)
-            y += lineH
-            canvas.drawText("C.I.: ${document.patientCedula.ifBlank { "—" }}", left, y, bodyPaint)
-            y += lineH
-            canvas.drawText("Edad: ${membrete.displayEdad()}", left, y, bodyPaint)
+            // Datos del paciente en una sola línea; solo la etiqueta "Nombre:" en negrita
+            val nombreValue = membrete.displayNombre()
+            val edadValue = membrete.displayEdad()
+            val cedulaValue = document.patientCedula.ifBlank { "—" }
+            var x = left
+            canvas.drawText("Nombre: ", x, y, boldPaint)
+            x += boldPaint.measureText("Nombre: ")
+            canvas.drawText(nombreValue, x, y, bodyPaint)
+            x += bodyPaint.measureText(nombreValue)
+            val gap = "   "
+            canvas.drawText(gap, x, y, bodyPaint)
+            x += bodyPaint.measureText(gap)
+            val rest = "Edad: $edadValue$gap" + "C.I.: $cedulaValue"
+            canvas.drawText(rest, x, y, bodyPaint)
             y += lineH + 8f
 
             // Fármacos / indicaciones
-            drawWrappedInHalf(body, left, right, y, maxContentY, bodyPaint)
+            drawMedicationBlocks(
+                body = body,
+                left = left,
+                right = right,
+                startY = y,
+                maxY = maxContentY,
+                extraGapBetween = isRecipeHalf,
+                omitDisponase = isRecipeHalf,
+            )
 
             // Fecha y firma cerca del borde inferior
             val footerY = LANDSCAPE_HEIGHT - RECETA_MARGIN - 8f
@@ -509,12 +630,14 @@ object DocumentPdfExporter {
             right = midX - halfGap,
             halfTitle = "RECIPE",
             body = recipeBody.ifBlank { RecetaDefaults.MOLDE_RECIPE },
+            isRecipeHalf = true,
         )
         drawHalf(
             left = midX + halfGap,
             right = LANDSCAPE_WIDTH - RECETA_MARGIN,
             halfTitle = "INDICACIONES",
             body = indicacionesBody.ifBlank { RecetaDefaults.MOLDE_INDICACIONES },
+            isRecipeHalf = false,
         )
 
         pdf.finishPage(page)

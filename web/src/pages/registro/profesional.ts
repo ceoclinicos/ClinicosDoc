@@ -21,6 +21,7 @@ import { validarMpps } from "../../services/mpps-validation";
 import { ESPECIALIDADES_MEDICAS_VE } from "../../registro/especialidades";
 import { loadDoctorProfile, saveDoctorProfile } from "../../services/doctor-local";
 import { syncOnLogin } from "../../services/cloud-sync";
+import { loadTemplates } from "../../services/clinical-store";
 import { bindBirthDateSelects, birthDateFieldsHtml, parseBirthFromForm } from "../../services/birth-date";
 import { bindNavButtons, page } from "../helpers";
 
@@ -192,6 +193,7 @@ function bindProfesionalPage(el: HTMLElement): void {
           seedDoctorFromSession(s);
           try {
             await syncOnLogin();
+            loadTemplates();
           } catch (syncErr) {
             console.warn("Sync cloud:", syncErr);
           }
@@ -250,6 +252,7 @@ function bindProfesionalPage(el: HTMLElement): void {
           seedDoctorFromSession(s);
           try {
             await syncOnLogin();
+            loadTemplates();
           } catch (syncErr) {
             console.warn("Sync cloud:", syncErr);
           }

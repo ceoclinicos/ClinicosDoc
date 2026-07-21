@@ -2,6 +2,11 @@ import type { DocumentSection } from "./document-parser";
 import { parseDocumentSections, serializeDocumentSections } from "./document-parser";
 import { SectionCatalog } from "../shared/section-catalog";
 import { ORDENES_MOLDE_EJEMPLO } from "../shared/ordenes-medicas";
+import {
+  RECETA_MOLDE_INDICACIONES,
+  RECETA_MOLDE_RECIPE,
+  RECIPE_SECTION,
+} from "../shared/receta";
 
 const DEFAULT_BODY: Record<string, string> = {
   [SectionCatalog.MOTIVO_CONSULTA]: "Evaluación médica.",
@@ -26,8 +31,10 @@ const DEFAULT_BODY: Record<string, string> = {
   [SectionCatalog.OBSERVACIONES]: "Sin observaciones adicionales.",
   [SectionCatalog.IMPRESION_DIAGNOSTICA]:
     "Impresión diagnóstica pendiente de correlacionar con evolución clínica.",
-  [SectionCatalog.DIAS_REPOSO]: "Días de reposo a indicar según criterio médico.",
-  [SectionCatalog.INDICACIONES]: "Indicaciones médicas según evolución.",
+  [SectionCatalog.DIAS_REPOSO]:
+    "Nota: En vista de la sintomatología del paciente se indican cumplir 3 días de reposo médico completo.",
+  [SectionCatalog.INDICACIONES]: RECETA_MOLDE_INDICACIONES,
+  [RECIPE_SECTION]: RECETA_MOLDE_RECIPE,
   [SectionCatalog.ORDENES]: ORDENES_MOLDE_EJEMPLO,
 };
 
