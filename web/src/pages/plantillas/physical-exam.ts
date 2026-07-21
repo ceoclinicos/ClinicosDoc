@@ -2,7 +2,7 @@ import { registerRoute } from "../../app/router";
 import { loadJson, saveJson } from "../../services/local-store";
 import type { PhysicalExamSystem } from "../../shared/models";
 import { PhysicalExamDefaults, displayPriority } from "../../shared/physical-exam-defaults";
-import { canSync, pushPhysicalExam, syncQuiet } from "../../services/cloud-sync";
+import { canSync, deletePhysicalExamCloud, pushPhysicalExam, syncQuiet } from "../../services/cloud-sync";
 import { page } from "../helpers";
 
 const KEY = "physical_exam";
@@ -45,6 +45,7 @@ registerRoute({
           <label>Texto base<textarea name="defaultText" rows="5" required></textarea></label>
           <div class="dialog-actions">
             <button type="button" class="btn btn-ghost" id="cancel-edit">Cancelar</button>
+            <button type="button" class="btn btn-ghost" id="delete-system" hidden>Eliminar</button>
             <button type="submit" class="btn btn-primary">Guardar</button>
           </div>
         </form>
@@ -55,6 +56,7 @@ registerRoute({
     const list = el.querySelector("#exam-list") as HTMLElement;
     const dialog = el.querySelector("#edit-dialog") as HTMLDialogElement;
     const form = el.querySelector("#edit-form") as HTMLFormElement;
+    const deleteBtn = el.querySelector("#delete-system") as HTMLButtonElement;
 
     function renderList(): void {
       list.innerHTML = systems
@@ -66,7 +68,10 @@ registerRoute({
             <p class="preview">${s.defaultText}</p>
             <small class="muted">Variable: ${s.id}</small>
           </div>
-          <button type="button" class="btn btn-ghost btn-sm" data-edit="${s.id}">Editar</button>
+          <div class="list-item-actions">
+            <button type="button" class="btn btn-ghost btn-sm" data-edit="${s.id}">Editar</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-delete="${s.id}">Eliminar</button>
+          </div>
         </li>`,
         )
         .join("");
@@ -78,6 +83,14 @@ registerRoute({
           const system = systems.find((x) => x.id === id);
           if (!system) return;
           openEdit(system);
+        });
+      });
+      list.querySelectorAll("[data-delete]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const id = btn.getAttribute("data-delete")!;
+          const system = systems.find((x) => x.id === id);
+          if (system) void removeSystem(system);
         });
       });
       list.querySelectorAll(".list-item-action").forEach((row) => {
@@ -93,7 +106,24 @@ registerRoute({
       (form.elements.namedItem("id") as HTMLInputElement).value = system.id;
       (form.elements.namedItem("name") as HTMLInputElement).value = system.name;
       (form.elements.namedItem("defaultText") as HTMLTextAreaElement).value = system.defaultText;
+      const exists = systems.some((s) => s.id === system.id);
+      deleteBtn.hidden = !exists;
       dialog.showModal();
+    }
+
+    function removeSystem(system: PhysicalExamSystem): void {
+      if (
+        !confirm(
+          `¿Eliminar "${system.name}" del catálogo? Las plantillas que lo usen dejarán de incluirlo.`,
+        )
+      ) {
+        return;
+      }
+      systems = systems.filter((s) => s.id !== system.id);
+      persist(systems);
+      if (canSync()) syncQuiet(() => deletePhysicalExamCloud(system.id));
+      dialog.close();
+      renderList();
     }
 
     form.addEventListener("submit", (e) => {
@@ -117,6 +147,11 @@ registerRoute({
     });
 
     el.querySelector("#cancel-edit")?.addEventListener("click", () => dialog.close());
+    deleteBtn.addEventListener("click", () => {
+      const id = (form.elements.namedItem("id") as HTMLInputElement).value;
+      const system = systems.find((s) => s.id === id);
+      if (system) void removeSystem(system);
+    });
     el.querySelector("#add-system")?.addEventListener("click", () => {
       openEdit({
         id: `sistema_${crypto.randomUUID().slice(0, 6)}`,

@@ -61,11 +61,17 @@ export function renderHeaderHtml(header?: DocumentHeader | null): string {
 
 export function renderMembreteHtml(m?: PatientMembrete | null): string {
   if (!m) return "";
+  const edad = m.edad.trim();
+  const edadLabel = !edad
+    ? "—"
+    : /año/i.test(edad)
+      ? edad
+      : `${edad} años`;
   return `
     <section class="print-membrete">
-      <div><strong>Paciente:</strong> ${escapeHtml(m.nombre)}</div>
-      <div><strong>Edad:</strong> ${escapeHtml(m.edad)} años · <strong>Sexo:</strong> ${escapeHtml(m.sexo)}</div>
-      <div><strong>Fecha de nacimiento:</strong> ${escapeHtml(m.fechaNacimiento)}</div>
+      <div><strong>Paciente:</strong> ${escapeHtml(m.nombre || "—")}</div>
+      <div><strong>Edad:</strong> ${escapeHtml(edadLabel)} · <strong>Sexo:</strong> ${escapeHtml(m.sexo || "—")}</div>
+      <div><strong>Fecha de nacimiento:</strong> ${escapeHtml(m.fechaNacimiento || "—")}</div>
     </section>
   `;
 }
@@ -378,5 +384,106 @@ export function printFromClinicalDocument(doc: ClinicalDocument): void {
     header: doc.headerSnapshot,
     membrete: doc.membrete,
     patientNombre: doc.patientNombre,
+    patientCedula: doc.patientCedula,
+  });
+}
+
+const PRINT_CSS = `
+  html, body { background: #fff; margin: 0; }
+  body { font-family: "Times New Roman", Times, Georgia, serif; color: #111; line-height: 1.45; }
+  .print-doc { max-width: 180mm; margin: 0 auto; padding: 12mm 14mm; }
+  .print-doc.print-receta {
+    max-width: none; padding: 0; display: flex; flex-direction: row; min-height: 180mm; gap: 0;
+  }
+  .receta-half {
+    flex: 1; padding: 8mm 10mm; display: flex; flex-direction: column; position: relative; box-sizing: border-box;
+  }
+  .receta-divider { width: 1px; background: #bbb; align-self: stretch; }
+  .receta-half-title { text-align: center; font-size: 12pt; margin: 0.5rem 0; font-weight: 700; }
+  .print-receta .print-header { position: relative; text-align: center; }
+  .print-receta .print-header-logo { position: absolute; left: 0; top: 0; margin: 0; }
+  .receta-meds { list-style: none; margin: 0; padding: 0; flex: 1; font-size: 10.5pt; }
+  .receta-med { position: relative; padding-left: 1.1em; margin: 0 0 0.35em; }
+  .receta-med-spaced { margin-bottom: 1.25em; }
+  .receta-med::before { content: "•"; position: absolute; left: 0; font-weight: 700; }
+  .receta-med strong { font-weight: 700; }
+  .receta-med-line { margin-top: 0.15em; font-weight: 400; }
+  .receta-patient { font-size: 10.5pt; margin-bottom: 0.75rem; font-weight: 400; }
+  .receta-patient strong { font-weight: 700; }
+  .receta-footer { margin-top: auto; padding-top: 1rem; font-size: 10.5pt; }
+  .print-header { text-align: center; margin-bottom: 0.75rem; }
+  .print-header-logo { display: block; width: 48px; height: 48px; object-fit: cover; margin: 0 auto 6px; border-radius: 6px; }
+  .print-header-name { font-size: 11pt; font-weight: 700; color: #111; }
+  .print-header-sub { font-size: 9pt; color: #222; }
+  .print-header-desc { font-size: 8.5pt; color: #444; white-space: pre-wrap; }
+  .print-date-row { text-align: right; font-size: 10.5pt; margin-bottom: 0.5rem; }
+  .print-title { text-align: center; font-size: 13pt; letter-spacing: 0.03em; margin: 0.75rem 0 1rem; font-weight: 700; }
+  .print-membrete { font-size: 10.5pt; margin: 0.5rem 0 0.75rem; }
+  .print-rule { border: 0; border-top: 1px solid #999; margin: 0.75rem 0 1rem; }
+  .print-section h3 { font-size: 11pt; margin: 0.9rem 0 0.25rem; color: #111; font-weight: 700; }
+  .print-body { white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 10.5pt; flex: 1; }
+`;
+
+/** Descarga un archivo .pdf (paridad Guardar PDF de la app). */
+export async function downloadClinicalPdf(doc: {
+  type: DocumentType;
+  content: string;
+  header?: DocumentHeader | null;
+  membrete?: PatientMembrete | null;
+  patientNombre?: string;
+  patientCedula?: string;
+}): Promise<void> {
+  const html2pdf = (await import("html2pdf.js")).default;
+  const isReceta = doc.type === "receta";
+  const title = DocumentReportTitles[doc.type];
+  const safeName = (doc.patientNombre || "documento")
+    .replace(/[^\w\s.-]/g, "")
+    .trim()
+    .replace(/\s+/g, "_")
+    .slice(0, 40);
+  const filename = `${title.replace(/\s+/g, "_")}_${safeName || "ClinicosDoc"}.pdf`;
+
+  const host = document.createElement("div");
+  host.style.cssText =
+    "position:fixed;left:-10000px;top:0;width:210mm;background:#fff;color:#111;z-index:-1;";
+  if (isReceta) host.style.width = "297mm";
+  const style = document.createElement("style");
+  style.textContent = PRINT_CSS;
+  host.appendChild(style);
+  const wrap = document.createElement("div");
+  wrap.innerHTML = buildFullDocumentHtml(doc);
+  host.appendChild(wrap);
+  document.body.appendChild(host);
+
+  try {
+    const target = host.querySelector(".print-doc") as HTMLElement;
+    await html2pdf()
+      .set({
+        margin: isReceta ? [6, 6, 6, 6] : [12, 12, 12, 12],
+        filename,
+        image: { type: "jpeg", quality: 0.96 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: {
+          unit: "mm",
+          format: "a4",
+          orientation: isReceta ? "landscape" : "portrait",
+        },
+        pagebreak: { mode: ["avoid-all", "css", "legacy"] },
+      })
+      .from(target)
+      .save(filename);
+  } finally {
+    host.remove();
+  }
+}
+
+export async function downloadFromClinicalDocument(doc: ClinicalDocument): Promise<void> {
+  await downloadClinicalPdf({
+    type: doc.type,
+    content: doc.content,
+    header: doc.headerSnapshot,
+    membrete: doc.membrete,
+    patientNombre: doc.patientNombre,
+    patientCedula: doc.patientCedula,
   });
 }

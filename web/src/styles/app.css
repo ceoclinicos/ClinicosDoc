@@ -381,6 +381,13 @@ a {
   display: block;
 }
 
+.list-item-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
 .preview {
   margin: 0.35rem 0 0;
   color: var(--text-secondary);

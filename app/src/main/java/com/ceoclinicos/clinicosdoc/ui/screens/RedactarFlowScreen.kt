@@ -1206,6 +1206,15 @@ fun RedactarFlowScreen(
                     Text("Editar dictado")
                 }
                 PremiumPrimaryButton(
+                    label = "Vista previa",
+                    icon = Icons.Outlined.Visibility,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                        .padding(bottom = 12.dp),
+                    onClick = { showPreview = true },
+                )
+                PremiumPrimaryButton(
                     label = if (savedDocumentId != null) "Actualizar documento" else "Guardar documento",
                     icon = Icons.Default.Save,
                     modifier = Modifier

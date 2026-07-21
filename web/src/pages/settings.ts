@@ -21,7 +21,9 @@ registerRoute({
         </div>
 
         <h2 class="home-section-title">Plantillas y documentos</h2>
-        <button type="button" class="tile tile-full" data-nav="/plantillas/documentos">Plantillas de informes e historias</button>
+        <button type="button" class="tile tile-full" data-nav="/plantillas">Todas las plantillas</button>
+        <button type="button" class="tile tile-full" data-nav="/plantillas/documentos">Informes e historias</button>
+        <button type="button" class="tile tile-full" data-nav="/plantillas/recetas">Órdenes y recetas</button>
         <button type="button" class="tile tile-full" data-nav="/plantillas/encabezados">Encabezados PDF</button>
         <button type="button" class="tile tile-full" data-nav="/plantillas/examen-fisico">Catálogo examen físico</button>
 

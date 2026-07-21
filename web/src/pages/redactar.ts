@@ -18,6 +18,7 @@ import { loadDoctorProfile, saveDoctorProfile, type DoctorProfileLocal } from ".
 import {
   buildFullDocumentHtml,
   buildMembreteFromPatient,
+  downloadClinicalPdf,
   printClinicalDocument,
 } from "../services/document-pdf";
 import { parseDocumentSections, serializeDocumentSections } from "../services/document-parser";
@@ -41,6 +42,7 @@ import type {
   DocumentTemplate,
   DocumentType,
   Patient,
+  PatientMembrete,
 } from "../shared/models";
 import { DocumentReportTitles, DocumentTypeLabels } from "../shared/models";
 import {
@@ -54,6 +56,7 @@ import {
 } from "../shared/receta";
 import { openFarmacoDialog } from "../ui/farmaco-dialog";
 import { bindSectionRegenerateButtons, sectionRegenerateButtonHtml } from "../ui/section-regenerate";
+import { bindMembreteEditor, membreteEditorHtml, readMembreteFromEditor } from "../ui/membrete-editor";
 import { bindNavButtons, page } from "./helpers";
 import { setOrdenesFromCasePending } from "./generar-ordenes";
 
@@ -78,7 +81,7 @@ registerRoute({
         <button type="button" class="btn btn-ghost btn-sm" id="btn-tools">Herramientas ▾</button>
         <div id="tools-menu" class="tools-menu" hidden>
           <button type="button" data-tool="preview">Vista previa</button>
-          <button type="button" data-tool="pdf">PDF</button>
+          <button type="button" data-tool="pdf">Guardar PDF</button>
           <button type="button" data-tool="print">Imprimir</button>
         </div>
       </div>`,
@@ -113,6 +116,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
   let diagnosticoText = "";
   let cedulaSearch = "";
   let patientSearchMessage = "";
+  let editableMembrete: PatientMembrete | null = null;
 
   let patients = loadJson<Patient[]>("patients", []);
   let selectedPatient: Patient | null =
@@ -141,6 +145,12 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
   /** Dictado efectivo para IA/regenerar (incluye diagnóstico en receta por protocolos). */
   function effectiveDictation(): string {
     return dictation.trim() || diagnosticoText.trim();
+  }
+
+  function currentMembrete(): PatientMembrete {
+    if (editableMembrete) return editableMembrete;
+    if (selectedPatient) return buildMembreteFromPatient(selectedPatient);
+    return { nombre: "", edad: "", sexo: "", fechaNacimiento: "", fecha: "" };
   }
 
   function upsertPatientInList(patient: Patient): Patient {
@@ -189,7 +199,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
               type: docType,
               content: generatedContent,
               header: selectedHeader,
-              membrete: buildMembreteFromPatient(selectedPatient),
+              membrete: currentMembrete(),
             }),
           );
           w.document.close();
@@ -197,12 +207,25 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       }
       return;
     }
-    if (tool === "pdf" || tool === "print") {
+    if (tool === "pdf") {
+      void downloadClinicalPdf({
+        type: docType,
+        content: generatedContent,
+        header: selectedHeader,
+        membrete: currentMembrete(),
+        patientNombre: selectedPatient.nombre,
+        patientCedula: selectedPatient.cedula,
+      }).catch((err) => {
+        alert(err instanceof Error ? err.message : "No se pudo generar el PDF");
+      });
+      return;
+    }
+    if (tool === "print") {
       printClinicalDocument({
         type: docType,
         content: generatedContent,
         header: selectedHeader,
-        membrete: buildMembreteFromPatient(selectedPatient),
+        membrete: currentMembrete(),
         patientNombre: selectedPatient.nombre,
         patientCedula: selectedPatient.cedula,
       });
@@ -320,6 +343,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       };
       saveDoctorProfile(doctor as DoctorProfileLocal);
       workingTemplate = structuredClone(templateForType(docType));
+      persistDraft();
       step = "plantilla";
       render();
     });
@@ -353,6 +377,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       selectedPatient = saved;
       patientSearchMessage = `Seleccionado: ${saved.nombre}`;
       workingTemplate = structuredClone(templateForType(docType));
+      persistDraft();
       step = "plantilla";
       render();
     } else {
@@ -461,6 +486,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       if (fd.get("saveTpl") === "1") {
         upsertTemplate(workingTemplate);
       }
+      persistDraft();
       step = "dictado";
       render();
     });
@@ -577,11 +603,18 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     `;
 
     const ta = root.querySelector("#dictation") as HTMLTextAreaElement | null;
+    let draftTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleDraft = () => {
+      if (draftTimer) clearTimeout(draftTimer);
+      draftTimer = setTimeout(() => persistDraft(), 800);
+    };
     ta?.addEventListener("input", () => {
       dictation = ta.value;
+      scheduleDraft();
     });
     root.querySelector("#ordenes-notes")?.addEventListener("input", (e) => {
       ordenesNotes = (e.target as HTMLTextAreaElement).value;
+      scheduleDraft();
     });
 
     root.querySelectorAll('input[name="ordenes-src"]').forEach((el) => {
@@ -602,6 +635,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
 
     root.querySelector("#diagnostico")?.addEventListener("input", (e) => {
       diagnosticoText = (e.target as HTMLTextAreaElement).value;
+      scheduleDraft();
     });
 
     root.querySelectorAll('input[name="src-doc"]').forEach((el) => {
@@ -738,6 +772,9 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
             dictation,
           });
         }
+        if (!editableMembrete && selectedPatient) {
+          editableMembrete = buildMembreteFromPatient(selectedPatient);
+        }
         step = "resultado";
         processing = false;
         if (savedDocumentId && generatedContent) {
@@ -761,7 +798,8 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     if (!selectedPatient || !generatedContent) return null;
     const existing = savedDocumentId ? getDocument(savedDocumentId) : undefined;
     const id = savedDocumentId ?? crypto.randomUUID();
-    const membreteData = buildMembreteFromPatient(selectedPatient);
+    const membreteData = currentMembrete();
+    editableMembrete = membreteData;
     const doc = saveDocument({
       id,
       patientId: selectedPatient.id,
@@ -828,11 +866,15 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       })
       .join("");
 
+    if (!editableMembrete && selectedPatient) {
+      editableMembrete = buildMembreteFromPatient(selectedPatient);
+    }
+    const membrete = currentMembrete();
+
     root.innerHTML = `
       <p class="step-badge">4 / 4 · Resultado</p>
       <p class="status-badge status-ok">${DocumentReportTitles[docType]} generado</p>
       <p class="muted">${escapeHtml(selectedPatient?.nombre ?? "")} · ${escapeHtml(selectedPatient?.cedula ?? "")}</p>
-      <p class="muted">Los <strong>datos del paciente</strong> aparecen en el membrete de la vista previa (no como sección editable).</p>
 
       <div class="result-actions">
         <button type="button" class="btn btn-primary" id="btn-save">${savedDocumentId ? "Actualizar" : "Guardar"}</button>
@@ -843,6 +885,8 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         <span class="field-label">Encabezado</span>
         <select id="header-select">${headerOpts || `<option value="">Sin encabezados — cree uno en Plantillas</option>`}</select>
       </div>
+
+      ${membreteEditorHtml(membrete)}
 
       <h2 class="home-section-title">Editar secciones</h2>
       <div id="sections-editor" class="stack">${sectionsHtml}</div>
@@ -888,13 +932,14 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
 
     const refreshPreview = () => {
       collectContent();
+      editableMembrete = currentMembrete();
       const box = root.querySelector("#live-preview") as HTMLElement;
       if (box) {
         box.innerHTML = buildFullDocumentHtml({
           type: docType,
           content: generatedContent,
           header: selectedHeader,
-          membrete: selectedPatient ? buildMembreteFromPatient(selectedPatient) : undefined,
+          membrete: editableMembrete,
         });
       }
       persistDraft();
@@ -907,6 +952,15 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       selectedHeader = headers.find((h) => h.id === id) ?? defaultHeader();
       refreshPreview();
     });
+
+    bindMembreteEditor(
+      root,
+      (m) => {
+        editableMembrete = m;
+        refreshPreview();
+      },
+      () => currentMembrete(),
+    );
 
     root.querySelector("#sections-editor")?.addEventListener("input", () => refreshPreview());
 
@@ -970,6 +1024,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
 
     const doSave = () => {
       if (!selectedPatient) return;
+      editableMembrete = readMembreteFromEditor(root, currentMembrete());
       refreshPreview();
       persistGeneratedDocument({ showAlert: true, navigateAfter: false });
       renderResultado();

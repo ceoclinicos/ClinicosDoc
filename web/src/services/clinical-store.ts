@@ -16,6 +16,7 @@ import { loadJson, saveJson } from "./local-store";
 import {
   canSync,
   deleteDraftCloud,
+  deleteDocumentCloud,
   deleteHeaderCloud,
   pushDocument,
   pushDraft,
@@ -275,10 +276,19 @@ export function getDocument(id: string): ClinicalDocument | undefined {
 }
 
 export function deleteDocument(id: string): void {
+  const existing = getDocument(id);
   saveJson(
     KEY_DOCUMENTS,
     loadDocuments().filter((d) => d.id !== id),
   );
+  if (canSync()) {
+    syncQuiet(() =>
+      deleteDocumentCloud(id, {
+        patientCedula: existing?.patientCedula,
+        patientNombre: existing?.patientNombre,
+      }),
+    );
+  }
 }
 
 export function loadDrafts(): ClinicalDraft[] {

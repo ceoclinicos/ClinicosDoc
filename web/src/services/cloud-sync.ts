@@ -1,14 +1,5 @@
 /** Sync consultorio web ↔ Firestore (mismo esquema que CloudSyncService Android). */
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  query,
-  setDoc,
-  where,
-  type DocumentData,
-} from "firebase/firestore";
+import { setDoc, doc, deleteDoc, collection, getDocs, query, where, type DocumentData } from "firebase/firestore";
 import { getDb } from "../registro/firebase";
 import { getProfessionalSession } from "../registro/session";
 import {
@@ -22,6 +13,7 @@ import {
   type PhysicalExamSystem,
 } from "../shared/models";
 import { PhysicalExamDefaults, orderEnabledIds } from "../shared/physical-exam-defaults";
+import { loadDoctorProfile } from "./doctor-local";
 import { cedulaLookupKeys, normalizeCedula } from "./cedula";
 import { loadJson, saveJson } from "./local-store";
 
@@ -33,6 +25,26 @@ function userIdOrThrow(): string {
 
 function sub(userId: string, name: string) {
   return collection(getDb(), FirestorePaths.USERS, userId, name);
+}
+
+/** Paridad CedulaNormalizer.normalize Android (sin forzar V). */
+function cedulaKeyAndroid(cedula: string): string {
+  return cedula.trim().toUpperCase().replace(/[\s.-]/g, "");
+}
+
+/** ID global `{cedula}_{nombre}` — paridad PatientFirestoreId.kt */
+export function patientFirestoreId(cedula: string, nombre: string): string {
+  const cedulaPart = cedulaKeyAndroid(cedula).toLowerCase();
+  const nameSlug = nombre
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/g, "");
+  if (!cedulaPart || !nameSlug) {
+    throw new Error("Cédula y nombre son obligatorios para el ID global");
+  }
+  return `${cedulaPart}_${nameSlug}`;
 }
 
 function asDocType(raw: string): DocumentType {
@@ -188,7 +200,7 @@ function parseGlobalPatient(data: DocumentData, id: string): Patient | null {
 
 /** Pacientes globales compartidos entre médicos (paridad CloudSyncService Android). */
 export async function findGlobalByCedula(cedula: string): Promise<Patient[]> {
-  const key = normalizeCedula(cedula).replace(/[\s.-]/g, "");
+  const key = cedulaKeyAndroid(cedula);
   if (!key) return [];
   const col = collection(getDb(), FirestorePaths.GLOBAL_PATIENTS);
   const found: Patient[] = [];
@@ -222,7 +234,7 @@ export async function findGlobalByCedula(cedula: string): Promise<Patient[]> {
     found.filter(
       (p) =>
         p.cedula.replace(/\D/g, "") === digits ||
-        normalizeCedula(p.cedula).replace(/[\s.-]/g, "") === key,
+        cedulaKeyAndroid(p.cedula) === key,
     ),
   );
 }
@@ -329,6 +341,12 @@ export async function deleteHeaderCloud(id: string): Promise<void> {
   await deleteDoc(doc(sub(userId, FirestorePaths.SUB_HEADERS), id));
 }
 
+export async function deletePhysicalExamCloud(systemId: string): Promise<void> {
+  const userId = getProfessionalSession()?.cloudUserId;
+  if (!userId) return;
+  await deleteDoc(doc(sub(userId, FirestorePaths.SUB_PHYSICAL_EXAM), systemId));
+}
+
 export async function pushPhysicalExam(s: PhysicalExamSystem, userId = userIdOrThrow()): Promise<void> {
   await setDoc(doc(sub(userId, FirestorePaths.SUB_PHYSICAL_EXAM), s.id), {
     id: s.id,
@@ -339,6 +357,7 @@ export async function pushPhysicalExam(s: PhysicalExamSystem, userId = userIdOrT
 }
 
 export async function pushPatient(p: Patient, userId = userIdOrThrow()): Promise<void> {
+  const cedulaKey = cedulaKeyAndroid(p.cedula);
   await setDoc(doc(sub(userId, FirestorePaths.SUB_PATIENTS), p.id), {
     id: p.id,
     nombre: p.nombre,
@@ -348,12 +367,38 @@ export async function pushPatient(p: Patient, userId = userIdOrThrow()): Promise
     fechaNacimiento: p.fechaNacimiento,
     createdAt: p.createdAt,
     whatsapp: p.whatsapp ?? "",
-    cedulaKey: p.cedula.replace(/\D/g, ""),
+    cedulaKey,
   });
+  await pushGlobalPatient(userId, p);
+}
+
+async function pushGlobalPatient(userId: string, patient: Patient): Promise<void> {
+  const key = patientFirestoreId(patient.cedula, patient.nombre);
+  const now = new Date().toISOString();
+  await setDoc(
+    doc(getDb(), FirestorePaths.GLOBAL_PATIENTS, key),
+    {
+      id: patient.id,
+      nombre: patient.nombre,
+      cedula: patient.cedula,
+      edad: patient.edad,
+      sexo: patient.sexo,
+      fechaNacimiento: patient.fechaNacimiento,
+      createdAt: patient.createdAt,
+      whatsapp: patient.whatsapp ?? "",
+      firestoreKey: key,
+      cedulaKey: cedulaKeyAndroid(patient.cedula),
+      updatedAt: now,
+      lastUpdatedByDoctorId: userId,
+    },
+    { merge: true },
+  );
 }
 
 export async function pushDocument(d: ClinicalDocument, userId = userIdOrThrow()): Promise<void> {
-  await setDoc(doc(sub(userId, FirestorePaths.SUB_DOCUMENTS), d.id), {
+  const doctor = loadDoctorProfile();
+  const doctorNombre = doctor?.nombre ?? getProfessionalSession()?.nombre ?? "";
+  const payload = {
     id: d.id,
     patientId: d.patientId,
     patientNombre: d.patientNombre,
@@ -372,8 +417,77 @@ export async function pushDocument(d: ClinicalDocument, userId = userIdOrThrow()
     membreteFechaNacimiento: d.membrete?.fechaNacimiento ?? null,
     membreteFecha: d.membrete?.fecha ?? null,
     doctorId: userId,
+    doctorNombre,
     sourceDocumentId: d.sourceDocumentId ?? null,
-  });
+  };
+  await setDoc(doc(sub(userId, FirestorePaths.SUB_DOCUMENTS), d.id), payload);
+  await pushGlobalDocument(userId, doctorNombre, d);
+}
+
+async function pushGlobalDocument(
+  userId: string,
+  doctorNombre: string,
+  document: ClinicalDocument,
+): Promise<void> {
+  const patientKey = patientFirestoreId(document.patientCedula, document.patientNombre);
+  await setDoc(
+    doc(
+      getDb(),
+      FirestorePaths.GLOBAL_PATIENTS,
+      patientKey,
+      FirestorePaths.SUB_DOCUMENTS,
+      document.id,
+    ),
+    {
+      id: document.id,
+      patientId: document.patientId,
+      patientNombre: document.patientNombre,
+      patientCedula: document.patientCedula,
+      type: document.type,
+      content: document.content,
+      rawDictation: document.rawDictation,
+      createdAt: document.createdAt,
+      templateId: document.templateId ?? null,
+      templateName: document.templateName ?? null,
+      headerId: document.headerId ?? null,
+      headerSnapshot: document.headerSnapshot ?? null,
+      membreteNombre: document.membrete?.nombre ?? null,
+      membreteEdad: document.membrete?.edad ?? null,
+      membreteSexo: document.membrete?.sexo ?? null,
+      membreteFechaNacimiento: document.membrete?.fechaNacimiento ?? null,
+      membreteFecha: document.membrete?.fecha ?? null,
+      doctorId: userId,
+      doctorNombre,
+      patientFirestoreKey: patientKey,
+      sourceDocumentId: document.sourceDocumentId ?? null,
+    },
+    { merge: true },
+  );
+}
+
+export async function deleteDocumentCloud(
+  id: string,
+  meta?: { patientCedula?: string; patientNombre?: string },
+): Promise<void> {
+  const userId = getProfessionalSession()?.cloudUserId;
+  if (!userId) return;
+  await deleteDoc(doc(sub(userId, FirestorePaths.SUB_DOCUMENTS), id));
+  if (meta?.patientCedula && meta?.patientNombre) {
+    try {
+      const patientKey = patientFirestoreId(meta.patientCedula, meta.patientNombre);
+      await deleteDoc(
+        doc(
+          getDb(),
+          FirestorePaths.GLOBAL_PATIENTS,
+          patientKey,
+          FirestorePaths.SUB_DOCUMENTS,
+          id,
+        ),
+      );
+    } catch {
+      /* sin clave global válida */
+    }
+  }
 }
 
 export async function pushDraft(d: ClinicalDraft, userId = userIdOrThrow()): Promise<void> {

@@ -9,10 +9,12 @@ import {
   templateForType,
   loadTemplates,
 } from "../services/clinical-store";
-import type { ClinicalDocument, DocumentHeader } from "../shared/models";
+import type { ClinicalDocument, DocumentHeader, Patient, PatientMembrete } from "../shared/models";
 import { DocumentReportTitles, DocumentTypeLabels } from "../shared/models";
 import {
   buildFullDocumentHtml,
+  buildMembreteFromPatient,
+  downloadFromClinicalDocument,
   printFromClinicalDocument,
 } from "../services/document-pdf";
 import { parseDocumentSections, serializeDocumentSections } from "../services/document-parser";
@@ -26,8 +28,8 @@ import {
 } from "../services/vital-signs";
 import { loadDoctorProfile } from "../services/doctor-local";
 import { loadJson } from "../services/local-store";
-import type { Patient } from "../shared/models";
 import { bindSectionRegenerateButtons, sectionRegenerateButtonHtml } from "../ui/section-regenerate";
+import { bindMembreteEditor, membreteEditorHtml, readMembreteFromEditor } from "../ui/membrete-editor";
 import { bindNavButtons, emptyState, page } from "./helpers";
 import { setOrdenesFromCasePending } from "./generar-ordenes";
 
@@ -79,9 +81,21 @@ registerRoute({
       defaultHeader();
 
     let sections = parseDocumentSections(doc.content);
-    const canRegenerate = Boolean(doc.rawDictation?.trim());
     const patient =
       loadJson<Patient[]>("patients", []).find((p) => p.id === doc!.patientId) ?? null;
+    let editableMembrete: PatientMembrete =
+      doc.membrete ??
+      (patient
+        ? buildMembreteFromPatient(patient)
+        : {
+            nombre: doc.patientNombre,
+            edad: "",
+            sexo: "",
+            fechaNacimiento: "",
+            fecha: new Date(doc.createdAt).toLocaleDateString("es-VE"),
+          });
+
+    const canRegenerate = Boolean(doc.rawDictation?.trim());
     const template =
       (doc.templateId ? loadTemplates().find((t) => t.id === doc!.templateId) : null) ??
       templateForType(doc.type);
@@ -115,8 +129,6 @@ registerRoute({
 
       <div class="result-actions">
         <button type="button" class="btn btn-primary" id="btn-save">Guardar cambios</button>
-        <button type="button" class="btn btn-secondary" id="btn-print">Imprimir / PDF</button>
-        <button type="button" class="btn btn-ghost" id="btn-scroll-preview">Vista previa</button>
       </div>
 
       <div class="field">
@@ -131,6 +143,8 @@ registerRoute({
         </select>
       </div>
 
+      ${membreteEditorHtml(editableMembrete)}
+
       <h2 class="home-section-title">Editar secciones</h2>
       <div id="sections-editor" class="stack">${sectionsHtml}</div>
 
@@ -141,7 +155,6 @@ registerRoute({
 
       <div class="result-actions result-actions-bottom">
         <button type="button" class="btn btn-primary" id="btn-save-2">Guardar cambios</button>
-        <button type="button" class="btn btn-secondary" id="btn-print-2">Imprimir / PDF</button>
         <button type="button" class="btn btn-secondary" id="btn-copy">Copiar texto</button>
         ${
           doc.type === "informe" || doc.type === "historiaClinica"
@@ -152,6 +165,15 @@ registerRoute({
         <button type="button" class="btn btn-ghost" id="btn-delete">Eliminar</button>
       </div>
       `,
+      `<div class="tools-wrap">
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-tools">Herramientas ▾</button>
+        <div id="tools-menu" class="tools-menu" hidden>
+          <button type="button" data-tool="preview">Vista previa</button>
+          <button type="button" data-tool="pdf">Guardar PDF</button>
+          <button type="button" data-tool="print">Imprimir</button>
+          <button type="button" data-tool="share">Compartir</button>
+        </div>
+      </div>`,
     );
 
     const collectContent = (): string => {
@@ -169,12 +191,13 @@ registerRoute({
 
     const refreshPreview = () => {
       const content = collectContent();
+      editableMembrete = readMembreteFromEditor(el, editableMembrete);
       const box = el.querySelector("#live-preview") as HTMLElement;
       box.innerHTML = buildFullDocumentHtml({
         type: doc!.type,
         content,
         header: selectedHeader,
-        membrete: doc!.membrete,
+        membrete: editableMembrete,
       });
       return content;
     };
@@ -186,6 +209,15 @@ registerRoute({
       selectedHeader = headers.find((h) => h.id === hid) ?? defaultHeader();
       refreshPreview();
     });
+
+    bindMembreteEditor(
+      el,
+      (m) => {
+        editableMembrete = m;
+        refreshPreview();
+      },
+      () => editableMembrete,
+    );
 
     el.querySelector("#sections-editor")?.addEventListener("input", () => refreshPreview());
 
@@ -221,11 +253,13 @@ registerRoute({
 
     const doSave = () => {
       const content = refreshPreview();
+      editableMembrete = readMembreteFromEditor(el, editableMembrete);
       const updated: ClinicalDocument = {
         ...doc!,
         content,
         headerId: selectedHeader?.id,
         headerSnapshot: selectedHeader ? { ...selectedHeader } : doc!.headerSnapshot,
+        membrete: editableMembrete,
       };
       doc = saveDocument(updated);
       alert("Cambios guardados");
@@ -233,17 +267,75 @@ registerRoute({
 
     const doPrint = () => {
       const content = refreshPreview();
+      editableMembrete = readMembreteFromEditor(el, editableMembrete);
       printFromClinicalDocument({
         ...doc!,
         content,
         headerSnapshot: selectedHeader ?? doc!.headerSnapshot,
+        membrete: editableMembrete,
       });
     };
 
+    const runTool = (tool: string) => {
+      const menu = el.querySelector("#tools-menu") as HTMLElement | null;
+      if (menu) menu.hidden = true;
+      if (tool === "preview") {
+        el.querySelector("#preview-heading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      if (tool === "pdf") {
+        const content = refreshPreview();
+        editableMembrete = readMembreteFromEditor(el, editableMembrete);
+        void downloadFromClinicalDocument({
+          ...doc!,
+          content,
+          headerSnapshot: selectedHeader ?? doc!.headerSnapshot,
+          membrete: editableMembrete,
+        }).catch((err) => {
+          alert(err instanceof Error ? err.message : "No se pudo generar el PDF");
+        });
+        return;
+      }
+      if (tool === "print") {
+        doPrint();
+        return;
+      }
+      if (tool === "share") {
+        const content = refreshPreview();
+        const title = DocumentReportTitles[doc!.type];
+        const text = `${title} — ${doc!.patientNombre}\n\n${content}`;
+        if (navigator.share) {
+          void navigator.share({ title, text }).catch(() => {
+            void navigator.clipboard.writeText(text).then(() => alert("Texto copiado para compartir"));
+          });
+        } else {
+          void navigator.clipboard.writeText(text).then(() => alert("Texto copiado para compartir"));
+        }
+      }
+    };
+
+    el.querySelector("#btn-tools")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const menu = el.querySelector("#tools-menu") as HTMLElement | null;
+      if (menu) menu.hidden = !menu.hidden;
+    });
+    el.querySelectorAll("[data-tool]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const tool = btn.getAttribute("data-tool");
+        if (tool) runTool(tool);
+      });
+    });
+    document.addEventListener(
+      "click",
+      () => {
+        const menu = el.querySelector("#tools-menu") as HTMLElement | null;
+        if (menu) menu.hidden = true;
+      },
+      { once: false },
+    );
+
     el.querySelector("#btn-save")?.addEventListener("click", doSave);
     el.querySelector("#btn-save-2")?.addEventListener("click", doSave);
-    el.querySelector("#btn-print")?.addEventListener("click", doPrint);
-    el.querySelector("#btn-print-2")?.addEventListener("click", doPrint);
 
     el.querySelector("#btn-copy")?.addEventListener("click", async () => {
       const content = refreshPreview();
