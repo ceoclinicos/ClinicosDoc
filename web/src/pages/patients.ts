@@ -75,9 +75,14 @@ function renderPatientList(patients: Patient[], highlightCedula?: string): strin
       const isMatch =
         highlight && findPatientByCedula([p], highlight)?.cedula === p.cedula;
       return `<li class="list-item list-item-action${isMatch ? " list-item-highlight" : ""}" data-cedula="${escapeAttr(p.cedula)}" role="button" tabindex="0">
-        <strong>${escapeHtml(p.nombre)}</strong>
-        <span>C.I. ${escapeHtml(p.cedula)} · ${p.edad} años · ${escapeHtml(p.sexo || "—")} · Nac. ${escapeHtml(formatNac(p.fechaNacimiento))}</span>
-        <span class="muted">Tocar para ficha de emergencia</span>
+        <div class="list-item-row">
+          <div>
+            <strong>${escapeHtml(p.nombre)}</strong>
+            <span>C.I. ${escapeHtml(p.cedula)} · ${p.edad} años · ${escapeHtml(p.sexo || "—")} · Nac. ${escapeHtml(formatNac(p.fechaNacimiento))}</span>
+            <span class="muted">Tocar para ficha · Editar datos con el botón</span>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm btn-edit-patient" data-edit-id="${escapeAttr(p.id)}">Editar</button>
+        </div>
       </li>`;
     })
     .join("")}</ul>`;
@@ -157,12 +162,22 @@ registerRoute({
           const cedula = (node as HTMLElement).getAttribute("data-cedula");
           if (cedula) void openFicha(cedula);
         };
-        node.addEventListener("click", open);
+        node.addEventListener("click", (e) => {
+          if ((e.target as HTMLElement).closest(".btn-edit-patient")) return;
+          open();
+        });
         node.addEventListener("keydown", (e) => {
           if ((e as KeyboardEvent).key === "Enter" || (e as KeyboardEvent).key === " ") {
             e.preventDefault();
             open();
           }
+        });
+      });
+      root.querySelectorAll(".btn-edit-patient").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const id = (btn as HTMLElement).dataset.editId;
+          if (id) navigate(`/pacientes/editar?id=${encodeURIComponent(id)}`);
         });
       });
     }
@@ -370,6 +385,71 @@ registerRoute({
     }
 
     renderStep();
+    return el;
+  },
+});
+
+registerRoute({
+  path: "/pacientes/editar",
+  title: "Editar paciente",
+  medicoOnly: true,
+  render: () => {
+    const raw = window.location.hash.split("?")[1] ?? "";
+    const id = new URLSearchParams(raw).get("id") ?? "";
+    const existing = loadPatients().find((p) => p.id === id);
+    if (!existing) {
+      const el = page("Editar paciente", `<p class="muted">Paciente no encontrado.</p>`);
+      bindNavButtons(el);
+      return el;
+    }
+
+    const birthIso = existing.fechaNacimiento;
+    const el = page(
+      "Editar paciente",
+      `
+      <p class="muted">Modifica los datos y guarda los cambios.</p>
+      <form class="form" id="edit-patient-form">
+        <label>Nombre<input name="nombre" required value="${escapeAttr(existing.nombre)}" /></label>
+        <label>Cédula<input name="cedula" required value="${escapeAttr(existing.cedula)}" /></label>
+        <label>Sexo
+          <select name="sexo" required>${sexOptionsHtml(existing.sexo)}</select>
+        </label>
+        <label>WhatsApp
+          <input name="whatsapp" inputmode="numeric" value="${escapeAttr(existing.whatsapp || "")}" placeholder="04141234567" />
+        </label>
+        ${birthDateFieldsHtml("nac", birthIso)}
+        <p class="muted">La edad se calcula automáticamente con la fecha de nacimiento.</p>
+        <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        <button type="button" class="btn btn-ghost" data-nav="/pacientes">Cancelar</button>
+      </form>`,
+    );
+
+    bindBirthDateSelects(el, "nac");
+    el.querySelector("#edit-patient-form")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target as HTMLFormElement);
+      try {
+        const sexo = String(fd.get("sexo") ?? "").trim();
+        if (sexo !== "Masculino" && sexo !== "Femenino") {
+          throw new Error("Seleccione el sexo");
+        }
+        const birth = parseBirthFromForm(fd, "nac");
+        const whatsapp = String(fd.get("whatsapp") ?? "").replace(/\D/g, "");
+        upsertLocalPatient({
+          ...existing,
+          nombre: String(fd.get("nombre")).trim(),
+          cedula: String(fd.get("cedula")).trim(),
+          edad: birth.age,
+          sexo,
+          fechaNacimiento: birth.iso,
+          whatsapp: whatsapp || existing.whatsapp,
+        });
+        navigate("/pacientes");
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Datos incompletos");
+      }
+    });
+    bindNavButtons(el);
     return el;
   },
 });

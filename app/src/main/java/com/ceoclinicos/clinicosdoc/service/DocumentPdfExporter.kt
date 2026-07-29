@@ -207,24 +207,61 @@ object DocumentPdfExporter {
         }
 
         fun drawMembreteLine(membrete: PatientMembrete) {
-            newPageIfNeeded()
+            val fields = listOf(
+                "Nombre" to membrete.displayNombre(),
+                "Edad" to membrete.displayEdad(),
+                "C.I." to membrete.displayCedula(),
+                "Sexo" to membrete.displaySexo(),
+                "Fecha de nacimiento" to membrete.displayFechaNacimiento(),
+            )
+            val maxWidth = PAGE_WIDTH - (MARGIN * 2)
+            val gap = "   "
+            val gapWidth = bodyPaint.measureText(gap)
             var x = MARGIN
-            fun drawField(label: String, value: String, addGap: Boolean = true) {
+            newPageIfNeeded()
+            fields.forEachIndexed { index, (label, value) ->
                 val labelText = "$label: "
+                val labelWidth = boldPaint.measureText(labelText)
+                val valueWidth = bodyPaint.measureText(value)
+                val pieceWidth = labelWidth + valueWidth
+                val needGap = index < fields.lastIndex
+                val totalNeeded = pieceWidth + if (needGap) gapWidth else 0f
+                if (x > MARGIN && x + totalNeeded > MARGIN + maxWidth) {
+                    y += LINE_HEIGHT
+                    newPageIfNeeded()
+                    x = MARGIN
+                }
                 canvas.drawText(labelText, x, y, boldPaint)
-                x += boldPaint.measureText(labelText)
-                canvas.drawText(value, x, y, bodyPaint)
-                x += bodyPaint.measureText(value)
-                if (addGap) {
-                    val gap = "   "
+                x += labelWidth
+                // Si el valor solo no cabe, lo partimos palabra a palabra
+                if (valueWidth > maxWidth - labelWidth && value.contains(' ')) {
+                    val words = value.split(" ")
+                    var line = StringBuilder()
+                    words.forEach { word ->
+                        val candidate = if (line.isEmpty()) word else "$line $word"
+                        if (x - MARGIN + bodyPaint.measureText(candidate) > maxWidth && line.isNotEmpty()) {
+                            canvas.drawText(line.toString(), x, y, bodyPaint)
+                            y += LINE_HEIGHT
+                            newPageIfNeeded()
+                            x = MARGIN
+                            line = StringBuilder(word)
+                        } else {
+                            line = StringBuilder(candidate)
+                        }
+                    }
+                    if (line.isNotEmpty()) {
+                        canvas.drawText(line.toString(), x, y, bodyPaint)
+                        x += bodyPaint.measureText(line.toString())
+                    }
+                } else {
+                    canvas.drawText(value, x, y, bodyPaint)
+                    x += valueWidth
+                }
+                if (needGap) {
                     canvas.drawText(gap, x, y, bodyPaint)
-                    x += bodyPaint.measureText(gap)
+                    x += gapWidth
                 }
             }
-            drawField("Nombre", membrete.displayNombre())
-            drawField("Edad", membrete.displayEdad())
-            drawField("Sexo", membrete.displaySexo())
-            drawField("Fecha de nacimiento", membrete.displayFechaNacimiento(), addGap = false)
             y += LINE_HEIGHT
         }
 
@@ -590,21 +627,41 @@ object DocumentPdfExporter {
             canvas.drawText(halfTitle, center - titleW / 2f, y, titlePaint)
             y += lineH + 4f
 
-            // Datos del paciente en una sola línea; solo la etiqueta "Nombre:" en negrita
+            // Datos del paciente; baja de línea si no cabe en el margen
             val nombreValue = membrete.displayNombre()
             val edadValue = membrete.displayEdad()
-            val cedulaValue = document.patientCedula.ifBlank { "—" }
-            var x = left
-            canvas.drawText("Nombre: ", x, y, boldPaint)
-            x += boldPaint.measureText("Nombre: ")
-            canvas.drawText(nombreValue, x, y, bodyPaint)
-            x += bodyPaint.measureText(nombreValue)
+            val cedulaValue = membrete.displayCedula().takeIf { it != "—" }
+                ?: document.patientCedula.ifBlank { "—" }
+            val patientFields = listOf(
+                "Nombre" to nombreValue,
+                "Edad" to edadValue,
+                "C.I." to cedulaValue,
+            )
+            val maxW = right - left
             val gap = "   "
-            canvas.drawText(gap, x, y, bodyPaint)
-            x += bodyPaint.measureText(gap)
-            val rest = "Edad: $edadValue$gap" + "C.I.: $cedulaValue"
-            canvas.drawText(rest, x, y, bodyPaint)
-            y += lineH + 8f
+            val gapW = bodyPaint.measureText(gap)
+            var x = left
+            patientFields.forEachIndexed { index, (label, value) ->
+                val labelText = "$label: "
+                val labelW = boldPaint.measureText(labelText)
+                val valueW = bodyPaint.measureText(value)
+                val needGap = index < patientFields.lastIndex
+                val needed = labelW + valueW + if (needGap) gapW else 0f
+                if (x > left && x - left + needed > maxW) {
+                    y += lineH
+                    x = left
+                }
+                canvas.drawText(labelText, x, y, boldPaint)
+                x += labelW
+                canvas.drawText(value, x, y, bodyPaint)
+                x += valueW
+                if (needGap) {
+                    canvas.drawText(gap, x, y, bodyPaint)
+                    x += gapW
+                }
+            }
+            // Línea en blanco extra entre datos del paciente y el primer medicamento
+            y += lineH * 2 + 8f
 
             // Fármacos / indicaciones
             drawMedicationBlocks(

@@ -7,6 +7,7 @@ import java.time.format.DateTimeFormatter
 data class PatientMembrete(
     val nombre: String = "",
     val edad: String = "",
+    val cedula: String = "",
     val sexo: String = "",
     val fechaNacimiento: String = "",
     val fecha: String = "",
@@ -19,6 +20,8 @@ data class PatientMembrete(
         if (trimmed.contains("año", ignoreCase = true)) return trimmed
         return "$trimmed años"
     }
+
+    fun displayCedula(): String = cedula.trim().ifBlank { "—" }
 
     fun displaySexo(): String = sexo.trim().ifBlank { "—" }
 
@@ -34,6 +37,7 @@ data class PatientMembrete(
             PatientMembrete(
                 nombre = patient.nombre,
                 edad = patient.edad.toString(),
+                cedula = patient.cedula,
                 sexo = patient.sexo,
                 fechaNacimiento = dateFormatter.format(patient.fechaNacimiento),
                 fecha = dateFormatter.format(at),
@@ -48,6 +52,9 @@ data class PatientMembrete(
                     ?: doc.patientNombre,
                 edad = stored?.edad?.takeIf { it.isNotBlank() }
                     ?: fromPatient?.edad.orEmpty(),
+                cedula = stored?.cedula?.takeIf { it.isNotBlank() }
+                    ?: fromPatient?.cedula
+                    ?: doc.patientCedula,
                 sexo = stored?.sexo?.takeIf { it.isNotBlank() }
                     ?: fromPatient?.sexo
                     ?: patient?.sexo.orEmpty(),

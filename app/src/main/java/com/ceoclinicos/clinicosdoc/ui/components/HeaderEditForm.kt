@@ -162,7 +162,7 @@ fun HeaderEditForm(
             )
         }
         Text(
-            "Requisito: imagen cuadrada 256×256 o 512×512 px",
+            "Se ajusta automáticamente (recomendado: cuadrada 256–1024 px)",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),

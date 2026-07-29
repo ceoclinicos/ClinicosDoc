@@ -316,6 +316,21 @@ a {
   align-items: flex-start;
 }
 
+.list-item-row {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.list-item-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
 .search-row {
   display: flex;
   gap: 0.75rem;
@@ -833,7 +848,7 @@ dialog {
   padding: 0.7rem 0.8rem;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--card, #fff);
+  background: #fff;
 }
 
 .result-actions {
@@ -858,6 +873,19 @@ dialog {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  background: var(--surface);
+}
+
+.card-panel.section-edit {
+  background: var(--surface);
+}
+
+#membrete-editor {
+  background: var(--surface);
+}
+
+#membrete-editor input {
+  background: #fff;
 }
 
 .vitals-editor {

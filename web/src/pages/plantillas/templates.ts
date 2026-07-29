@@ -49,10 +49,10 @@ registerRoute({
           <label>Médico / clínica<input name="doctorName" /></label>
           <label>Subtítulo<input name="subtitle" placeholder="Ej. Medicina interna" /></label>
           <label>Descripción<textarea name="description" rows="3" placeholder="Dirección, teléfono…"></textarea></label>
-          <label>Logo (cuadrado 256×256 o 512×512 px)
+          <label>Logo (se ajusta automáticamente)
             <input type="file" name="logo" id="logo-input" accept="image/*" />
           </label>
-          <p class="muted" id="logo-hint">Requisito: imagen cuadrada 256×256 o 512×512</p>
+          <p class="muted" id="logo-hint">Recomendado: imagen cuadrada 256–1024 px</p>
           <div id="logo-preview" class="header-logo-preview" hidden></div>
           <button type="button" class="btn btn-ghost btn-sm" id="btn-clear-logo" hidden>Quitar logo</button>
           <label class="check-row"><input type="checkbox" name="isDefault" /> Predeterminado</label>

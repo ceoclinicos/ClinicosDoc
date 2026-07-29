@@ -19,7 +19,7 @@ object AiService {
     private const val PREFS = "clinicos_doc_prefs"
     private const val PROVIDER_KEY = "ai_provider"
     private const val GEMINI_MODEL = "gemini-2.5-flash"
-    private const val DEEP_SEEK_MODEL = "deepseek-chat"
+    private const val DEEP_SEEK_MODEL = "deepseek-v4-flash"
     private const val DEEP_SEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 
     private val httpClient = OkHttpClient.Builder()
@@ -105,6 +105,7 @@ object AiService {
                 "messages" to messages,
                 "temperature" to 0.7,
                 "max_tokens" to maxTokens,
+                "thinking" to mapOf("type" to "disabled"),
             ),
         )
         val request = Request.Builder()

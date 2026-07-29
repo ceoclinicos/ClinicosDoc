@@ -71,6 +71,7 @@ object DocumentStorage {
         headerSnapshot = headerSnapshot?.toDto(),
         membreteNombre = membrete?.nombre,
         membreteEdad = membrete?.edad,
+        membreteCedula = membrete?.cedula,
         membreteSexo = membrete?.sexo,
         membreteFechaNacimiento = membrete?.fechaNacimiento,
         membreteFecha = membrete?.fecha,
@@ -98,6 +99,7 @@ object DocumentStorage {
         val hasData = listOf(
             membreteNombre,
             membreteEdad,
+            membreteCedula,
             membreteSexo,
             membreteFechaNacimiento,
             membreteFecha,
@@ -106,6 +108,7 @@ object DocumentStorage {
         return PatientMembrete(
             nombre = membreteNombre.orEmpty(),
             edad = membreteEdad.orEmpty(),
+            cedula = membreteCedula.orEmpty().ifBlank { patientCedula },
             sexo = membreteSexo.orEmpty(),
             fechaNacimiento = membreteFechaNacimiento.orEmpty(),
             fecha = membreteFecha.orEmpty(),

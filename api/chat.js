@@ -34,10 +34,11 @@ module.exports = async function handler(req, res) {
           Authorization: "Bearer " + dsKey,
         },
         body: JSON.stringify({
-          model: "deepseek-chat",
+          model: "deepseek-v4-flash",
           messages,
           temperature: 0.7,
           max_tokens: maxTokens,
+          thinking: { type: "disabled" },
         }),
       });
 

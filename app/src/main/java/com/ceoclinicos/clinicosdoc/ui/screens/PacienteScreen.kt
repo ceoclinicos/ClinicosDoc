@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.PersonAddAlt1
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Search
@@ -61,6 +62,7 @@ import java.time.format.DateTimeFormatter
 fun PacienteScreen(
     refreshKey: Int,
     onAddPatient: () -> Unit,
+    onEditPatient: (patientId: String) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -180,7 +182,7 @@ fun PacienteScreen(
             Text(it, style = MaterialTheme.typography.bodySmall, color = Teal, modifier = Modifier.padding(top = 6.dp))
         }
         Text(
-            "Toca un paciente para ver su ficha de emergencia",
+            "Toca un paciente para ver su ficha. Usa el lápiz para editar sus datos.",
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary,
             modifier = Modifier.padding(top = 8.dp),
@@ -220,6 +222,13 @@ fun PacienteScreen(
                                             append(" · Nac. ${dateFormatter.format(patient.fechaNacimiento)}")
                                         },
                                     )
+                                },
+                                trailingContent = {
+                                    IconButton(
+                                        onClick = { onEditPatient(patient.id) },
+                                    ) {
+                                        Icon(Icons.Outlined.Edit, contentDescription = "Editar paciente", tint = Teal)
+                                    }
                                 },
                             )
                         }
@@ -265,6 +274,11 @@ fun PacienteScreen(
                 }
             },
             confirmButton = {
+                TextButton(onClick = { onEditPatient(patient.id); fichaPatient = null }) {
+                    Text("Editar datos")
+                }
+            },
+            dismissButton = {
                 TextButton(onClick = { fichaPatient = null }) { Text("Cerrar") }
             },
         )

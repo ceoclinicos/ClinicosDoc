@@ -12,9 +12,12 @@ object Routes {
     const val HEADERS = "headers"
     const val HEADER_EDIT = "header_edit/{headerId}/{isNew}"
     const val ADD_PATIENT = "add_patient"
+    const val EDIT_PATIENT = "edit_patient/{patientId}"
     const val ADD_APPOINTMENT = "add_appointment"
     const val INFORME_DETAIL = "informe_detail/{docId}"
     const val GENERAR_ORDENES = "generar_ordenes"
+
+    fun editPatient(patientId: String) = "edit_patient/$patientId"
 
     fun informeDetail(docId: String) = "informe_detail/$docId"
     const val DRAFTS = "drafts"

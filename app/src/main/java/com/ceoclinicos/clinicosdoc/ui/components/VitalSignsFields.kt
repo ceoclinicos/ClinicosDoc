@@ -8,14 +8,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.ceoclinicos.clinicosdoc.ui.theme.CardWhite
+import com.ceoclinicos.clinicosdoc.ui.theme.DividerColor
+import com.ceoclinicos.clinicosdoc.ui.theme.Teal
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 import com.ceoclinicos.clinicosdoc.util.VitalSigns
 
@@ -116,5 +121,14 @@ private fun VitalField(
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         textStyle = MaterialTheme.typography.bodyMedium,
+        shape = RoundedCornerShape(14.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Teal,
+            unfocusedBorderColor = DividerColor,
+            focusedContainerColor = CardWhite,
+            unfocusedContainerColor = CardWhite,
+            disabledContainerColor = CardWhite,
+            errorContainerColor = CardWhite,
+        ),
     )
 }

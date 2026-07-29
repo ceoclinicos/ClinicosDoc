@@ -31,14 +31,12 @@ import com.ceoclinicos.clinicosdoc.data.TemplateStorage
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
 import com.ceoclinicos.clinicosdoc.model.DocumentType
-import com.ceoclinicos.clinicosdoc.model.OrdenesFromCasePending
 import com.ceoclinicos.clinicosdoc.ui.screens.AddAppointmentScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.AddPatientScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.AuthLoadingScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.DoctorLoginScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.DocumentTypeSheet
 import com.ceoclinicos.clinicosdoc.ui.screens.DraftsScreen
-import com.ceoclinicos.clinicosdoc.ui.screens.GenerarOrdenesFromCaseScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.HeaderEditScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.HeadersScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.InformeDetailScreen
@@ -98,6 +96,7 @@ fun ClinicosDocNavHost() {
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 onRedactar = { showDocTypeSheet = true },
                 onAddPatient = { navController.navigate(Routes.ADD_PATIENT) },
+                onEditPatient = { id -> navController.navigate(Routes.editPatient(id)) },
                 onOpenPlantillas = { navController.navigate(Routes.PLANTILLAS_HUB) },
                 onOpenDrafts = { navController.navigate(Routes.DRAFTS) },
                 patientRefreshKey = patientRefreshKey,
@@ -119,28 +118,6 @@ fun ClinicosDocNavHost() {
                 },
                 onEditHeader = { id, isNew ->
                     navController.navigate(Routes.headerEdit(id, isNew))
-                },
-                onGenerarOrdenes = { patientId, content, sourceDocId, headerId, typeLabel ->
-                    OrdenesFromCasePending.set(
-                        OrdenesFromCasePending.Payload(
-                            patientId = patientId,
-                            caseContent = content,
-                            sourceDocumentId = sourceDocId,
-                            headerId = headerId,
-                            sourceTypeLabel = typeLabel,
-                        ),
-                    )
-                    navController.navigate(Routes.GENERAR_ORDENES)
-                },
-            )
-        }
-        composable(Routes.GENERAR_ORDENES) {
-            GenerarOrdenesFromCaseScreen(
-                onBack = { navController.popBackStack() },
-                onSaved = { docId ->
-                    informeRefreshKey++
-                    navController.popBackStack()
-                    navController.navigate(Routes.informeDetail(docId))
                 },
             )
         }
@@ -235,6 +212,19 @@ fun ClinicosDocNavHost() {
                 onBack = { navController.popBackStack() },
             )
         }
+        composable(
+            route = Routes.EDIT_PATIENT,
+            arguments = listOf(navArgument("patientId") { type = NavType.StringType }),
+        ) { entry ->
+            AddPatientScreen(
+                editPatientId = entry.arguments?.getString("patientId"),
+                onSaved = {
+                    patientRefreshKey++
+                    navController.popBackStack()
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
         composable(Routes.DRAFTS) {
             DraftsScreen(
                 onBack = { navController.popBackStack() },
@@ -281,18 +271,6 @@ fun ClinicosDocNavHost() {
                 },
                 onEditTemplate = { id, isNew ->
                     navController.navigate(Routes.templateEdit(id, isNew))
-                },
-                onGenerarOrdenes = { patientId, content, headerId, typeLabel ->
-                    OrdenesFromCasePending.set(
-                        OrdenesFromCasePending.Payload(
-                            patientId = patientId,
-                            caseContent = content,
-                            sourceDocumentId = null,
-                            headerId = headerId,
-                            sourceTypeLabel = typeLabel,
-                        ),
-                    )
-                    navController.navigate(Routes.GENERAR_ORDENES)
                 },
             )
         }

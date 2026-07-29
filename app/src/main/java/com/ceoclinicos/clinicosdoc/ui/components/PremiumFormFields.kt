@@ -49,6 +49,7 @@ fun PremiumTextField(
     errorMessage: String? = null,
     readOnly: Boolean = false,
     placeholderColor: Color = TextSecondary.copy(alpha = 0.38f),
+    containerColor: Color = Color.Transparent,
 ) {
     Column(modifier = modifier) {
         Text(
@@ -72,6 +73,10 @@ fun PremiumTextField(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Teal,
                 unfocusedBorderColor = DividerColor,
+                focusedContainerColor = containerColor,
+                unfocusedContainerColor = containerColor,
+                disabledContainerColor = containerColor,
+                errorContainerColor = containerColor,
             ),
         )
         if (errorMessage != null) {

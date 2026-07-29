@@ -128,6 +128,12 @@ function parseDocument(data: DocumentData, id: string): ClinicalDocument | null 
       ? {
           nombre: String((data.membrete as { nombre?: string })?.nombre ?? data.membreteNombre ?? ""),
           edad: String((data.membrete as { edad?: string })?.edad ?? data.membreteEdad ?? ""),
+          cedula: String(
+            (data.membrete as { cedula?: string })?.cedula ??
+              data.membreteCedula ??
+              data.patientCedula ??
+              "",
+          ),
           sexo: String((data.membrete as { sexo?: string })?.sexo ?? data.membreteSexo ?? ""),
           fechaNacimiento: String(
             (data.membrete as { fechaNacimiento?: string })?.fechaNacimiento ??
@@ -413,6 +419,7 @@ export async function pushDocument(d: ClinicalDocument, userId = userIdOrThrow()
     headerSnapshot: d.headerSnapshot ?? null,
     membreteNombre: d.membrete?.nombre ?? null,
     membreteEdad: d.membrete?.edad ?? null,
+    membreteCedula: d.membrete?.cedula ?? d.patientCedula ?? null,
     membreteSexo: d.membrete?.sexo ?? null,
     membreteFechaNacimiento: d.membrete?.fechaNacimiento ?? null,
     membreteFecha: d.membrete?.fecha ?? null,
@@ -453,6 +460,7 @@ async function pushGlobalDocument(
       headerSnapshot: document.headerSnapshot ?? null,
       membreteNombre: document.membrete?.nombre ?? null,
       membreteEdad: document.membrete?.edad ?? null,
+      membreteCedula: document.membrete?.cedula ?? document.patientCedula ?? null,
       membreteSexo: document.membrete?.sexo ?? null,
       membreteFechaNacimiento: document.membrete?.fechaNacimiento ?? null,
       membreteFecha: document.membrete?.fecha ?? null,

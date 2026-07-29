@@ -2,6 +2,7 @@ package com.ceoclinicos.clinicosdoc.ui.screens
 
 import android.Manifest
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,6 +50,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.Composable
@@ -125,10 +128,24 @@ private val RedactarStepSaver = Saver<RedactarStep, String>(
 )
 
 private val PatientMembreteSaver = Saver<PatientMembrete, List<String>>(
-    save = { listOf(it.nombre, it.edad, it.sexo, it.fechaNacimiento, it.fecha) },
+    save = { listOf(it.nombre, it.edad, it.cedula, it.sexo, it.fechaNacimiento, it.fecha) },
     restore = {
         when (it.size) {
-            5 -> PatientMembrete(it[0], it[1], it[2], it[3], it[4])
+            6 -> PatientMembrete(
+                nombre = it[0],
+                edad = it[1],
+                cedula = it[2],
+                sexo = it[3],
+                fechaNacimiento = it[4],
+                fecha = it[5],
+            )
+            5 -> PatientMembrete(
+                nombre = it[0],
+                edad = it[1],
+                sexo = it[2],
+                fechaNacimiento = it[3],
+                fecha = it[4],
+            )
             4 -> PatientMembrete(
                 nombre = it[0],
                 edad = it[1],
@@ -152,12 +169,6 @@ fun RedactarFlowScreen(
     onAddPatient: () -> Unit,
     onEditHeader: (headerId: String, isNew: Boolean) -> Unit,
     onEditTemplate: (templateId: String, isNew: Boolean) -> Unit,
-    onGenerarOrdenes: (
-        patientId: String,
-        caseContent: String,
-        headerId: String?,
-        typeLabel: String,
-    ) -> Unit = { _, _, _, _ -> },
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -210,6 +221,19 @@ fun RedactarFlowScreen(
     var diagnosticoText by rememberSaveable { mutableStateOf("") }
     var showAddFarmaco by remember { mutableStateOf(false) }
     var addingFarmaco by remember { mutableStateOf(false) }
+    var showLeaveResultDialog by remember { mutableStateOf(false) }
+
+    fun requestLeave() {
+        if (step == RedactarStep.RESULTADO) {
+            showLeaveResultDialog = true
+        } else {
+            onBack()
+        }
+    }
+
+    BackHandler {
+        requestLeave()
+    }
 
     val sessionConfig = remember(
         enabledExamIds,
@@ -286,6 +310,7 @@ fun RedactarFlowScreen(
         sections: List<String> = activeSections,
         layout: List<String> = sectionLayoutOrder,
         sectionTexts: Map<String, String> = sectionDefaultTexts,
+        force: Boolean = false,
     ) {
         val tpl = template ?: return
         val updated = tpl.withSessionConfig(
@@ -299,7 +324,7 @@ fun RedactarFlowScreen(
             ),
         )
         EnfermedadActualStorage.save(context, ejemplo)
-        if (updated == tpl) return
+        if (!force && updated == tpl) return
         template = TemplateStorage.upsert(context, updated)
     }
 
@@ -482,7 +507,7 @@ fun RedactarFlowScreen(
 
     AppScaffold(
         title = "${documentType.label} · ${template?.name ?: ""}",
-        onBack = onBack,
+        onBack = { requestLeave() },
         actions = {
             Box {
                 IconButton(onClick = { showToolsMenu = true }) {
@@ -664,7 +689,7 @@ fun RedactarFlowScreen(
                     canChangeTemplate = availableTemplates.size > 1,
                     onChangeTemplate = { showTemplatePicker = true },
                     onContinue = {
-                        persistTemplateConfig()
+                        persistTemplateConfig(force = true)
                         step = RedactarStep.DICTADO
                     },
                 )
@@ -1173,37 +1198,26 @@ fun RedactarFlowScreen(
                             Text(if (addingFarmaco) "Agregando fármaco…" else "Agregar fármaco")
                         }
                     }
-                    val patient = selectedPatient
-                    val content = generatedContent
-                    if (patient != null && content != null) {
-                        if (documentType == DocumentType.INFORME ||
-                            documentType == DocumentType.HISTORIA_CLINICA
-                        ) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            OutlinedButton(
-                                onClick = {
-                                    onGenerarOrdenes(
-                                        patient.id,
-                                        content,
-                                        header?.id,
-                                        documentType.label,
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text("Generar órdenes médicas")
-                            }
-                        }
+                    Spacer(modifier = Modifier.height(20.dp))
+                    OutlinedButton(
+                        onClick = { step = RedactarStep.DICTADO },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Editar dictado")
                     }
-                }
-                OutlinedButton(
-                    onClick = { step = RedactarStep.DICTADO },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .padding(bottom = 12.dp),
-                ) {
-                    Text("Editar dictado")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    PremiumPrimaryButton(
+                        label = if (savedDocumentId != null) "Actualizar documento" else "Guardar documento",
+                        icon = Icons.Default.Save,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            val content = generatedContent ?: return@PremiumPrimaryButton
+                            scope.launch {
+                                persistGeneratedDocument(content, showToast = true)
+                            }
+                        },
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
                 PremiumPrimaryButton(
                     label = "Vista previa",
@@ -1211,25 +1225,36 @@ fun RedactarFlowScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp)
-                        .padding(bottom = 12.dp),
+                        .padding(top = 8.dp, bottom = 24.dp),
                     onClick = { showPreview = true },
-                )
-                PremiumPrimaryButton(
-                    label = if (savedDocumentId != null) "Actualizar documento" else "Guardar documento",
-                    icon = Icons.Default.Save,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .padding(bottom = 24.dp),
-                    onClick = {
-                        val content = generatedContent ?: return@PremiumPrimaryButton
-                        scope.launch {
-                            persistGeneratedDocument(content, showToast = true)
-                        }
-                    },
                 )
             }
         }
+    }
+
+    if (showLeaveResultDialog) {
+        AlertDialog(
+            onDismissRequest = { showLeaveResultDialog = false },
+            title = { Text("Salir") },
+            text = {
+                Text("¿Seguro que quieres salir? Aún puedes seguir editando el documento.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLeaveResultDialog = false
+                        onBack()
+                    },
+                ) {
+                    Text("Salir")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLeaveResultDialog = false }) {
+                    Text("Seguir editando")
+                }
+            },
+        )
     }
 
     if (showPreview) {

@@ -58,7 +58,6 @@ import { openFarmacoDialog } from "../ui/farmaco-dialog";
 import { bindSectionRegenerateButtons, sectionRegenerateButtonHtml } from "../ui/section-regenerate";
 import { bindMembreteEditor, membreteEditorHtml, readMembreteFromEditor } from "../ui/membrete-editor";
 import { bindNavButtons, page } from "./helpers";
-import { setOrdenesFromCasePending } from "./generar-ordenes";
 
 function hashQuery(): URLSearchParams {
   const raw = window.location.hash.split("?")[1] ?? "";
@@ -432,7 +431,6 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
             : ""
         }
         <p class="muted">${isSpeechSupported() ? "Dictado por voz disponible" : "Dictado solo texto"}</p>
-        <label class="check-row"><input type="checkbox" name="saveTpl" value="1" /> Guardar esta configuración como plantilla por defecto</label>
         <button type="submit" class="btn btn-primary">Continuar al dictado</button>
         <button type="button" class="btn btn-ghost" id="btn-back-pac">Volver</button>
       </form>
@@ -483,9 +481,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         sectionDefaultTexts: draftSectionTexts,
         isDefault: true,
       };
-      if (fd.get("saveTpl") === "1") {
-        upsertTemplate(workingTemplate);
-      }
+      upsertTemplate(workingTemplate);
       persistDraft();
       step = "dictado";
       render();
@@ -906,11 +902,6 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         <button type="button" class="btn btn-primary" id="btn-save-2">${savedDocumentId ? "Actualizar documento" : "Guardar documento"}</button>
         <button type="button" class="btn btn-secondary" id="btn-copy">Copiar texto</button>
         <button type="button" class="btn btn-ghost" id="btn-edit">Editar dictado y regenerar</button>
-        ${
-          docType === "informe" || docType === "historiaClinica"
-            ? `<button type="button" class="btn btn-secondary" id="btn-ordenes">Generar órdenes médicas</button>`
-            : ""
-        }
         <button type="button" class="btn btn-ghost" data-nav="/informes">Ver informes</button>
       </div>
     `;
@@ -1043,18 +1034,6 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       refreshPreview();
       step = "dictado";
       render();
-    });
-
-    root.querySelector("#btn-ordenes")?.addEventListener("click", () => {
-      if (!selectedPatient) return;
-      refreshPreview();
-      setOrdenesFromCasePending({
-        patientId: selectedPatient.id,
-        caseContent: generatedContent,
-        headerId: selectedHeader?.id,
-        sourceTypeLabel: DocumentTypeLabels[docType],
-      });
-      navigate("/ordenes/desde-caso");
     });
 
     bindNavButtons(root);

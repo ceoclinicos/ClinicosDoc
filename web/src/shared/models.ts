@@ -76,6 +76,7 @@ export interface DocumentHeader {
 export interface PatientMembrete {
   nombre: string;
   edad: string;
+  cedula?: string;
   sexo: string;
   fechaNacimiento: string;
   fecha: string;

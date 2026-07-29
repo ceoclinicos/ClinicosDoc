@@ -32,6 +32,7 @@ fun MainShell(
     onOpenSettings: () -> Unit,
     onRedactar: () -> Unit,
     onAddPatient: () -> Unit,
+    onEditPatient: (patientId: String) -> Unit,
     onOpenPlantillas: () -> Unit,
     onOpenDrafts: () -> Unit,
     patientRefreshKey: Int,
@@ -73,7 +74,11 @@ fun MainShell(
                     onOpenPlantillas = onOpenPlantillas,
                     onOpenDrafts = onOpenDrafts,
                 )
-                1 -> PacienteScreen(refreshKey = patientRefreshKey, onAddPatient = onAddPatient)
+                1 -> PacienteScreen(
+                    refreshKey = patientRefreshKey,
+                    onAddPatient = onAddPatient,
+                    onEditPatient = onEditPatient,
+                )
                 else -> InformeScreen(refreshKey = informeRefreshKey, onOpenInforme = onOpenInforme)
             }
         }

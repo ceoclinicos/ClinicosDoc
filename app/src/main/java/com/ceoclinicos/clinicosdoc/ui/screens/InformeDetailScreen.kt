@@ -1,6 +1,7 @@
 package com.ceoclinicos.clinicosdoc.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.SaveAlt
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
@@ -25,8 +27,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -52,7 +54,6 @@ import com.ceoclinicos.clinicosdoc.data.PatientStorage
 import com.ceoclinicos.clinicosdoc.data.TemplateStorage
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
-import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
 import com.ceoclinicos.clinicosdoc.service.DocumentAiService
 import com.ceoclinicos.clinicosdoc.service.DocumentPdfExporter
@@ -77,13 +78,6 @@ fun InformeDetailScreen(
     docId: String,
     onBack: () -> Unit,
     onEditHeader: (headerId: String, isNew: Boolean) -> Unit = { _, _ -> },
-    onGenerarOrdenes: (
-        patientId: String,
-        caseContent: String,
-        sourceDocId: String,
-        headerId: String?,
-        typeLabel: String,
-    ) -> Unit = { _, _, _, _, _ -> },
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -98,9 +92,20 @@ fun InformeDetailScreen(
     var saving by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(false) }
     var openEditHeaderId by rememberSaveable { mutableStateOf<String?>(null) }
+    var showLeaveEditDialog by remember { mutableStateOf(false) }
     val dateTimeFormatter = remember {
         DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.systemDefault())
     }
+
+    fun requestLeave() {
+        if (editing) {
+            showLeaveEditDialog = true
+        } else {
+            onBack()
+        }
+    }
+
+    BackHandler { requestLeave() }
 
     fun refreshHeaders() {
         availableHeaders = HeaderStorage.loadAll(context)
@@ -175,7 +180,7 @@ fun InformeDetailScreen(
 
     AppScaffold(
         title = doc?.typeLabel ?: "Informe",
-        onBack = onBack,
+        onBack = { requestLeave() },
         actions = {
             if (doc != null) {
                 IconButton(
@@ -409,27 +414,33 @@ fun InformeDetailScreen(
                     membrete = editableMembrete,
                     content = editableContent,
                 )
-                if (document.type == DocumentType.INFORME ||
-                    document.type == DocumentType.HISTORIA_CLINICA
-                ) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedButton(
-                        onClick = {
-                            onGenerarOrdenes(
-                                document.patientId,
-                                editableContent,
-                                document.id,
-                                selectedHeader?.id ?: document.headerId,
-                                document.typeLabel,
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Generar órdenes médicas")
-                    }
-                }
             }
             Spacer(modifier = Modifier.height(32.dp))
+        }
+
+        if (showLeaveEditDialog) {
+            AlertDialog(
+                onDismissRequest = { showLeaveEditDialog = false },
+                title = { Text("Salir") },
+                text = {
+                    Text("¿Seguro que quieres salir? Aún puedes seguir editando el documento.")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showLeaveEditDialog = false
+                            onBack()
+                        },
+                    ) {
+                        Text("Salir")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLeaveEditDialog = false }) {
+                        Text("Seguir editando")
+                    }
+                },
+            )
         }
 
         if (showPreview) {

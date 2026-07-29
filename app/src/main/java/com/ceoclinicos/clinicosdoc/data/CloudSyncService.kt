@@ -575,6 +575,7 @@ object CloudSyncService {
             membrete = if (
                 dto.membreteNombre != null ||
                 dto.membreteEdad != null ||
+                dto.membreteCedula != null ||
                 dto.membreteSexo != null ||
                 dto.membreteFechaNacimiento != null ||
                 dto.membreteFecha != null
@@ -582,6 +583,7 @@ object CloudSyncService {
                 PatientMembrete(
                     nombre = dto.membreteNombre.orEmpty(),
                     edad = dto.membreteEdad.orEmpty(),
+                    cedula = dto.membreteCedula.orEmpty().ifBlank { dto.patientCedula },
                     sexo = dto.membreteSexo.orEmpty(),
                     fechaNacimiento = dto.membreteFechaNacimiento.orEmpty(),
                     fecha = dto.membreteFecha.orEmpty(),
@@ -649,6 +651,7 @@ object CloudSyncService {
         headerSnapshot = headerSnapshot?.toSyncDto(),
         membreteNombre = membrete?.nombre,
         membreteEdad = membrete?.edad,
+        membreteCedula = membrete?.cedula,
         membreteSexo = membrete?.sexo,
         membreteFechaNacimiento = membrete?.fechaNacimiento,
         membreteFecha = membrete?.fecha,
@@ -706,6 +709,7 @@ object CloudSyncService {
         generatedContent = generatedContent,
         membreteNombre = membrete?.nombre,
         membreteEdad = membrete?.edad,
+        membreteCedula = membrete?.cedula,
         membreteSexo = membrete?.sexo,
         membreteFechaNacimiento = membrete?.fechaNacimiento,
         membreteFecha = membrete?.fecha,
@@ -728,6 +732,7 @@ object CloudSyncService {
         val hasData = listOf(
             membreteNombre,
             membreteEdad,
+            membreteCedula,
             membreteSexo,
             membreteFechaNacimiento,
             membreteFecha,
@@ -736,6 +741,7 @@ object CloudSyncService {
         return PatientMembrete(
             nombre = membreteNombre.orEmpty(),
             edad = membreteEdad.orEmpty(),
+            cedula = membreteCedula.orEmpty().ifBlank { patientCedula },
             sexo = membreteSexo.orEmpty(),
             fechaNacimiento = membreteFechaNacimiento.orEmpty(),
             fecha = membreteFecha.orEmpty(),

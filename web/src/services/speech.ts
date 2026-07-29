@@ -109,15 +109,27 @@ export function startDictation(
   };
 
   rec.onerror = (ev: SpeechRecognitionErrorEvent) => {
-    if (ev.error === "aborted" || ev.error === "no-speech") return;
-    if (ev.error === "network" || ev.error === "audio-capture") {
-      onError?.(`Error de dictado: ${ev.error}`);
+    // Silencio / abort: no marcar error; onend reinicia si sigue activo
+    if (
+      ev.error === "aborted" ||
+      ev.error === "no-speech" ||
+      ev.error === "network"
+    ) {
+      return;
+    }
+    if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
+      onError?.("Permiso de micrófono denegado");
+      stopped = true;
+      return;
+    }
+    if (ev.error === "audio-capture") {
+      onError?.("Error de captura de audio");
     }
   };
 
   rec.onend = () => {
     if (stopped) return;
-    // Reinicio limpio: no resetear committed; sí limpiar parcial
+    // Seguir escuchando hasta que el usuario detenga o procese
     sessionPartial = "";
     restarting = true;
     window.setTimeout(() => {
@@ -125,10 +137,17 @@ export function startDictation(
       try {
         rec.start();
       } catch {
-        /* ya arrancado */
+        window.setTimeout(() => {
+          if (stopped) return;
+          try {
+            rec.start();
+          } catch {
+            /* ya arrancado */
+          }
+        }, 400);
       }
       restarting = false;
-    }, 200);
+    }, 120);
   };
 
   try {

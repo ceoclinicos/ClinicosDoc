@@ -1,8 +1,10 @@
-/** Tamaños cuadrados permitidos para logos de encabezado. */
+/** Tamaños de salida del logo (cuadrados). */
 export const ALLOWED_LOGO_SIZES = new Set([256, 512]);
+const MIN_SIDE = 64;
 
 /**
- * Valida 256×256 o 512×512 y devuelve JPEG en base64 (sin prefijo data:).
+ * Recorta al centro, escala a 256 o 512 y devuelve JPEG en base64 (sin prefijo data:).
+ * Acepta 256, 512, 1024 u otras imágenes.
  */
 export function fileToLogoBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -12,23 +14,23 @@ export function fileToLogoBase64(file: File): Promise<string> {
       try {
         const w = img.naturalWidth;
         const h = img.naturalHeight;
-        if (w !== h || !ALLOWED_LOGO_SIZES.has(w)) {
-          reject(
-            new Error(
-              `El logo debe ser cuadrado de 256×256 o 512×512 píxeles (recibido ${w}×${h})`,
-            ),
-          );
+        if (w < MIN_SIDE || h < MIN_SIDE) {
+          reject(new Error(`La imagen es demasiado pequeña (mínimo ${MIN_SIDE}×${MIN_SIDE} px)`));
           return;
         }
+        const side = Math.min(w, h);
+        const sx = Math.floor((w - side) / 2);
+        const sy = Math.floor((h - side) / 2);
+        const target = side >= 512 ? 512 : 256;
         const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
+        canvas.width = target;
+        canvas.height = target;
         const ctx = canvas.getContext("2d");
         if (!ctx) {
           reject(new Error("No se pudo procesar la imagen"));
           return;
         }
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, target, target);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
         const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
         resolve(base64);

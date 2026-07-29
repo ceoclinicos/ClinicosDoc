@@ -25,8 +25,9 @@ object HeaderStorage {
     private const val KEY = "document_headers_json"
     private const val INITIALIZED_KEY = "headers_initialized"
     const val MAX_HEADERS = 4
-    /** Tamaños cuadrados permitidos para el logo de encabezado. */
+    /** Tamaños de salida del logo (cuadrados). */
     val ALLOWED_LOGO_SIZES = setOf(256, 512)
+    private const val MIN_LOGO_SIDE = 64
     private const val JPEG_QUALITY = 85
     private val gson = Gson()
 
@@ -131,34 +132,51 @@ object HeaderStorage {
     }
 
     /**
-     * Valida tamaño 256×256 o 512×512, comprime a JPEG y guarda local + base64.
+     * Recorta al centro (cuadrado), escala a 256 o 512 y guarda JPEG + base64.
+     * Acepta 256, 512, 1024 u otras imágenes (se ajustan automáticamente).
      */
     fun persistLogo(context: Context, uri: Uri, headerId: String): LogoPersistResult {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            BitmapFactory.decodeStream(input, null, bounds)
-        } ?: error("No se pudo leer la imagen")
-        val w = bounds.outWidth
-        val h = bounds.outHeight
-        if (w != h || w !in ALLOWED_LOGO_SIZES) {
-            error("El logo debe ser cuadrado de 256×256 o 512×512 píxeles (recibido ${w}×${h})")
-        }
         val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
             BitmapFactory.decodeStream(input)
         } ?: error("No se pudo decodificar la imagen")
-        val bytes = ByteArrayOutputStream().use { out ->
-            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
-                bitmap.recycle()
-                error("No se pudo comprimir el logo")
+        try {
+            val w = bitmap.width
+            val h = bitmap.height
+            if (w < MIN_LOGO_SIDE || h < MIN_LOGO_SIDE) {
+                error("La imagen es demasiado pequeña (mínimo ${MIN_LOGO_SIDE}×${MIN_LOGO_SIDE} px)")
             }
+            val side = minOf(w, h)
+            val left = (w - side) / 2
+            val top = (h - side) / 2
+            val square = Bitmap.createBitmap(bitmap, left, top, side, side)
+            val target = when {
+                side >= 512 -> 512
+                side >= 256 -> 256
+                else -> 256
+            }
+            val scaled = if (square.width == target) {
+                square
+            } else {
+                Bitmap.createScaledBitmap(square, target, target, true).also {
+                    if (it !== square) square.recycle()
+                }
+            }
+            val bytes = ByteArrayOutputStream().use { out ->
+                if (!scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
+                    if (scaled !== bitmap) scaled.recycle()
+                    error("No se pudo comprimir el logo")
+                }
+                if (scaled !== bitmap) scaled.recycle()
+                out.toByteArray()
+            }
+            val logosDir = File(context.filesDir, "header_logos").apply { mkdirs() }
+            val dest = File(logosDir, "$headerId.jpg")
+            dest.writeBytes(bytes)
+            val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            return LogoPersistResult(path = dest.absolutePath, base64 = base64)
+        } finally {
             bitmap.recycle()
-            out.toByteArray()
         }
-        val logosDir = File(context.filesDir, "header_logos").apply { mkdirs() }
-        val dest = File(logosDir, "$headerId.jpg")
-        dest.writeBytes(bytes)
-        val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-        return LogoPersistResult(path = dest.absolutePath, base64 = base64)
     }
 
     /** Escribe logo desde base64 de Firestore a archivo local. */

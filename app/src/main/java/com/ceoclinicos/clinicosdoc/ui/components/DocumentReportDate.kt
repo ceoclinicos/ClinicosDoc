@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.ceoclinicos.clinicosdoc.ui.theme.CardWhite
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 
 /** Fecha del informe: esquina superior derecha, encima del encabezado. */
@@ -48,6 +49,7 @@ fun DocumentReportDateEditor(
                 .align(Alignment.CenterEnd)
                 .widthIn(max = 200.dp)
                 .padding(bottom = 4.dp),
+            containerColor = CardWhite,
         )
     }
 }

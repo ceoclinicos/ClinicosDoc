@@ -30,6 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,10 +61,17 @@ import java.time.format.DateTimeFormatter
 private enum class AddPatientStep { CEDULA, FORMULARIO }
 
 @Composable
-fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
+fun AddPatientScreen(
+    onSaved: (Patient) -> Unit,
+    onBack: () -> Unit,
+    editPatientId: String? = null,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var step by remember { mutableStateOf(AddPatientStep.CEDULA) }
+    val editing = !editPatientId.isNullOrBlank()
+    var step by remember {
+        mutableStateOf(if (editing) AddPatientStep.FORMULARIO else AddPatientStep.CEDULA)
+    }
     var nombre by remember { mutableStateOf("") }
     var cedula by remember { mutableStateOf("") }
     var edad by remember { mutableStateOf("") }
@@ -75,7 +83,23 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
     var searching by remember { mutableStateOf(false) }
     var searchMessage by remember { mutableStateOf<String?>(null) }
     var foundPatients by remember { mutableStateOf<List<Patient>>(emptyList()) }
+    var existingCreatedAt by remember { mutableStateOf<Instant?>(null) }
+    var existingId by remember { mutableStateOf(editPatientId) }
     val dateFormatter = remember { DateTimeFormatter.ofPattern("dd/MM/yyyy") }
+
+    LaunchedEffect(editPatientId) {
+        val id = editPatientId ?: return@LaunchedEffect
+        val patient = PatientStorage.loadAll(context).firstOrNull { it.id == id } ?: return@LaunchedEffect
+        existingId = patient.id
+        existingCreatedAt = patient.createdAt
+        nombre = patient.nombre
+        cedula = patient.cedula
+        edad = patient.edad.toString()
+        whatsapp = patient.whatsapp
+        sexo = patient.sexo.takeIf { it.isNotBlank() }
+        fechaNacimiento = patient.fechaNacimiento
+        step = AddPatientStep.FORMULARIO
+    }
 
     fun validationError(): String? = when {
         nombre.isBlank() -> "Ingresa el nombre completo"
@@ -135,20 +159,23 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
         }
     }
 
-    AppScaffold(title = "Registrar paciente", onBack = onBack) { padding ->
+    AppScaffold(title = if (editing) "Editar paciente" else "Registrar paciente", onBack = onBack) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp),
         ) {
-            Text("Datos del paciente", style = MaterialTheme.typography.headlineMedium)
+            Text(
+                if (editing) "Editar datos" else "Datos del paciente",
+                style = MaterialTheme.typography.headlineMedium,
+            )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                if (step == AddPatientStep.CEDULA) {
-                    "Primero busca por cédula en la base de datos"
-                } else {
-                    "Completa los datos del paciente nuevo"
+                when {
+                    editing -> "Modifica los datos y guarda los cambios"
+                    step == AddPatientStep.CEDULA -> "Primero busca por cédula en la base de datos"
+                    else -> "Completa los datos del paciente nuevo"
                 },
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -159,15 +186,18 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
                 value = cedula,
                 onValueChange = {
                     cedula = it
-                    searchMessage = null
-                    foundPatients = emptyList()
-                    if (step == AddPatientStep.FORMULARIO) step = AddPatientStep.CEDULA
+                    if (!editing) {
+                        searchMessage = null
+                        foundPatients = emptyList()
+                        if (step == AddPatientStep.FORMULARIO) step = AddPatientStep.CEDULA
+                    }
                 },
                 hint = "Ej. V-12345678",
                 prefixIcon = Icons.Outlined.Badge,
                 isError = cedula.isBlank(),
                 errorMessage = if (cedula.isBlank()) "Requerido" else null,
             )
+            if (!editing) {
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedButton(
                 onClick = { searchByCedula() },
@@ -227,6 +257,8 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
                                 fechaNacimiento = patient.fechaNacimiento
                                 sexo = patient.sexo.takeIf { it == "Masculino" || it == "Femenino" }
                                 whatsapp = patient.whatsapp
+                                existingId = patient.id
+                                existingCreatedAt = patient.createdAt
                                 step = AddPatientStep.FORMULARIO
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -235,6 +267,7 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
                         }
                     }
                 }
+            }
             }
 
             if (step == AddPatientStep.FORMULARIO) {
@@ -293,7 +326,7 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
                 )
                 Spacer(modifier = Modifier.height(32.dp))
                 PremiumPrimaryButton(
-                    label = "Guardar paciente",
+                    label = if (editing) "Guardar cambios" else "Guardar paciente",
                     icon = Icons.Default.Check,
                     loading = saving,
                     onClick = {
@@ -307,17 +340,22 @@ fun AddPatientScreen(onSaved: (Patient) -> Unit, onBack: () -> Unit) {
                             val birth = fechaNacimiento!!
                             val age = edad.toIntOrNull() ?: PatientUtils.calcAge(birth)
                             val patient = Patient(
-                                id = PatientFirestoreId.from(cedula.trim(), nombre.trim()),
+                                id = existingId ?: PatientFirestoreId.from(cedula.trim(), nombre.trim()),
                                 nombre = nombre.trim(),
                                 cedula = cedula.trim(),
                                 edad = age,
                                 fechaNacimiento = birth,
-                                createdAt = Instant.now(),
+                                createdAt = existingCreatedAt ?: Instant.now(),
                                 whatsapp = whatsapp.trim(),
                                 sexo = sexo!!,
                             )
                             val saved = PatientStorage.upsert(context, patient)
                             saving = false
+                            Toast.makeText(
+                                context,
+                                if (editing) "Paciente actualizado" else "Paciente guardado",
+                                Toast.LENGTH_SHORT,
+                            ).show()
                             onSaved(saved)
                         }
                     },

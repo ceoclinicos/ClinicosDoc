@@ -60,24 +60,35 @@ export function sexOptionsHtml(selected?: string): string {
 }
 
 /** HTML de los 3 selects de fecha de nacimiento. */
-export function birthDateFieldsHtml(prefix = "nac"): string {
+export function birthDateFieldsHtml(prefix = "nac", iso?: string): string {
+  let day = 1;
+  let month = 1;
+  let year = 1990;
+  if (iso) {
+    const dt = new Date(iso);
+    if (!Number.isNaN(dt.getTime())) {
+      day = dt.getUTCDate();
+      month = dt.getUTCMonth() + 1;
+      year = dt.getUTCFullYear();
+    }
+  }
   return `
     <fieldset class="birth-date-fieldset">
       <legend>Fecha de nacimiento</legend>
       <div class="birth-date-row">
         <label>Día
           <select name="${prefix}Dia" id="${prefix}-dia" required>
-            ${dayOptionsHtml(1990, 1)}
+            ${dayOptionsHtml(year, month, day)}
           </select>
         </label>
         <label>Mes
           <select name="${prefix}Mes" id="${prefix}-mes" required>
-            ${monthOptionsHtml()}
+            ${monthOptionsHtml(month)}
           </select>
         </label>
         <label>Año
           <select name="${prefix}Anio" id="${prefix}-anio" required>
-            ${yearOptionsHtml(1990)}
+            ${yearOptionsHtml(year)}
           </select>
         </label>
       </div>

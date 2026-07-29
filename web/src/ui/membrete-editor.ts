@@ -22,13 +22,16 @@ export function membreteEditorHtml(membrete: PatientMembrete): string {
         </label>
       </div>
       <div class="grid-2">
+        <label>Cédula
+          <input type="text" name="mCedula" class="m-cedula" value="${escapeHtml(membrete.cedula || "")}" />
+        </label>
         <label>Sexo
           <input type="text" name="mSexo" class="m-sexo" value="${escapeHtml(membrete.sexo)}" />
         </label>
-        <label>F. nacimiento
-          <input type="text" name="mNac" class="m-nac" value="${escapeHtml(membrete.fechaNacimiento)}" placeholder="dd/MM/yyyy" />
-        </label>
       </div>
+      <label>F. nacimiento
+        <input type="text" name="mNac" class="m-nac" value="${escapeHtml(membrete.fechaNacimiento)}" placeholder="dd/MM/yyyy" />
+      </label>
     </fieldset>`;
 }
 
@@ -38,6 +41,7 @@ export function readMembreteFromEditor(root: HTMLElement, fallback: PatientMembr
   return {
     nombre: (box.querySelector(".m-nombre") as HTMLInputElement)?.value.trim() || fallback.nombre,
     edad: (box.querySelector(".m-edad") as HTMLInputElement)?.value.trim() || fallback.edad,
+    cedula: (box.querySelector(".m-cedula") as HTMLInputElement)?.value.trim() || fallback.cedula || "",
     sexo: (box.querySelector(".m-sexo") as HTMLInputElement)?.value.trim() || fallback.sexo,
     fechaNacimiento:
       (box.querySelector(".m-nac") as HTMLInputElement)?.value.trim() || fallback.fechaNacimiento,

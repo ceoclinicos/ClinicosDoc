@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
+import com.ceoclinicos.clinicosdoc.ui.theme.CardWhite
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 
 @Composable
@@ -47,12 +48,21 @@ fun PatientMembreteEditor(
                         value = membrete.nombre,
                         onValueChange = { onMembreteChange(membrete.copy(nombre = it)) },
                         modifier = Modifier.weight(1.2f),
+                        containerColor = CardWhite,
                     )
                     PremiumTextField(
                         label = "Edad",
                         value = membrete.edad,
                         onValueChange = { onMembreteChange(membrete.copy(edad = it)) },
                         modifier = Modifier.weight(0.6f),
+                        containerColor = CardWhite,
+                    )
+                    PremiumTextField(
+                        label = "Cédula",
+                        value = membrete.cedula,
+                        onValueChange = { onMembreteChange(membrete.copy(cedula = it)) },
+                        modifier = Modifier.weight(0.8f),
+                        containerColor = CardWhite,
                     )
                 }
                 Row(
@@ -64,6 +74,7 @@ fun PatientMembreteEditor(
                         value = membrete.sexo,
                         onValueChange = { onMembreteChange(membrete.copy(sexo = it)) },
                         modifier = Modifier.weight(0.8f),
+                        containerColor = CardWhite,
                     )
                     PremiumTextField(
                         label = "F. nacimiento",
@@ -71,6 +82,7 @@ fun PatientMembreteEditor(
                         onValueChange = { onMembreteChange(membrete.copy(fechaNacimiento = it)) },
                         hint = "dd/MM/yyyy",
                         modifier = Modifier.weight(1f),
+                        containerColor = CardWhite,
                     )
                 }
                 Text(
@@ -105,6 +117,8 @@ fun buildMembreteAnnotated(membrete: PatientMembrete): AnnotatedString = buildAn
     field("Nombre", membrete.displayNombre())
     append("   ")
     field("Edad", membrete.displayEdad())
+    append("   ")
+    field("C.I.", membrete.displayCedula())
     append("   ")
     field("Sexo", membrete.displaySexo())
     append("   ")

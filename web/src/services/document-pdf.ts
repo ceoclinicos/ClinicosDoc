@@ -29,10 +29,12 @@ export function buildMembreteFromPatient(p: {
   edad: number;
   sexo: string;
   fechaNacimiento: string;
+  cedula?: string;
 }): PatientMembrete {
   return {
     nombre: p.nombre,
     edad: String(p.edad),
+    cedula: p.cedula || "",
     sexo: p.sexo || "—",
     fechaNacimiento: formatBirth(p.fechaNacimiento),
     fecha: new Date().toLocaleDateString("es-VE"),
@@ -67,11 +69,16 @@ export function renderMembreteHtml(m?: PatientMembrete | null): string {
     : /año/i.test(edad)
       ? edad
       : `${edad} años`;
+  const cedula = (m.cedula || "").trim() || "—";
   return `
     <section class="print-membrete">
-      <div><strong>Paciente:</strong> ${escapeHtml(m.nombre || "—")}</div>
-      <div><strong>Edad:</strong> ${escapeHtml(edadLabel)} · <strong>Sexo:</strong> ${escapeHtml(m.sexo || "—")}</div>
-      <div><strong>Fecha de nacimiento:</strong> ${escapeHtml(m.fechaNacimiento || "—")}</div>
+      <div class="print-membrete-line">
+        <span><strong>Nombre:</strong> ${escapeHtml(m.nombre || "—")}</span>
+        <span><strong>Edad:</strong> ${escapeHtml(edadLabel)}</span>
+        <span><strong>C.I.:</strong> ${escapeHtml(cedula)}</span>
+        <span><strong>Sexo:</strong> ${escapeHtml(m.sexo || "—")}</span>
+        <span><strong>Fecha de nacimiento:</strong> ${escapeHtml(m.fechaNacimiento || "—")}</span>
+      </div>
     </section>
   `;
 }
@@ -171,7 +178,7 @@ function buildRecetaLandscapeHtml(options: {
     <div class="receta-patient">
       <strong>Nombre:</strong> ${escapeHtml(m?.nombre || "—")}
       &nbsp;&nbsp;Edad: ${escapeHtml(m?.edad ? `${m.edad}` : "—")}
-      &nbsp;&nbsp;C.I.: ${escapeHtml(options.patientCedula || "—")}
+      &nbsp;&nbsp;C.I.: ${escapeHtml(m?.cedula || options.patientCedula || "—")}
     </div>`;
   const footer = `
     <div class="receta-footer">
@@ -278,8 +285,10 @@ export function printClinicalDocument(doc: {
     .receta-med-line { margin-top: 0.15em; font-weight: 400; }
     .receta-patient {
       font-size: 10.5pt;
-      margin-bottom: 0.75rem;
+      margin-bottom: 1.6rem;
       font-weight: 400;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
     }
     .receta-patient strong { font-weight: 700; }
     .receta-footer {
@@ -295,6 +304,12 @@ export function printClinicalDocument(doc: {
     .print-date-row { text-align: right; font-size: 10.5pt; margin-bottom: 0.5rem; }
     .print-title { text-align: center; font-size: 13pt; letter-spacing: 0.03em; margin: 0.75rem 0 1rem; font-weight: 700; }
     .print-membrete { font-size: 10.5pt; margin: 0.5rem 0 0.75rem; }
+    .print-membrete-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 1rem;
+      line-height: 1.45;
+    }
     .print-rule { border: 0; border-top: 1px solid #999; margin: 0.75rem 0 1rem; }
     .print-section h3 { font-size: 11pt; margin: 0.9rem 0 0.25rem; color: #111; font-weight: 700; }
     .print-body { white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 10.5pt; flex: 1; }
@@ -408,7 +423,7 @@ const PRINT_CSS = `
   .receta-med::before { content: "•"; position: absolute; left: 0; font-weight: 700; }
   .receta-med strong { font-weight: 700; }
   .receta-med-line { margin-top: 0.15em; font-weight: 400; }
-  .receta-patient { font-size: 10.5pt; margin-bottom: 0.75rem; font-weight: 400; }
+  .receta-patient { font-size: 10.5pt; margin-bottom: 1.6rem; font-weight: 400; line-height: 1.45; overflow-wrap: anywhere; }
   .receta-patient strong { font-weight: 700; }
   .receta-footer { margin-top: auto; padding-top: 1rem; font-size: 10.5pt; }
   .print-header { text-align: center; margin-bottom: 0.75rem; }
@@ -419,6 +434,7 @@ const PRINT_CSS = `
   .print-date-row { text-align: right; font-size: 10.5pt; margin-bottom: 0.5rem; }
   .print-title { text-align: center; font-size: 13pt; letter-spacing: 0.03em; margin: 0.75rem 0 1rem; font-weight: 700; }
   .print-membrete { font-size: 10.5pt; margin: 0.5rem 0 0.75rem; }
+  .print-membrete-line { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; line-height: 1.45; }
   .print-rule { border: 0; border-top: 1px solid #999; margin: 0.75rem 0 1rem; }
   .print-section h3 { font-size: 11pt; margin: 0.9rem 0 0.25rem; color: #111; font-weight: 700; }
   .print-body { white-space: pre-wrap; font-family: inherit; margin: 0; font-size: 10.5pt; flex: 1; }

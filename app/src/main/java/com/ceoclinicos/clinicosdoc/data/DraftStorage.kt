@@ -59,6 +59,7 @@ object DraftStorage {
         generatedContent = generatedContent,
         membreteNombre = membrete?.nombre,
         membreteEdad = membrete?.edad,
+        membreteCedula = membrete?.cedula,
         membreteSexo = membrete?.sexo,
         membreteFechaNacimiento = membrete?.fechaNacimiento,
         membreteFecha = membrete?.fecha,
@@ -80,6 +81,7 @@ object DraftStorage {
         membrete = if (
             membreteNombre != null ||
             membreteEdad != null ||
+            membreteCedula != null ||
             membreteSexo != null ||
             membreteFechaNacimiento != null ||
             membreteFecha != null
@@ -87,6 +89,7 @@ object DraftStorage {
             PatientMembrete(
                 nombre = membreteNombre.orEmpty(),
                 edad = membreteEdad.orEmpty(),
+                cedula = membreteCedula.orEmpty().ifBlank { patientCedula },
                 sexo = membreteSexo.orEmpty(),
                 fechaNacimiento = membreteFechaNacimiento.orEmpty(),
                 fecha = membreteFecha.orEmpty(),

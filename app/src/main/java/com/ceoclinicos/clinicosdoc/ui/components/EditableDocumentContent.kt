@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.ceoclinicos.clinicosdoc.ui.theme.CardWhite
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
@@ -149,6 +150,7 @@ fun EditableDocumentContent(
                             )
                         },
                         hint = "Título sección:",
+                        containerColor = CardWhite,
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     if (VitalSignsParser.isPhysicalExam(section.title)) {
@@ -183,6 +185,7 @@ fun EditableDocumentContent(
                             hint = "General, cardiopulmonar, abdomen…",
                             singleLine = false,
                             maxLines = 12,
+                            containerColor = CardWhite,
                         )
                     } else {
                         PremiumTextField(
@@ -198,6 +201,7 @@ fun EditableDocumentContent(
                             hint = "Contenido:",
                             singleLine = false,
                             maxLines = 12,
+                            containerColor = CardWhite,
                         )
                     }
                     if (onRegenerateSection != null) {
