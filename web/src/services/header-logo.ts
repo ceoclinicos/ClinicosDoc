@@ -1,10 +1,11 @@
-/** Tamaños de salida del logo (cuadrados). */
-export const ALLOWED_LOGO_SIZES = new Set([256, 512]);
-const MIN_SIDE = 64;
+/** Logo de encabezado: cuadrado final entre 256×256 y 1024×1024 px. */
+export const MIN_LOGO_SIDE = 256;
+export const MAX_LOGO_SIDE = 1024;
 
 /**
- * Recorta al centro, escala a 256 o 512 y devuelve JPEG en base64 (sin prefijo data:).
- * Acepta 256, 512, 1024 u otras imágenes.
+ * Acepta la imagen completa. Si es rectangular, crea un cuadrado del lado mayor
+ * y rellena el resto en blanco (ej. 600×800 → 800×800 con bandas blancas).
+ * Si el lado mayor supera 1024, escala proporcionalmente.
  */
 export function fileToLogoBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -14,23 +15,42 @@ export function fileToLogoBase64(file: File): Promise<string> {
       try {
         const w = img.naturalWidth;
         const h = img.naturalHeight;
-        if (w < MIN_SIDE || h < MIN_SIDE) {
-          reject(new Error(`La imagen es demasiado pequeña (mínimo ${MIN_SIDE}×${MIN_SIDE} px)`));
+        if (w < 1 || h < 1) {
+          reject(new Error("No se pudo leer la imagen"));
           return;
         }
-        const side = Math.min(w, h);
-        const sx = Math.floor((w - side) / 2);
-        const sy = Math.floor((h - side) / 2);
-        const target = side >= 512 ? 512 : 256;
+        const longest = Math.max(w, h);
+        if (longest < MIN_LOGO_SIDE) {
+          reject(
+            new Error(
+              `La imagen es demasiado pequeña (mínimo ${MIN_LOGO_SIDE} px en el lado mayor)`,
+            ),
+          );
+          return;
+        }
+
+        const scale = longest > MAX_LOGO_SIDE ? MAX_LOGO_SIDE / longest : 1;
+        const drawW = Math.max(1, Math.round(w * scale));
+        const drawH = Math.max(1, Math.round(h * scale));
+        const side = Math.min(
+          MAX_LOGO_SIDE,
+          Math.max(MIN_LOGO_SIDE, Math.max(drawW, drawH)),
+        );
+
         const canvas = document.createElement("canvas");
-        canvas.width = target;
-        canvas.height = target;
+        canvas.width = side;
+        canvas.height = side;
         const ctx = canvas.getContext("2d");
         if (!ctx) {
           reject(new Error("No se pudo procesar la imagen"));
           return;
         }
-        ctx.drawImage(img, sx, sy, side, side, 0, 0, target, target);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, side, side);
+        const left = Math.floor((side - drawW) / 2);
+        const top = Math.floor((side - drawH) / 2);
+        ctx.drawImage(img, 0, 0, w, h, left, top, drawW, drawH);
+
         const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
         const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, "");
         resolve(base64);

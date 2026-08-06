@@ -25,9 +25,8 @@ object HeaderStorage {
     private const val KEY = "document_headers_json"
     private const val INITIALIZED_KEY = "headers_initialized"
     const val MAX_HEADERS = 4
-    /** Tamaños de salida del logo (cuadrados). */
-    val ALLOWED_LOGO_SIZES = setOf(256, 512)
-    private const val MIN_LOGO_SIDE = 64
+    private const val MIN_LOGO_SIDE = 256
+    private const val MAX_LOGO_SIDE = 1024
     private const val JPEG_QUALITY = 85
     private val gson = Gson()
 
@@ -132,8 +131,9 @@ object HeaderStorage {
     }
 
     /**
-     * Recorta al centro (cuadrado), escala a 256 o 512 y guarda JPEG + base64.
-     * Acepta 256, 512, 1024 u otras imágenes (se ajustan automáticamente).
+     * Acepta la imagen completa (cuadrada o rectangular).
+     * Si es rectangular, crea un cuadrado del lado mayor y rellena el resto en blanco.
+     * El lado del cuadrado final queda entre 256 y 1024 px (escala si hace falta).
      */
     fun persistLogo(context: Context, uri: Uri, headerId: String): LogoPersistResult {
         val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
@@ -142,38 +142,48 @@ object HeaderStorage {
         try {
             val w = bitmap.width
             val h = bitmap.height
-            if (w < MIN_LOGO_SIDE || h < MIN_LOGO_SIDE) {
-                error("La imagen es demasiado pequeña (mínimo ${MIN_LOGO_SIDE}×${MIN_LOGO_SIDE} px)")
+            if (w < 1 || h < 1) error("No se pudo leer la imagen")
+
+            val longest = maxOf(w, h)
+            if (longest < MIN_LOGO_SIDE) {
+                error("La imagen es demasiado pequeña (mínimo ${MIN_LOGO_SIDE} px en el lado mayor)")
             }
-            val side = minOf(w, h)
-            val left = (w - side) / 2
-            val top = (h - side) / 2
-            val square = Bitmap.createBitmap(bitmap, left, top, side, side)
-            val target = when {
-                side >= 512 -> 512
-                side >= 256 -> 256
-                else -> 256
-            }
-            val scaled = if (square.width == target) {
-                square
+
+            // Escala para que el cuadrado final no pase de 1024
+            val scale = if (longest > MAX_LOGO_SIDE) {
+                MAX_LOGO_SIDE.toFloat() / longest
             } else {
-                Bitmap.createScaledBitmap(square, target, target, true).also {
-                    if (it !== square) square.recycle()
-                }
+                1f
             }
-            val bytes = ByteArrayOutputStream().use { out ->
-                if (!scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
-                    if (scaled !== bitmap) scaled.recycle()
-                    error("No se pudo comprimir el logo")
+            val drawW = (w * scale).toInt().coerceAtLeast(1)
+            val drawH = (h * scale).toInt().coerceAtLeast(1)
+            val side = maxOf(drawW, drawH).coerceIn(MIN_LOGO_SIDE, MAX_LOGO_SIDE)
+
+            val square = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(square)
+            canvas.drawColor(android.graphics.Color.WHITE)
+            val left = (side - drawW) / 2f
+            val top = (side - drawH) / 2f
+            val src = android.graphics.Rect(0, 0, w, h)
+            val dst = android.graphics.RectF(left, top, left + drawW, top + drawH)
+            val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
+            canvas.drawBitmap(bitmap, src, dst, paint)
+
+            try {
+                val bytes = ByteArrayOutputStream().use { out ->
+                    if (!square.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
+                        error("No se pudo comprimir el logo")
+                    }
+                    out.toByteArray()
                 }
-                if (scaled !== bitmap) scaled.recycle()
-                out.toByteArray()
+                val logosDir = File(context.filesDir, "header_logos").apply { mkdirs() }
+                val dest = File(logosDir, "$headerId.jpg")
+                dest.writeBytes(bytes)
+                val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                return LogoPersistResult(path = dest.absolutePath, base64 = base64)
+            } finally {
+                square.recycle()
             }
-            val logosDir = File(context.filesDir, "header_logos").apply { mkdirs() }
-            val dest = File(logosDir, "$headerId.jpg")
-            dest.writeBytes(bytes)
-            val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            return LogoPersistResult(path = dest.absolutePath, base64 = base64)
         } finally {
             bitmap.recycle()
         }

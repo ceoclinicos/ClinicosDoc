@@ -86,7 +86,6 @@ service cloud.firestore {
     }
 
     // ── Clínicos Doc (consultorio + muro humanitario) ──
-    // Login por cédula/PIN sin Firebase Auth — restringir cuando migres a Auth.
     match /clinicosdoc_user/{userId}/{document=**} {
       allow read, write: if true;
     }
@@ -94,7 +93,6 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Pacientes globales consultorio (app Android)
     match /clinicosdoc_patients/{patientKey} {
       allow read, write: if true;
       match /documents/{docId} {
@@ -102,7 +100,6 @@ service cloud.firestore {
       }
     }
 
-    // Registro médico compartido (web)
     match /pacientes/{cedula} {
       allow read, write: if true;
       match /atenciones/{atencionId} {
@@ -113,21 +110,19 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // Muro Ayudemos — solicitudes públicas
     match /solicitudes/{solicitudId} {
       allow read, write: if true;
     }
 
-    // Ficha médica de emergencia (QR público)
-    match /fichas_emergencia/{fichaId} {
+    // ── Modo empresa / centro de salud ──
+    match /clinicosdoc_clinics/{clinicId} {
       allow read, write: if true;
+      match /{document=**} {
+        allow read, write: if true;
+      }
     }
-    match /fichas_emergencia_cedula/{cedula} {
+    match /clinicosdoc_clinic_invites/{code} {
       allow read, write: if true;
-    }
-
-    match /pin_reset_tokens/{tokenId} {
-      allow read, write: if false;
     }
   }
 }

@@ -26,6 +26,12 @@ object FirestorePaths {
      */
     const val GLOBAL_PATIENTS = "${PREFIX}patients"
 
+    /** Centros de salud / clínicas (modo empresa). */
+    const val CLINICS = "${PREFIX}clinics"
+    const val CLINIC_INVITES = "${PREFIX}clinic_invites"
+    const val SUB_MEMBERS = "members"
+    const val SUB_CLINIC_MEMBERSHIPS = "clinic_memberships"
+
     /** Registro portal pacientes (modo paciente / ficha emergencia). */
     const val PORTAL_PACIENTES = "pacientes"
     const val FICHAS_EMERGENCIA = "fichas_emergencia"

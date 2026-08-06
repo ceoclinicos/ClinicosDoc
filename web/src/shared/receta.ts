@@ -22,10 +22,8 @@ export const RECETA_PRESENTACIONES = [
 
 export const RECETA_MOLDE_RECIPE = [
   "Amoxicilina + Ácido Clavulánico 875 mg / 125 mg (Tabletas)",
-  "Dispóngase: 14 tabletas.",
   "",
   "Ibuprofeno 400 mg (Tabletas)",
-  "Dispóngase: 20 tabletas.",
 ].join("\n");
 
 /** Títulos válidos de la sección Recipe (paridad PDF Android). */
@@ -63,7 +61,7 @@ export function recetaPromptBlock(
     "",
     "SECCIÓN Recipe (lo que se dispensa en farmacia):",
     "- Por cada medicamento: nombre + concentración + forma en una línea.",
-    '- Debajo: "Dispóngase: N tabletas/frasco/…".',
+    '- Debajo (opcional): "Dispóngase: N tabletas/frasco/…".',
     "- Ejemplo de estilo:",
     "---",
     moldeRecipe,

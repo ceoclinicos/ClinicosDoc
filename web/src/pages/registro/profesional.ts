@@ -16,6 +16,7 @@ import {
   setAtencionCedula,
   setProfessionalSession,
 } from "../../registro/session";
+import { clearClinicSession } from "../../clinic/session";
 import type { AtencionRegistro, PacienteRegistro, ProfesionalSession } from "../../registro/models";
 import { validarMpps } from "../../services/mpps-validation";
 import { ESPECIALIDADES_MEDICAS_VE } from "../../registro/especialidades";
@@ -189,6 +190,7 @@ function bindProfesionalPage(el: HTMLElement): void {
             String(fd.get("cedula")),
             String(fd.get("pin")),
           );
+          clearClinicSession();
           setProfessionalSession(s);
           seedDoctorFromSession(s);
           try {
@@ -248,6 +250,7 @@ function bindProfesionalPage(el: HTMLElement): void {
             nacionalidad: esVe ? "Venezuela" : "Otros",
           });
           const s = await loginProfesional(cedula, String(fd.get("pin")));
+          clearClinicSession();
           setProfessionalSession(s);
           seedDoctorFromSession(s);
           try {

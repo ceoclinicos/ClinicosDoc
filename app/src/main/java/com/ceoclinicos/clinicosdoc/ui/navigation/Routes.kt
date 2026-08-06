@@ -4,6 +4,7 @@ object Routes {
     const val AUTH = "auth"
     const val MAIN = "main"
     const val SETTINGS = "settings"
+    const val JOIN_CLINIC = "join_clinic"
     const val TEMPLATES = "templates"
     const val TEMPLATES_RECETAS = "templates_recetas"
     const val PLANTILLAS_HUB = "plantillas_hub"

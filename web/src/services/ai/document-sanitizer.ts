@@ -24,7 +24,33 @@ export function sanitizeDocumentContent(
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   text = reorderPhysicalExamSystems(text, examSystems);
+  text = stripPlaceholderVitalPhrases(text);
   return text;
+}
+
+/** Elimina «signos vitales no tomados» y frases equivalentes sin valores reales. */
+function stripPlaceholderVitalPhrases(content: string): string {
+  const placeholder =
+    /^\s*(signos\s+vitales|s\.?\s*v\.?)\s*[:\-]?\s*(no\s+tomad[oa]s?|no\s+aportad[oa]s?|no\s+registrad[oa]s?|no\s+disponibles?|ausentes?|sin\s+datos|n\/?a|—|-|\.{2,}|pendientes?)\s*\.?$/i;
+  const inline =
+    /\b(signos\s+vitales|s\.?\s*v\.?)\s*[:\-]?\s*(no\s+tomad[oa]s?|no\s+aportad[oa]s?|no\s+registrad[oa]s?|no\s+disponibles?|ausentes?)\b\.?/gi;
+  const hasNumericVitals = /(TA:|FR:|FC:|SaTO2:)/i;
+  return content
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return line;
+      if (placeholder.test(trimmed)) return null;
+      if (inline.test(trimmed) && !hasNumericVitals.test(trimmed)) {
+        const cleaned = trimmed.replace(inline, "").trim().replace(/^[,.:\-|]+|[,.:\-|]+$/g, "").trim();
+        return cleaned || null;
+      }
+      return line;
+    })
+    .filter((l): l is string => l != null)
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /**

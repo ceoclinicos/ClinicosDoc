@@ -13,25 +13,49 @@ registerRoute({
     const el = page(
       "Recuperar acceso",
       `
-      <p class="lead">Ingrese su cédula. Si tiene correo registrado, le enviaremos un enlace para restablecer su PIN (contraseña).</p>
+      <p class="lead" id="olvide-lead">Ingrese su cédula. Si tiene correo registrado, le enviaremos un enlace para restablecer su PIN.</p>
       <form class="form" id="form-olvide-pin">
         <label>Tipo de cuenta
-          <select name="tipo">
+          <select name="tipo" id="tipo-cuenta">
             <option value="paciente" ${tipoPref === "paciente" ? "selected" : ""}>Paciente</option>
             <option value="profesional" ${tipoPref === "profesional" || tipoPref === "medico" ? "selected" : ""}>Médico (web)</option>
             <option value="app" ${tipoPref === "app" ? "selected" : ""}>Médico (app Android)</option>
+            <option value="clinica" ${tipoPref === "clinica" || tipoPref === "centro" ? "selected" : ""}>Centro de salud / clínica</option>
           </select>
         </label>
-        <label>Cédula<input name="cedula" required placeholder="Ej. 23536843" inputmode="numeric" /></label>
+        <label id="id-label">Cédula<input name="cedula" id="id-input" required placeholder="Ej. 23536843" /></label>
         <button type="submit" class="btn btn-primary">Enviar enlace</button>
       </form>
       <p class="muted">
         <a href="#/paciente">Portal paciente</a> ·
-        <a href="#/profesional">Portal médico</a>
+        <a href="#/profesional">Portal médico</a> ·
+        <a href="#/clinica">Modo empresa</a>
       </p>
       <div id="olvide-msg"></div>
       `,
     );
+
+    const tipoSelect = el.querySelector("#tipo-cuenta") as HTMLSelectElement;
+    const idLabel = el.querySelector("#id-label") as HTMLElement;
+    const lead = el.querySelector("#olvide-lead") as HTMLElement;
+
+    function syncTipoUi(): void {
+      const isClinic = tipoSelect.value === "clinica";
+      if (isClinic) {
+        lead.textContent =
+          "Ingrese el RIF del centro. Si tiene correo administrativo, le enviaremos un enlace para restablecer el PIN.";
+        idLabel.innerHTML =
+          'RIF o código del centro<input name="cedula" id="id-input" required placeholder="Ej. J123456789" />';
+      } else {
+        lead.textContent =
+          "Ingrese su cédula. Si tiene correo registrado, le enviaremos un enlace para restablecer su PIN.";
+        idLabel.innerHTML =
+          'Cédula<input name="cedula" id="id-input" required placeholder="Ej. 23536843" inputmode="numeric" />';
+      }
+    }
+
+    tipoSelect.addEventListener("change", syncTipoUi);
+    syncTipoUi();
 
     el.querySelector("#form-olvide-pin")?.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -44,6 +68,8 @@ registerRoute({
         const text = await requestPinReset(String(fd.get("cedula")), String(fd.get("tipo") || "paciente"));
         msg.innerHTML = `<p class="status-badge status-ok">${text}</p>`;
         (e.target as HTMLFormElement).reset();
+        tipoSelect.value = tipoPref === "clinica" ? "clinica" : tipoSelect.value;
+        syncTipoUi();
       } catch (err) {
         const text = err instanceof Error ? err.message : "Error";
         msg.innerHTML = `<p class="status-badge status-error">${text}</p>

@@ -24,6 +24,7 @@ import {
   pushTemplate,
   syncQuiet,
 } from "./cloud-sync";
+import { enqueueClinicDocumentPush } from "./clinic-doc-sync";
 
 const KEY_TEMPLATES = "templates";
 const KEY_HEADERS = "headers";
@@ -268,6 +269,9 @@ export function saveDocument(doc: ClinicalDocument): ClinicalDocument {
   const all = loadDocuments().filter((d) => d.id !== doc.id);
   saveJson(KEY_DOCUMENTS, [doc, ...all]);
   if (canSync()) syncQuiet(() => pushDocument(doc));
+  if (doc.clinicId) {
+    enqueueClinicDocumentPush(doc.clinicId, doc, doc.doctorNombre || "");
+  }
   return doc;
 }
 

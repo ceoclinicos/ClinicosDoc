@@ -2,7 +2,7 @@ package com.ceoclinicos.clinicosdoc.model
 
 /**
  * Molde y pautas de Receta médica (IA + plantilla editable).
- * Hoja horizontal: mitad Recipe (dispóngase) + mitad Indicaciones.
+ * Hoja horizontal: mitad Recipe (fármacos) + mitad Indicaciones.
  */
 object RecetaDefaults {
     const val SECTION_RECIPE = "Recipe"
@@ -31,10 +31,8 @@ object RecetaDefaults {
 
     val MOLDE_RECIPE = """
 Amoxicilina + Ácido Clavulánico 875 mg / 125 mg (Tabletas)
-Dispóngase: 14 tabletas.
 
 Ibuprofeno 400 mg (Tabletas)
-Dispóngase: 20 tabletas.
 """.trimIndent()
 
     val MOLDE_INDICACIONES = """
@@ -66,7 +64,7 @@ Tomar 1 tableta vía oral cada 8 horas por 5 días (con alimentos).
         appendLine()
         appendLine("SECCIÓN Recipe (lo que se dispensa en farmacia):")
         appendLine("- Por cada medicamento: nombre + concentración + forma farmacéutica en una línea.")
-        appendLine("- Debajo: \"Dispóngase: N tabletas/frasco/…\" (cantidad a entregar).")
+        appendLine("- Debajo (opcional): \"Dispóngase: N tabletas/frasco/…\" (cantidad a entregar).")
         appendLine("- Ejemplo de estilo (respétalo):")
         appendLine("---")
         appendLine(moldeRecipe)

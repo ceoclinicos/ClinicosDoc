@@ -53,7 +53,7 @@ export async function confirmPinReset(
   token: string,
   secret: string,
   modo: "pin" | "password" = "pin",
-): Promise<string> {
+): Promise<{ message: string; accountKind?: string }> {
   let res: Response;
   try {
     const body =
@@ -74,5 +74,8 @@ export async function confirmPinReset(
 
   const { data, raw } = await readApiResponse(res);
   if (!res.ok) fail(res, data, raw, "No se pudo restablecer el acceso");
-  return data.message || "Actualizado.";
+  return {
+    message: data.message || "Actualizado.",
+    accountKind: (data as ApiPayload & { accountKind?: string }).accountKind,
+  };
 }

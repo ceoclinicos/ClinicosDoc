@@ -84,7 +84,10 @@ export function buildPhysicalExamBlock(
   if (vitalsSystem) {
     lines.push("- Signos vitales (si dictados): línea aparte al inicio, solo valores presentes.");
     lines.push("  Formato: TA: 120/80 mmHg | FR: 18 rpm | FC: 82 lpm | SaTO2: 98%");
-    lines.push("- Signos no dictados: omitirlos (no escribas 0). Si no hay ningún signo, no pongas línea de vitales.");
+    lines.push(
+      "- Signos no dictados: OMITIR por completo. NO escribas «signos vitales no tomados», «no aportados», «ausentes» ni similares.",
+    );
+    lines.push("- Si el dictado no trae ningún signo vital, NO pongas ninguna línea de signos vitales.");
   }
   lines.push(
     "- Coloca cada signo en el sistema correcto (ej. Rovsing → Abdomen).",

@@ -10,6 +10,10 @@ export const FirestorePaths = {
   SUB_HEADERS: "headers",
   SUB_PHYSICAL_EXAM: "physical_exam_systems",
   SUB_DRAFTS: "drafts",
+  /** Centros de salud / clínicas (modo empresa) */
+  CLINICS: "clinicosdoc_clinics",
+  CLINIC_INVITES: "clinicosdoc_clinic_invites",
+  SUB_MEMBERS: "members",
 } as const;
 
 export type DocumentType =
@@ -98,6 +102,10 @@ export interface ClinicalDocument {
   membrete?: PatientMembrete;
   /** Documento clínico de origen (informe/HC). */
   sourceDocumentId?: string;
+  /** Si se redactó con molde de un centro; filtra la vista de esa clínica. */
+  clinicId?: string;
+  clinicName?: string;
+  doctorNombre?: string;
 }
 
 export const DocumentReportTitles: Record<DocumentType, string> = {

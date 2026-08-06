@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ViewList
 import androidx.compose.material3.Card
@@ -31,6 +32,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,7 +49,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ceoclinicos.clinicosdoc.data.DoctorStorage
+import com.ceoclinicos.clinicosdoc.data.OnboardingStorage
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
+import com.ceoclinicos.clinicosdoc.ui.components.RedactarTutorialDialog
 import com.ceoclinicos.clinicosdoc.ui.theme.CardWhite
 import com.ceoclinicos.clinicosdoc.ui.theme.DividerColor
 import com.ceoclinicos.clinicosdoc.ui.theme.Navy
@@ -65,9 +69,27 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     var doctor by remember { mutableStateOf<DoctorProfile?>(null) }
+    var showTutorial by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         doctor = DoctorStorage.loadProfile(context)
+        if (!OnboardingStorage.hasSeenRedactarTutorial(context)) {
+            showTutorial = true
+        }
+    }
+
+    if (showTutorial) {
+        RedactarTutorialDialog(
+            onDismiss = {
+                OnboardingStorage.markRedactarTutorialSeen(context)
+                showTutorial = false
+            },
+            onStartRedactar = {
+                OnboardingStorage.markRedactarTutorialSeen(context)
+                showTutorial = false
+                onRedactar()
+            },
+        )
     }
 
     Column(
@@ -99,6 +121,16 @@ fun HomeScreen(
         )
         Spacer(modifier = Modifier.height(32.dp))
         RedactarHero(onTap = onRedactar)
+        Spacer(modifier = Modifier.height(12.dp))
+        // TODO: ocultar cuando el tutorial esté validado
+        OutlinedButton(
+            onClick = { showTutorial = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Outlined.School, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Probar tutorial")
+        }
         Spacer(modifier = Modifier.height(28.dp))
         Text("Accesos rápidos", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(16.dp))

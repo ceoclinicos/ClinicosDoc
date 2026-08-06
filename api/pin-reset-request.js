@@ -87,8 +87,29 @@ async function findAppMedico(db, inputCedula) {
   return null;
 }
 
+async function findClinica(db, inputRif) {
+  const raw = String(inputRif || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s.-]/g, "");
+  if (!raw || raw.length < 5) return null;
+  const clinicId = `clinic_${raw.toLowerCase()}`;
+  const s = await db.collection("clinicosdoc_clinics").doc(clinicId).get();
+  if (!s.exists) return null;
+  return {
+    snap: s,
+    docId: clinicId,
+    collection: "clinicosdoc_clinics",
+    secretKind: "pin",
+    accountKind: "clinica",
+  };
+}
+
 async function findAccount(db, inputCedula, tipo) {
   const t = String(tipo || "auto").toLowerCase();
+  if (t === "clinica" || t === "centro" || t === "empresa") {
+    return findClinica(db, inputCedula);
+  }
   if (t === "paciente") return findPaciente(db, inputCedula);
   if (t === "profesional" || t === "medico-web") return findProfesional(db, inputCedula);
   if (t === "app" || t === "medico-app") return findAppMedico(db, inputCedula);
@@ -98,7 +119,7 @@ async function findAccount(db, inputCedula, tipo) {
       (await findAppMedico(db, inputCedula))
     );
   }
-  // auto: paciente → profesional → app
+  // auto: paciente → profesional → app (no clínica: requiere RIF explícito)
   return (
     (await findPaciente(db, inputCedula)) ||
     (await findProfesional(db, inputCedula)) ||
@@ -114,7 +135,11 @@ module.exports = async function handler(req, res) {
   const body = parseBody(req);
   const inputCedula = String(body.cedula || "").trim();
   const tipo = String(body.tipo || "auto").trim();
-  if (!inputCedula) return res.status(400).json({ error: "Cédula requerida" });
+  if (!inputCedula) {
+    return res.status(400).json({
+      error: tipo === "clinica" || tipo === "centro" ? "RIF requerido" : "Cédula requerida",
+    });
+  }
 
   try {
     const db = getAdmin().firestore();
@@ -125,7 +150,14 @@ module.exports = async function handler(req, res) {
     const email = pickEmail(p);
     if (!email) return res.status(200).json(OK_MSG);
 
-    const cedula = String(p.cedula || found.docId);
+    const cedula =
+      found.accountKind === "clinica"
+        ? String(p.rif || found.docId)
+        : String(p.cedula || found.docId);
+    const displayName =
+      found.accountKind === "clinica"
+        ? String(p.nombre || "Centro de salud")
+        : p.nombre;
     const token = crypto.randomUUID();
     const now = Date.now();
     await db
@@ -144,9 +176,9 @@ module.exports = async function handler(req, res) {
       });
 
     const site = (process.env.SITE_URL || "https://clinicosdoc.com").replace(/\/$/, "");
-    const link = `${site}/#/restablecer-pin?token=${encodeURIComponent(token)}&modo=${found.secretKind}`;
+    const link = `${site}/#/restablecer-pin?token=${encodeURIComponent(token)}&modo=${found.secretKind}&cuenta=${found.accountKind}`;
 
-    await sendPinResetEmail(email, p.nombre, link, found.secretKind);
+    await sendPinResetEmail(email, displayName, link, found.secretKind);
     return res.status(200).json(OK_MSG);
   } catch (err) {
     console.error("pin-reset-request", err);

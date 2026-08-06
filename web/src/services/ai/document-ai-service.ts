@@ -167,7 +167,8 @@ function buildPrompt(
       MOTIVO_CONSULTA_STYLE,
       `- Enfermedad actual: narrativa al estilo del ejemplo. Inicie con paciente ${sexoTexto} de ${patient.edad} años; natural/procedente, diagnóstico de base o sin patológicos, inicio con fecha, hechos del dictado y cierre en el centro. DEBE ir bajo [[SECTION:Enfermedad actual]].`,
       "- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto. PROHIBIDO omitir sistemas activos no mencionados en el dictado.",
-      "- Signos vitales: solo si hay valores dictados; si no, omitir esa línea.",
+      "- Signos vitales: solo si hay valores dictados; si no, omitir esa línea por completo.",
+      "- PROHIBIDO escribir «signos vitales no tomados», «no aportados» o similares cuando no hay valores.",
       "- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.",
       "- Plan (si está en la plantilla): lista numerada de conducta/tratamiento (ej. observación, fármacos EV, control de signos). Solo según dictado.",
       ...(template.documentType === "reposo"
@@ -554,7 +555,8 @@ Usa terminología médica apropiada para Venezuela/Latinoamérica.`.trim();
       "- Incluye TODOS los sistemas activos, aunque el dictado solo mencione uno.",
       "- Sistemas no dictados → texto base intacto. Solo edita los mencionados.",
       "- Signos vitales SOLO si hay valores dictados (ej. TA: 120/80 mmHg | FC: 82 lpm).",
-      "- Signos en 0 o no dictados: omitirlos.",
+      "- Signos no dictados: omitir por completo. PROHIBIDO «no tomados», «no aportados» o similares.",
+      "- Si no hay signos en el dictado, no menciones signos vitales en absoluto.",
     );
     if (physicalExamBlock) {
       lines.push("", physicalExamBlock);

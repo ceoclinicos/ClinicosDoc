@@ -1,7 +1,9 @@
 import { registerRoute, isMedicoLoggedIn, navigate } from "../app/router";
 import { getPatientSession, getProfessionalSession } from "../registro/session";
 import { loadDocuments, loadDrafts } from "../services/clinical-store";
+import { hasSeenRedactarTutorial, resetRedactarTutorial } from "../services/onboarding";
 import { DocumentTypeLabels } from "../shared/models";
+import { openRedactarTutorial } from "../ui/redactar-tutorial";
 import { bindNavButtons, page } from "./helpers";
 
 function saludoHora(): string {
@@ -54,6 +56,11 @@ function medicoHome(): HTMLElement {
       <span class="home-redactar-cta">Redactar →</span>
     </button>
 
+    <!-- TODO: ocultar cuando el tutorial esté validado -->
+    <button type="button" class="btn btn-ghost" id="btn-probar-tutorial" style="margin:0.75rem 0 0;width:100%">
+      Probar tutorial
+    </button>
+
     <h2 class="home-section-title">Accesos rápidos</h2>
     <div class="grid-2">
       <button type="button" class="tile tile-home" data-nav="/plantillas">
@@ -88,7 +95,17 @@ function medicoHome(): HTMLElement {
   `;
 
   const sheet = el.querySelector("#doc-type-sheet") as HTMLDialogElement;
+  const openTutorial = () => {
+    openRedactarTutorial({
+      onStartRedactar: () => sheet.showModal(),
+    });
+  };
+
   el.querySelector("#btn-open-redactar")?.addEventListener("click", () => sheet.showModal());
+  el.querySelector("#btn-probar-tutorial")?.addEventListener("click", () => {
+    resetRedactarTutorial();
+    openTutorial();
+  });
   el.querySelectorAll("[data-type]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const type = btn.getAttribute("data-type");
@@ -98,6 +115,11 @@ function medicoHome(): HTMLElement {
   });
 
   bindNavButtons(el);
+
+  if (!hasSeenRedactarTutorial()) {
+    requestAnimationFrame(openTutorial);
+  }
+
   return el;
 }
 
@@ -113,6 +135,10 @@ function publicHome(): HTMLElement {
     <button type="button" class="hero-card hero-card-alt" data-nav="/paciente">
       <span class="hero-title">Soy paciente</span>
       <span class="hero-sub">Ficha de emergencia (QR) · Ayudemos</span>
+    </button>
+    <button type="button" class="hero-card" data-nav="/clinica">
+      <span class="hero-title">Modo empresa / centro de salud</span>
+      <span class="hero-sub">Plantillas institucionales · Pacientes del centro · Equipo médico</span>
     </button>
     `,
   );

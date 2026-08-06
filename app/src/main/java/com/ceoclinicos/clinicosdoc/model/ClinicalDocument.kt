@@ -18,6 +18,10 @@ data class ClinicalDocument(
     val membrete: PatientMembrete? = null,
     /** Documento clínico de origen (informe/HC) si se generó desde él. */
     val sourceDocumentId: String? = null,
+    /** Molde / sede institucional; aísla historial por centro. */
+    val clinicId: String? = null,
+    val clinicName: String? = null,
+    val doctorNombre: String? = null,
 ) {
     val typeLabel: String get() = type.label
 }

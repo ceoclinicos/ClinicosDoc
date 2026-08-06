@@ -76,6 +76,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.ceoclinicos.clinicosdoc.data.ClinicMembershipStorage
+import com.ceoclinicos.clinicosdoc.data.ClinicService
 import com.ceoclinicos.clinicosdoc.data.CloudSyncService
 import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.data.DraftStorage
@@ -85,6 +87,7 @@ import com.ceoclinicos.clinicosdoc.data.HeaderStorage
 import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
 import com.ceoclinicos.clinicosdoc.data.PatientStorage
 import com.ceoclinicos.clinicosdoc.data.TemplateStorage
+import com.ceoclinicos.clinicosdoc.model.ClinicMembership
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
 import com.ceoclinicos.clinicosdoc.model.ClinicalDraft
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
@@ -120,7 +123,7 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.UUID
 
-private enum class RedactarStep { PACIENTE, PLANTILLA, DICTADO, RESULTADO }
+private enum class RedactarStep { PACIENTE, ORIGEN, MOLDE, PLANTILLA, DICTADO, RESULTADO }
 
 private val RedactarStepSaver = Saver<RedactarStep, String>(
     save = { it.name },
@@ -219,6 +222,13 @@ fun RedactarFlowScreen(
     /** Receta: dictar, informe o diagnóstico. */
     var recetaFuenteName by rememberSaveable { mutableStateOf(RecetaDefaults.Fuente.DICTAR.name) }
     var diagnosticoText by rememberSaveable { mutableStateOf("") }
+    var clinicId by rememberSaveable { mutableStateOf<String?>(null) }
+    var clinicName by rememberSaveable { mutableStateOf<String?>(null) }
+    var doctorMemberships by remember { mutableStateOf(ClinicMembershipStorage.load(context)) }
+    var origenLoading by remember { mutableStateOf(false) }
+    var clinicMoldChoices by remember { mutableStateOf<List<DocumentTemplate>>(emptyList()) }
+    var pendingClinicHeaders by remember { mutableStateOf<List<DocumentHeader>>(emptyList()) }
+    var usedMoldePicker by rememberSaveable { mutableStateOf(false) }
     var showAddFarmaco by remember { mutableStateOf(false) }
     var addingFarmaco by remember { mutableStateOf(false) }
     var showLeaveResultDialog by remember { mutableStateOf(false) }
@@ -325,6 +335,11 @@ fun RedactarFlowScreen(
         )
         EnfermedadActualStorage.save(context, ejemplo)
         if (!force && updated == tpl) return
+        // Molde institucional: solo en sesión; no sobrescribe plantillas personales
+        if (!clinicId.isNullOrBlank()) {
+            template = updated
+            return
+        }
         template = TemplateStorage.upsert(context, updated)
     }
 
@@ -369,6 +384,75 @@ fun RedactarFlowScreen(
 
     fun showMsg(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
 
+    fun goAfterPatientSelected() {
+        clinicId = null
+        clinicName = null
+        scope.launch {
+            doctorMemberships = runCatching { ClinicService.refreshMemberships(context) }
+                .getOrElse { ClinicMembershipStorage.load(context) }
+            step = if (doctorMemberships.isNotEmpty()) RedactarStep.ORIGEN else RedactarStep.PLANTILLA
+        }
+    }
+
+    fun usePersonalMold() {
+        clinicId = null
+        clinicName = null
+        clinicMoldChoices = emptyList()
+        usedMoldePicker = false
+        reloadTemplate()
+        template?.let { applyTemplateConfig(it) }
+        refreshHeaders()
+        step = RedactarStep.PLANTILLA
+    }
+
+    fun applyClinicTemplateChoice(chosen: DocumentTemplate) {
+        template = chosen
+        selectedTemplateId = chosen.id
+        availableTemplates = clinicMoldChoices.ifEmpty { listOf(chosen) }
+        applyTemplateConfig(chosen)
+        if (pendingClinicHeaders.isNotEmpty()) {
+            availableHeaders = pendingClinicHeaders
+            header = pendingClinicHeaders.firstOrNull { it.isDefault } ?: pendingClinicHeaders.first()
+            selectedHeaderId = header!!.id
+        } else {
+            refreshHeaders()
+        }
+        step = RedactarStep.PLANTILLA
+    }
+
+    fun useClinicMold(membership: ClinicMembership) {
+        scope.launch {
+            origenLoading = true
+            try {
+                clinicId = membership.clinicId
+                clinicName = membership.clinicName
+                val tpls = ClinicService.listTemplates(membership.clinicId)
+                    .filter { it.documentType == documentType }
+                val hdrs = ClinicService.listHeaders(membership.clinicId)
+                pendingClinicHeaders = hdrs
+                if (tpls.isEmpty()) {
+                    showMsg(
+                        "El centro no tiene molde de ${documentType.label}. Crea uno en la web (ej. HC femenina, masculina o pediatría).",
+                    )
+                    return@launch
+                }
+                if (tpls.size == 1) {
+                    usedMoldePicker = false
+                    clinicMoldChoices = tpls
+                    applyClinicTemplateChoice(tpls.first())
+                } else {
+                    usedMoldePicker = true
+                    clinicMoldChoices = tpls
+                    step = RedactarStep.MOLDE
+                }
+            } catch (e: Exception) {
+                showMsg(e.message ?: "No se pudieron cargar moldes del centro")
+            } finally {
+                origenLoading = false
+            }
+        }
+    }
+
     fun persistGeneratedDocument(content: String, showToast: Boolean = true): Boolean {
         val patient = selectedPatient ?: return false
         val tpl = template ?: return false
@@ -396,6 +480,9 @@ fun RedactarFlowScreen(
                         (documentType == DocumentType.RECETA &&
                             recetaFuenteName == RecetaDefaults.Fuente.INFORME.name)
                 },
+            clinicId = clinicId,
+            clinicName = clinicName,
+            doctorNombre = doctor?.nombre,
         )
         if (existing != null) {
             DocumentStorage.update(context, doc)
@@ -611,7 +698,7 @@ fun RedactarFlowScreen(
                                     selectedPatient = saved
                                     selectedPatientId = saved.id
                                     patientSearchMessage = "Seleccionado: ${saved.nombre}"
-                                    step = RedactarStep.PLANTILLA
+                                    goAfterPatientSelected()
                                 } else {
                                     patientSearchMessage = "No se encontró paciente con esa cédula"
                                 }
@@ -642,7 +729,7 @@ fun RedactarFlowScreen(
                             PatientPickCard(patient) {
                                 selectedPatient = patient
                                 selectedPatientId = patient.id
-                                step = RedactarStep.PLANTILLA
+                                goAfterPatientSelected()
                             }
                         }
                     }
@@ -652,6 +739,90 @@ fun RedactarFlowScreen(
                     }
                 }
                 PremiumPrimaryButton("Agregar paciente", onClick = onAddPatient, icon = Icons.Default.PersonAdd)
+            }
+
+            RedactarStep.ORIGEN -> Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(24.dp),
+            ) {
+                Text("Origen del molde", style = MaterialTheme.typography.headlineMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "¿Con qué plantilla crearás este ${documentType.label.lowercase()}?",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                if (origenLoading) {
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Teal)
+                    }
+                } else {
+                    Card(
+                        onClick = { usePersonalMold() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Mis plantillas personales", style = MaterialTheme.typography.titleMedium)
+                            Text("Consultorio propio", color = TextSecondary)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    doctorMemberships.forEach { m ->
+                        Card(
+                            onClick = { useClinicMold(m) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(m.clinicName, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    "Moldes institucionales (femenina, masculina, pediatría…)",
+                                    color = TextSecondary,
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(onClick = { step = RedactarStep.PACIENTE }) {
+                    Text("Volver")
+                }
+            }
+
+            RedactarStep.MOLDE -> Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(24.dp),
+            ) {
+                Text("Elegir molde", style = MaterialTheme.typography.headlineMedium)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "${clinicName ?: "Centro"}: ¿cuál ${documentType.label.lowercase()}?",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                clinicMoldChoices.forEach { tpl ->
+                    Card(
+                        onClick = { applyClinicTemplateChoice(tpl) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(tpl.name, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "${tpl.sections.size} secciones" +
+                                    if (tpl.isDefault) " · predeterminado" else "",
+                                color = TextSecondary,
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+                OutlinedButton(onClick = { step = RedactarStep.ORIGEN }) {
+                    Text("Volver")
+                }
             }
 
             RedactarStep.PLANTILLA -> Box(modifier = Modifier.padding(padding)) {
@@ -1165,28 +1336,6 @@ fun RedactarFlowScreen(
                     EditableDocumentContent(
                         content = generatedContent.orEmpty(),
                         onContentChange = { generatedContent = it },
-                        onRegenerateSection = { index, sections ->
-                            if (dictation.isBlank() && diagnosticoText.isBlank()) {
-                                showMsg("No hay dictado/diagnóstico para regenerar esta sección")
-                                return@EditableDocumentContent null
-                            }
-                            val patient = selectedPatient
-                            val doc = doctor
-                            val tpl = template
-                            if (patient == null || doc == null || tpl == null) return@EditableDocumentContent null
-                            DocumentAiService.regenerateSection(
-                                context = context,
-                                template = tpl,
-                                patient = patient,
-                                doctor = doc,
-                                dictation = dictation.trim().ifBlank { diagnosticoText.trim() },
-                                sectionTitle = sections[index].title,
-                                currentSectionBody = sections[index].body,
-                                otherSections = sections.filterIndexed { i, _ -> i != index },
-                                header = header,
-                                sessionConfig = sessionConfig,
-                            )
-                        },
                     )
                     if (documentType == DocumentType.RECETA) {
                         Spacer(modifier = Modifier.height(8.dp))

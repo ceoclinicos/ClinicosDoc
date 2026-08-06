@@ -12,7 +12,9 @@ registerRoute({
     const params = new URLSearchParams(query);
     const token = params.get("token")?.trim() || "";
     const modo = (params.get("modo") || "pin").toLowerCase();
+    const cuenta = (params.get("cuenta") || "").toLowerCase();
     const isPassword = modo === "password";
+    const isClinica = cuenta === "clinica" || cuenta === "centro";
 
     const el = page(
       isPassword ? "Crear contraseña nueva" : "Crear PIN nuevo",
@@ -43,9 +45,20 @@ registerRoute({
           return;
         }
         try {
-          const text = await confirmPinReset(token, pin, isPassword ? "password" : "pin");
+          const result = await confirmPinReset(token, pin, isPassword ? "password" : "pin");
+          const text = typeof result === "string" ? result : result.message;
+          const kind =
+            typeof result === "object" && result.accountKind
+              ? result.accountKind
+              : isClinica
+                ? "clinica"
+                : isPassword
+                  ? "app"
+                  : "paciente";
           msg.innerHTML = `<p class="status-badge status-ok">${text}</p>`;
-          setTimeout(() => navigate(isPassword ? "/" : "/paciente"), 2000);
+          const dest =
+            kind === "clinica" ? "/clinica" : kind === "app" || isPassword ? "/" : "/paciente";
+          setTimeout(() => navigate(dest), 2000);
         } catch (err) {
           const text = err instanceof Error ? err.message : "Error";
           msg.innerHTML = `<p class="status-badge status-error">${text}</p>

@@ -8,6 +8,8 @@ export interface Route {
   navLabel?: string;
   /** Solo visible/accesible con sesión de profesional de salud */
   medicoOnly?: boolean;
+  /** Solo con sesión de clínica / centro de salud */
+  clinicOnly?: boolean;
 }
 
 const routes: Route[] = [];
@@ -21,17 +23,27 @@ export function getRoutes(): Route[] {
 }
 
 import { getProfessionalSession } from "../registro/session";
+import { getClinicSession } from "../clinic/session";
 
 export function isMedicoLoggedIn(): boolean {
   return getProfessionalSession() !== null;
 }
 
+export function isClinicLoggedIn(): boolean {
+  return getClinicSession() !== null;
+}
+
 export function getNavRoutes(): Route[] {
-  return routes.filter((r) => r.nav && (!r.medicoOnly || isMedicoLoggedIn()));
+  if (isClinicLoggedIn()) {
+    return routes.filter((r) => r.nav && r.clinicOnly);
+  }
+  return routes.filter((r) => r.nav && !r.clinicOnly && (!r.medicoOnly || isMedicoLoggedIn()));
 }
 
 export function canAccessRoute(route: Route): boolean {
-  return !route.medicoOnly || isMedicoLoggedIn();
+  if (route.clinicOnly) return isClinicLoggedIn();
+  if (route.medicoOnly) return isMedicoLoggedIn();
+  return true;
 }
 
 export function matchRoute(hash: string): Route | undefined {

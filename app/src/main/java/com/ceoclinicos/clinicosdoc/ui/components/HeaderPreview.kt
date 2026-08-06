@@ -116,7 +116,7 @@ private fun HeaderTextBlock(
             )
         } else {
             Text(
-                text = "Texto principal (requerido)",
+                text = "Título (requerido)",
                 modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.bodyLarge.copy(
                     fontSize = mainSize,

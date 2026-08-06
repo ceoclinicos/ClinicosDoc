@@ -38,21 +38,21 @@ registerRoute({
     const el = page(
       "Encabezados",
       `
-      <p class="lead">Hasta 4 encabezados para tus PDF (clínica o médico).</p>
+      <p class="lead">Hasta 4 encabezados para tus PDF.</p>
       <ul class="list" id="headers-list"></ul>
       <button type="button" class="btn btn-secondary" id="btn-add" ${headers.length >= 4 ? "disabled" : ""}>+ Nuevo encabezado</button>
       <dialog id="edit-dialog">
         <form method="dialog" class="form" id="edit-form">
           <h2 id="dialog-title">Editar encabezado</h2>
           <input type="hidden" name="id" />
-          <label>Nombre<input name="name" required /></label>
-          <label>Médico / clínica<input name="doctorName" /></label>
-          <label>Subtítulo<input name="subtitle" placeholder="Ej. Medicina interna" /></label>
-          <label>Descripción<textarea name="description" rows="3" placeholder="Dirección, teléfono…"></textarea></label>
+          <label>Nombre de la plantilla<input name="name" required /></label>
+          <label>Título — Nombre de la clínica o médico<input name="doctorName" required /></label>
+          <label>Subtítulo — dirección, especialidad o servicios que ofrece<input name="subtitle" /></label>
+          <label>Complemento — RIF, MPPS u otro dato importante que quiera mostrar<textarea name="description" rows="3"></textarea></label>
           <label>Logo (se ajusta automáticamente)
             <input type="file" name="logo" id="logo-input" accept="image/*" />
           </label>
-          <p class="muted" id="logo-hint">Recomendado: imagen cuadrada 256–1024 px</p>
+          <p class="muted" id="logo-hint">Se acepta completa; si es rectangular, el resto del cuadrado queda en blanco (máx. 1024 px)</p>
           <div id="logo-preview" class="header-logo-preview" hidden></div>
           <button type="button" class="btn btn-ghost btn-sm" id="btn-clear-logo" hidden>Quitar logo</button>
           <label class="check-row"><input type="checkbox" name="isDefault" /> Predeterminado</label>

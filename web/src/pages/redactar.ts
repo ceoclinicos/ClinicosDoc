@@ -1,3 +1,4 @@
+import { listClinicHeaders, listClinicTemplates, listMembershipsForDoctor } from "../clinic/store";
 import { registerRoute, navigate } from "../app/router";
 import { generateDocument, generateOrdenesFromCase, generateReceta, appendFarmacoToReceta } from "../services/ai/document-ai-service";
 import { bindExamSystemsEditor, orderEnabledByCatalog, loadExamCatalog } from "../services/exam-catalog";
@@ -55,7 +56,6 @@ import {
   type RecetaFuente,
 } from "../shared/receta";
 import { openFarmacoDialog } from "../ui/farmaco-dialog";
-import { bindSectionRegenerateButtons, sectionRegenerateButtonHtml } from "../ui/section-regenerate";
 import { bindMembreteEditor, membreteEditorHtml, readMembreteFromEditor } from "../ui/membrete-editor";
 import { bindNavButtons, page } from "./helpers";
 
@@ -97,7 +97,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
   const tipoQ = q.get("tipo") as DocumentType | null;
   const existingDraft = draftId ? getDraft(draftId) : undefined;
 
-  let step: "paciente" | "plantilla" | "dictado" | "resultado" =
+  let step: "paciente" | "origen" | "molde" | "plantilla" | "dictado" | "resultado" =
     existingDraft?.generatedContent ? "resultado" : "paciente";
   let dictation = existingDraft?.dictation ?? "";
   let generatedContent = existingDraft?.generatedContent ?? "";
@@ -116,6 +116,15 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
   let cedulaSearch = "";
   let patientSearchMessage = "";
   let editableMembrete: PatientMembrete | null = null;
+  /** Contexto de clínica si eligió molde institucional */
+  let clinicContext: { clinicId: string; clinicName: string } | null = null;
+  let doctorMemberships: Array<{ clinicId: string; clinicName: string }> = [];
+  let membershipsLoaded = false;
+  let availableHeaders: DocumentHeader[] = loadHeaders();
+  /** Varios moldes del centro del mismo tipo (HC femenina / masculina / pediatría…) */
+  let clinicMoldChoices: DocumentTemplate[] = [];
+  let pendingClinicHeaders: DocumentHeader[] = [];
+  let usedMoldePicker = false;
 
   let patients = loadJson<Patient[]>("patients", []);
   let selectedPatient: Patient | null =
@@ -249,9 +258,65 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
 
   function render(): void {
     if (step === "paciente") renderPaciente();
+    else if (step === "origen") renderOrigen();
+    else if (step === "molde") renderMoldeClinic();
     else if (step === "plantilla") renderPlantilla();
     else if (step === "dictado") renderDictado();
     else renderResultado();
+  }
+
+  function stepTotal(): number {
+    return doctorMemberships.length ? 6 : 4;
+  }
+
+  function applyClinicTemplate(chosen: DocumentTemplate, hdrs: DocumentHeader[]): void {
+    workingTemplate = structuredClone(chosen);
+    availableHeaders = hdrs.length ? hdrs : loadHeaders();
+    selectedHeader = availableHeaders.find((h) => h.isDefault) ?? availableHeaders[0];
+    step = "plantilla";
+    render();
+  }
+
+  function plantillaStepLabel(): string {
+    if (!doctorMemberships.length) return "2 / 4";
+    return usedMoldePicker ? `4 / ${stepTotal()}` : `3 / ${stepTotal()}`;
+  }
+
+  function dictadoStepLabel(): string {
+    if (!doctorMemberships.length) return "3 / 4";
+    return usedMoldePicker ? `5 / ${stepTotal()}` : `4 / ${stepTotal()}`;
+  }
+
+  function resultadoStepLabel(): string {
+    if (!doctorMemberships.length) return "4 / 4";
+    return usedMoldePicker ? `6 / ${stepTotal()}` : `5 / ${stepTotal()}`;
+  }
+
+  async function goAfterPatient(): Promise<void> {
+    workingTemplate = structuredClone(templateForType(docType));
+    clinicContext = null;
+    availableHeaders = loadHeaders();
+    selectedHeader = defaultHeader();
+    persistDraft();
+
+    if (!membershipsLoaded) {
+      membershipsLoaded = true;
+      try {
+        const cedula = session?.cedula || doctor.cedula;
+        if (cedula) {
+          doctorMemberships = await listMembershipsForDoctor(cedula, session?.cloudUserId);
+        }
+      } catch {
+        doctorMemberships = [];
+      }
+    }
+
+    if (doctorMemberships.length > 0) {
+      step = "origen";
+    } else {
+      step = "plantilla";
+    }
+    render();
   }
 
   function renderPaciente(): void {
@@ -341,10 +406,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         mpps: String(fd.get("docMpps")),
       };
       saveDoctorProfile(doctor as DoctorProfileLocal);
-      workingTemplate = structuredClone(templateForType(docType));
-      persistDraft();
-      step = "plantilla";
-      render();
+      void goAfterPatient();
     });
 
     bindNavButtons(root);
@@ -375,14 +437,114 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       const saved = upsertPatientInList(found);
       selectedPatient = saved;
       patientSearchMessage = `Seleccionado: ${saved.nombre}`;
-      workingTemplate = structuredClone(templateForType(docType));
-      persistDraft();
-      step = "plantilla";
-      render();
+      void goAfterPatient();
     } else {
       patientSearchMessage = "No se encontró paciente con esa cédula";
       renderPaciente();
     }
+  }
+
+  function renderOrigen(): void {
+    root.innerHTML = `
+      <p class="step-badge">2 / ${stepTotal()} · Origen del molde</p>
+      <p class="lead">¿Con qué plantilla crearás este ${escapeHtml(DocumentTypeLabels[docType])}?</p>
+      <div class="stack" id="origen-options">
+        <button type="button" class="tile tile-full" data-origen="personal">
+          <strong>Mis plantillas personales</strong>
+          <span class="muted">Consultorio propio</span>
+        </button>
+        ${doctorMemberships
+          .map(
+            (m) => `
+          <button type="button" class="tile tile-full" data-origen="clinic" data-clinic-id="${escapeHtml(m.clinicId)}" data-clinic-name="${escapeHtml(m.clinicName)}">
+            <strong>${escapeHtml(m.clinicName)}</strong>
+            <span class="muted">Moldes institucionales (femenina, masculina, pediatría…)</span>
+          </button>`,
+          )
+          .join("")}
+      </div>
+      <button type="button" class="btn btn-ghost" id="btn-back-pac" style="margin-top:1rem">Volver</button>
+    `;
+
+    root.querySelector("#btn-back-pac")?.addEventListener("click", () => {
+      step = "paciente";
+      render();
+    });
+
+    root.querySelectorAll("[data-origen]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const origen = btn.getAttribute("data-origen");
+        if (origen === "personal") {
+          clinicContext = null;
+          clinicMoldChoices = [];
+          usedMoldePicker = false;
+          workingTemplate = structuredClone(templateForType(docType));
+          availableHeaders = loadHeaders();
+          selectedHeader = defaultHeader();
+          step = "plantilla";
+          render();
+          return;
+        }
+        const clinicId = btn.getAttribute("data-clinic-id") || "";
+        const clinicName = btn.getAttribute("data-clinic-name") || "Centro";
+        clinicContext = { clinicId, clinicName };
+        try {
+          const [tpls, hdrs] = await Promise.all([
+            listClinicTemplates(clinicId),
+            listClinicHeaders(clinicId),
+          ]);
+          const ofType = tpls.filter((t) => t.documentType === docType);
+          if (!ofType.length) {
+            alert(
+              `El centro no tiene un molde de «${DocumentTypeLabels[docType]}». Créalo en Plantillas del centro (ej. HC femenina, masculina o pediatría).`,
+            );
+            return;
+          }
+          if (ofType.length === 1) {
+            usedMoldePicker = false;
+            applyClinicTemplate(ofType[0], hdrs);
+            return;
+          }
+          clinicMoldChoices = ofType;
+          pendingClinicHeaders = hdrs;
+          usedMoldePicker = true;
+          step = "molde";
+          render();
+        } catch (err) {
+          alert(err instanceof Error ? err.message : "No se pudieron cargar moldes del centro");
+        }
+      });
+    });
+  }
+
+  function renderMoldeClinic(): void {
+    root.innerHTML = `
+      <p class="step-badge">3 / ${stepTotal()} · Elegir molde</p>
+      <p class="lead">${escapeHtml(clinicContext?.clinicName ?? "Centro")}: ¿cuál ${escapeHtml(DocumentTypeLabels[docType].toLowerCase())}?</p>
+      <div class="stack">
+        ${clinicMoldChoices
+          .map(
+            (t) => `
+          <button type="button" class="tile tile-full" data-tpl="${t.id}">
+            <strong>${escapeHtml(t.name)}</strong>
+            <span class="muted">${t.sections.length} secciones${t.isDefault ? " · predeterminado" : ""}</span>
+          </button>`,
+          )
+          .join("")}
+      </div>
+      <button type="button" class="btn btn-ghost" id="btn-back-origen" style="margin-top:1rem">Volver</button>
+    `;
+    root.querySelector("#btn-back-origen")?.addEventListener("click", () => {
+      step = "origen";
+      render();
+    });
+    root.querySelectorAll("[data-tpl]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.getAttribute("data-tpl");
+        const chosen = clinicMoldChoices.find((t) => t.id === id);
+        if (chosen) applyClinicTemplate(chosen, pendingClinicHeaders);
+      });
+    });
   }
 
   function renderPlantilla(): void {
@@ -401,7 +563,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     const ejemploActual = resolveEnfermedadActualEjemplo(workingTemplate.enfermedadActualEjemplo);
 
     root.innerHTML = `
-      <p class="step-badge">2 / 4 · Plantilla</p>
+      <p class="step-badge">${plantillaStepLabel()} · Plantilla${clinicContext ? ` · ${escapeHtml(clinicContext.clinicName)} · ${escapeHtml(workingTemplate.name)}` : ""}</p>
       <p class="lead">Configura secciones${needsExam ? " y examen físico" : ""} para este documento.</p>
       <form class="form" id="tpl-step-form">
         <label>Nombre de plantilla
@@ -456,7 +618,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     }
 
     root.querySelector("#btn-back-pac")?.addEventListener("click", () => {
-      step = "paciente";
+      step = doctorMemberships.length ? (usedMoldePicker ? "molde" : "origen") : "paciente";
       render();
     });
 
@@ -481,7 +643,10 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         sectionDefaultTexts: draftSectionTexts,
         isDefault: true,
       };
-      upsertTemplate(workingTemplate);
+      // Solo persistir en plantillas personales; el molde de clínica no se sobrescribe desde aquí
+      if (!clinicContext) {
+        upsertTemplate(workingTemplate);
+      }
       persistDraft();
       step = "dictado";
       render();
@@ -583,7 +748,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       : "";
 
     root.innerHTML = `
-      <p class="step-badge">3 / 4 · Dictado</p>
+      <p class="step-badge">${dictadoStepLabel()} · Dictado</p>
       <p class="muted"><strong>${escapeHtml(selectedPatient?.nombre ?? "")}</strong> · ${DocumentTypeLabels[docType]} · ${escapeHtml(workingTemplate.name)}</p>
       ${sourceBlock}
       ${mainInput}
@@ -815,6 +980,9 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         (docType === "ordenesMedicas" || (docType === "receta" && recetaFuente === "informe")
           ? selectedSourceDocId ?? undefined
           : undefined),
+      clinicId: clinicContext?.clinicId,
+      clinicName: clinicContext?.clinicName,
+      doctorNombre: doctor.nombre || session?.nombre,
     });
     savedDocumentId = id;
     deleteDraft(currentDraftId);
@@ -828,8 +996,8 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
   }
 
   function renderResultado(): void {
-    const headers = loadHeaders();
-    if (!selectedHeader) selectedHeader = defaultHeader();
+    const headers = availableHeaders.length ? availableHeaders : loadHeaders();
+    if (!selectedHeader) selectedHeader = headers.find((h) => h.isDefault) ?? headers[0] ?? defaultHeader();
 
     let sections = parseDocumentSections(generatedContent);
 
@@ -840,7 +1008,6 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       )
       .join("");
 
-    const canRegenerate = Boolean(effectiveDictation());
     const sectionsHtml = sections
       .map((sec, i) => {
         const isExam = isPhysicalExamTitle(sec.title);
@@ -857,7 +1024,6 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
               <span class="field-label">${isExam ? "Resto del examen físico" : "Contenido"}</span>
               <textarea class="sec-body" rows="${isExam ? 8 : 5}">${escapeHtml(bodyText)}</textarea>
             </div>
-            ${canRegenerate ? sectionRegenerateButtonHtml(i) : ""}
           </div>`;
       })
       .join("");
@@ -868,8 +1034,8 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     const membrete = currentMembrete();
 
     root.innerHTML = `
-      <p class="step-badge">4 / 4 · Resultado</p>
-      <p class="status-badge status-ok">${DocumentReportTitles[docType]} generado</p>
+      <p class="step-badge">${resultadoStepLabel()} · Resultado</p>
+      <p class="status-badge status-ok">${DocumentReportTitles[docType]} generado${clinicContext ? ` · ${escapeHtml(clinicContext.clinicName)}` : ""}</p>
       <p class="muted">${escapeHtml(selectedPatient?.nombre ?? "")} · ${escapeHtml(selectedPatient?.cedula ?? "")}</p>
 
       <div class="result-actions">
@@ -901,7 +1067,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       <div class="result-actions result-actions-bottom">
         <button type="button" class="btn btn-primary" id="btn-save-2">${savedDocumentId ? "Actualizar documento" : "Guardar documento"}</button>
         <button type="button" class="btn btn-secondary" id="btn-copy">Copiar texto</button>
-        <button type="button" class="btn btn-ghost" id="btn-edit">Editar dictado y regenerar</button>
+        <button type="button" class="btn btn-ghost" id="btn-edit">Editar dictado</button>
         <button type="button" class="btn btn-ghost" data-nav="/informes">Ver informes</button>
       </div>
     `;
@@ -954,33 +1120,6 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     );
 
     root.querySelector("#sections-editor")?.addEventListener("input", () => refreshPreview());
-
-    const doctor = loadDoctorProfile();
-    if (canRegenerate && selectedPatient && doctor) {
-      bindSectionRegenerateButtons(root, {
-        rawDictation: effectiveDictation(),
-        template: workingTemplate,
-        patient: selectedPatient,
-        doctor,
-        getSections: () => {
-          const boxes = Array.from(root.querySelectorAll(".section-edit")) as HTMLElement[];
-          return boxes.map((box, i) => {
-            const title = (box.querySelector(".sec-title") as HTMLInputElement).value.trim();
-            let body = (box.querySelector(".sec-body") as HTMLTextAreaElement).value;
-            if (isPhysicalExamTitle(title) || box.querySelector(".vitals-editor")) {
-              body = applyVitalsToBody(body, readVitalsFromForm(box, `vs${i}`));
-            }
-            return { id: sections[i]?.id ?? crypto.randomUUID(), title, body };
-          });
-        },
-        applySectionBody: (index, body) => {
-          const box = root.querySelector(`.section-edit[data-sec-idx="${index}"]`);
-          const ta = box?.querySelector(".sec-body") as HTMLTextAreaElement | null;
-          if (ta) ta.value = body;
-        },
-        onAfterRegenerate: () => refreshPreview(),
-      });
-    }
 
     root.querySelector("#btn-add-section")?.addEventListener("click", () => {
       collectContent();

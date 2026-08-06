@@ -46,7 +46,8 @@ object PhysicalExamPromptBuilder {
             if (vitalsSystem != null) {
                 appendLine("- Signos vitales (si dictados): línea aparte al inicio, solo valores presentes.")
                 appendLine("  Formato: TA: 120/80 mmHg | FR: 18 rpm | FC: 82 lpm | SaTO2: 98%")
-                appendLine("- Signos no dictados: omitirlos (no escribas 0). Si no hay ningún signo, no pongas línea de vitales.")
+                appendLine("- Signos no dictados: OMITIR por completo. NO escribas «signos vitales no tomados», «no aportados», «ausentes» ni similares.")
+                appendLine("- Si el dictado no trae ningún signo vital, NO pongas ninguna línea de signos vitales.")
             }
             appendLine("- Coloca cada signo en el sistema correcto (ej. Rovsing → Abdomen).")
             appendLine("- Si el dictado contradice la base de un sistema, sustituye SOLO ese sistema.")

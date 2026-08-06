@@ -24,9 +24,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -185,8 +183,6 @@ fun HeadersScreen(onBack: () -> Unit, onEditHeader: (String, Boolean) -> Unit) {
     val context = LocalContext.current
     var headers by remember { mutableStateOf(HeaderStorage.loadAll(context)) }
     var loading by remember { mutableStateOf(true) }
-    var showAddSheet by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     fun reload() {
         headers = HeaderStorage.loadAll(context)
@@ -204,6 +200,28 @@ fun HeadersScreen(onBack: () -> Unit, onEditHeader: (String, Boolean) -> Unit) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    fun addHeader() {
+        if (!HeaderStorage.canAdd(context)) {
+            Toast.makeText(
+                context,
+                "Máximo ${HeaderStorage.MAX_HEADERS} encabezados",
+                Toast.LENGTH_SHORT,
+            ).show()
+            return
+        }
+        val doctor = DoctorStorage.loadProfile(context)
+        val header = if (doctor != null) {
+            HeaderStorage.createFromDoctor(doctor)
+        } else {
+            HeaderStorage.createClinic().copy(
+                headerType = HeaderType.MEDICO,
+                name = "Nuevo encabezado",
+            )
+        }
+        HeaderStorage.upsert(context, header)
+        onEditHeader(header.id, true)
+    }
+
     val canAdd = headers.size < HeaderStorage.MAX_HEADERS
 
     AppScaffold(
@@ -212,7 +230,7 @@ fun HeadersScreen(onBack: () -> Unit, onEditHeader: (String, Boolean) -> Unit) {
         floatingActionButton = {
             if (canAdd) {
                 FloatingActionButton(
-                    onClick = { showAddSheet = true },
+                    onClick = { addHeader() },
                     containerColor = Navy,
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, tint = Color.White)
@@ -240,7 +258,7 @@ fun HeadersScreen(onBack: () -> Unit, onEditHeader: (String, Boolean) -> Unit) {
                             headlineContent = { Text(header.name) },
                             supportingContent = {
                                 Text(
-                                    "${header.headerType.label} · ${header.displayTitle}" +
+                                    header.displayTitle +
                                         if (header.isDefault) " · Predeterminado" else "",
                                 )
                             },
@@ -248,75 +266,6 @@ fun HeadersScreen(onBack: () -> Unit, onEditHeader: (String, Boolean) -> Unit) {
                         )
                     }
                 }
-            }
-        }
-    }
-
-    if (showAddSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showAddSheet = false },
-            sheetState = sheetState,
-        ) {
-            Column(modifier = Modifier.padding(24.dp)) {
-                Text("Nuevo encabezado", style = MaterialTheme.typography.headlineSmall)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Elige el tipo de encabezado para tus documentos", style = MaterialTheme.typography.bodyMedium)
-                Spacer(modifier = Modifier.height(20.dp))
-                Card(
-                    onClick = {
-                        if (!HeaderStorage.canAdd(context)) {
-                            Toast.makeText(
-                                context,
-                                "Máximo ${HeaderStorage.MAX_HEADERS} encabezados",
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                            showAddSheet = false
-                            return@Card
-                        }
-                        val doctor = DoctorStorage.loadProfile(context)
-                        val header = if (doctor != null) {
-                            HeaderStorage.createFromDoctor(doctor)
-                        } else {
-                            HeaderStorage.createClinic().copy(
-                                headerType = HeaderType.MEDICO,
-                                name = "Encabezado médico",
-                            )
-                        }
-                        HeaderStorage.upsert(context, header)
-                        showAddSheet = false
-                        onEditHeader(header.id, true)
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                ) {
-                    ListItem(
-                        headlineContent = { Text("Encabezado de médico") },
-                        supportingContent = { Text("Nombre, especialidad y datos del profesional") },
-                    )
-                }
-                Card(
-                    onClick = {
-                        if (!HeaderStorage.canAdd(context)) {
-                            Toast.makeText(
-                                context,
-                                "Máximo ${HeaderStorage.MAX_HEADERS} encabezados",
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                            showAddSheet = false
-                            return@Card
-                        }
-                        val header = HeaderStorage.createClinic()
-                        HeaderStorage.upsert(context, header)
-                        showAddSheet = false
-                        onEditHeader(header.id, true)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    ListItem(
-                        headlineContent = { Text("Encabezado de clínica") },
-                        supportingContent = { Text("Nombre, logo y datos de la institución") },
-                    )
-                }
-                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }

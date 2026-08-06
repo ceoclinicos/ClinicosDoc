@@ -23,7 +23,8 @@ fun sanitizeDocumentContent(
     val withoutPatientLines = removeLeadingPatientLines(withoutPatientSection)
     val withoutTitles = removeDuplicateDocumentTitles(withoutPatientLines).trim()
     val withoutZeroVitals = stripAbsentVitalSigns(withoutTitles)
-    val orderedExam = reorderPhysicalExamSystems(withoutZeroVitals, examSystems)
+    val withoutPlaceholderVitals = stripPlaceholderVitalPhrases(withoutZeroVitals)
+    val orderedExam = reorderPhysicalExamSystems(withoutPlaceholderVitals, examSystems)
     return normalizeSectionMarkdown(orderedExam)
 }
 
@@ -150,6 +151,32 @@ private fun stripAbsentVitalSigns(content: String): String {
         }
         if (vitals.hasAnyValue()) vitals.toLine() else line
     }.replace(Regex("\n{3,}"), "\n\n")
+}
+
+/**
+ * Elimina frases del tipo "signos vitales no tomados" cuando no hay valores reales.
+ * Si no se dictaron vitales, simplemente no deben aparecer.
+ */
+private fun stripPlaceholderVitalPhrases(content: String): String {
+    val placeholder = Regex(
+        """(?i)^\s*(signos\s+vitales|s\.?\s*v\.?)\s*[:\-]?\s*(no\s+tomad[oa]s?|no\s+aportad[oa]s?|no\s+registrad[oa]s?|no\s+disponibles?|ausentes?|sin\s+datos|n/?a|—|-|\.{2,}|pendientes?)\s*\.?$""",
+    )
+    val inlinePlaceholder = Regex(
+        """(?i)\b(signos\s+vitales|s\.?\s*v\.?)\s*[:\-]?\s*(no\s+tomad[oa]s?|no\s+aportad[oa]s?|no\s+registrad[oa]s?|no\s+disponibles?|ausentes?)\b\.?""",
+    )
+    return content.lines().mapNotNull { line ->
+        val trimmed = line.trim()
+        when {
+            trimmed.isEmpty() -> line
+            placeholder.containsMatchIn(trimmed) -> null
+            inlinePlaceholder.containsMatchIn(trimmed) &&
+                !Regex("""(?i)(TA:|FR:|FC:|SaTO2:)""").containsMatchIn(trimmed) -> {
+                val cleaned = inlinePlaceholder.replace(trimmed, "").trim().trim(',', '.', ':', '-', '|')
+                cleaned.ifBlank { null }
+            }
+            else -> line
+        }
+    }.joinToString("\n").replace(Regex("\n{3,}"), "\n\n").trim()
 }
 
 private val SECTION_MARKER = Regex("""^\[\[SECTION:(.+?)]]\s*$""")

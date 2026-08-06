@@ -33,6 +33,7 @@ module.exports = async function handler(req, res) {
     const docId = String(data.docId || cedula);
     const collection = String(data.collection || "pacientes");
     const secretKind = String(data.secretKind || "pin");
+    const accountKind = String(data.accountKind || "");
     if (!docId) return res.status(400).json({ error: "Enlace inválido" });
 
     const now = new Date().toISOString();
@@ -49,7 +50,10 @@ module.exports = async function handler(req, res) {
         { merge: true },
       );
       await ref.set({ used: true, usedAt: now }, { merge: true });
-      return res.status(200).json({ message: "PIN actualizado. Ya puede iniciar sesión en la app." });
+      return res.status(200).json({
+        message: "PIN actualizado. Ya puede iniciar sesión en la app.",
+        accountKind: accountKind || "app",
+      });
     }
 
     try {
@@ -62,7 +66,15 @@ module.exports = async function handler(req, res) {
     await db.collection(collection).doc(docId).set({ pinHash, updatedAt: now }, { merge: true });
     await ref.set({ used: true, usedAt: now }, { merge: true });
 
-    return res.status(200).json({ message: "PIN actualizado. Ya puede iniciar sesión." });
+    const redirectHint =
+      accountKind === "clinica"
+        ? " Ya puede iniciar sesión en Modo empresa."
+        : " Ya puede iniciar sesión.";
+
+    return res.status(200).json({
+      message: `PIN actualizado.${redirectHint}`,
+      accountKind: accountKind || "paciente",
+    });
   } catch (err) {
     console.error("pin-reset-confirm", err);
     return apiError(

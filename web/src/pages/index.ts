@@ -1,6 +1,7 @@
 import "./home";
 import "./mural";
 import "./registro";
+import "./clinica";
 import "./patients";
 import "./documents";
 import "./drafts";

@@ -373,7 +373,7 @@ object DocumentPdfExporter {
 
     /**
      * Hoja A4 horizontal dividida a la mitad:
-     * izquierda = Recipe (dispóngase), derecha = Indicaciones.
+     * izquierda = Recipe, derecha = Indicaciones.
      * En cada mitad: encabezado, datos paciente, fármacos, fecha + firma abajo.
      */
     private fun generateRecetaLandscape(context: Context, document: ClinicalDocument): File {
@@ -541,21 +541,11 @@ object DocumentPdfExporter {
             startY: Float,
             maxY: Float,
             extraGapBetween: Boolean,
-            omitDisponase: Boolean,
         ): Float {
             var y = startY
             val bullet = "• "
             val bulletW = boldPaint.measureText(bullet)
-            val blocks = splitMedicationBlocks(body).map { lines ->
-                if (omitDisponase) {
-                    lines.filterNot {
-                        it.contains("dispóngase", ignoreCase = true) ||
-                            it.contains("disponase", ignoreCase = true)
-                    }
-                } else {
-                    lines
-                }
-            }.filter { it.isNotEmpty() }
+            val blocks = splitMedicationBlocks(body).filter { it.isNotEmpty() }
             blocks.forEachIndexed { index, lines ->
                 if (index > 0) {
                     // Recipe: un salto extra entre fármacos; Indicaciones: sin ese extra
@@ -671,7 +661,6 @@ object DocumentPdfExporter {
                 startY = y,
                 maxY = maxContentY,
                 extraGapBetween = isRecipeHalf,
-                omitDisponase = isRecipeHalf,
             )
 
             // Fecha y firma cerca del borde inferior

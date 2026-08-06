@@ -51,11 +51,9 @@ import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.data.DocumentStorage
 import com.ceoclinicos.clinicosdoc.data.HeaderStorage
 import com.ceoclinicos.clinicosdoc.data.PatientStorage
-import com.ceoclinicos.clinicosdoc.data.TemplateStorage
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
-import com.ceoclinicos.clinicosdoc.service.DocumentAiService
 import com.ceoclinicos.clinicosdoc.service.DocumentPdfExporter
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
 import com.ceoclinicos.clinicosdoc.ui.components.DocumentHeaderSelector
@@ -365,39 +363,6 @@ fun InformeDetailScreen(
                 EditableDocumentContent(
                     content = editableContent,
                     onContentChange = { editableContent = it },
-                    onRegenerateSection = { index, sections ->
-                        val document = doc ?: return@EditableDocumentContent null
-                        val dictation = document.rawDictation.trim()
-                        if (dictation.isBlank()) {
-                            Toast.makeText(
-                                context,
-                                "Este documento no tiene dictado original guardado",
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                            return@EditableDocumentContent null
-                        }
-                        val patient = PatientStorage.loadAll(context)
-                            .firstOrNull { it.id == document.patientId }
-                        val doctor = DoctorStorage.loadProfile(context)
-                        val template = document.templateId?.let { id ->
-                            TemplateStorage.loadAll(context).firstOrNull { it.id == id }
-                        } ?: TemplateStorage.defaultForType(context, document.type)
-                        if (patient == null || doctor == null || template == null) {
-                            Toast.makeText(context, "Faltan datos para regenerar", Toast.LENGTH_SHORT).show()
-                            return@EditableDocumentContent null
-                        }
-                        DocumentAiService.regenerateSection(
-                            context = context,
-                            template = template,
-                            patient = patient,
-                            doctor = doctor,
-                            dictation = dictation,
-                            sectionTitle = sections[index].title,
-                            currentSectionBody = sections[index].body,
-                            otherSections = sections.filterIndexed { i, _ -> i != index },
-                            header = selectedHeader ?: document.headerSnapshot,
-                        )
-                    },
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 PremiumPrimaryButton(

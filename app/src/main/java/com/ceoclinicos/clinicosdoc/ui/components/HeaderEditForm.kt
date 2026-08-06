@@ -16,12 +16,8 @@ import androidx.compose.material.icons.outlined.Label
 import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.Notes
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,12 +34,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ceoclinicos.clinicosdoc.data.HeaderStorage
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
-import com.ceoclinicos.clinicosdoc.model.HeaderType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HeaderEditForm(
     headerId: String,
@@ -56,7 +50,6 @@ fun HeaderEditForm(
     val scope = rememberCoroutineScope()
     var header by remember(headerId) { mutableStateOf<DocumentHeader?>(null) }
     var name by remember(headerId) { mutableStateOf("") }
-    var headerType by remember(headerId) { mutableStateOf(HeaderType.MEDICO) }
     var doctorName by remember(headerId) { mutableStateOf("") }
     var subtitle by remember(headerId) { mutableStateOf("") }
     var description by remember(headerId) { mutableStateOf("") }
@@ -93,7 +86,6 @@ fun HeaderEditForm(
     fun bindHeader(h: DocumentHeader) {
         header = h
         name = h.name
-        headerType = h.headerType
         doctorName = h.doctorName
         subtitle = h.subtitle
         description = h.description
@@ -108,7 +100,6 @@ fun HeaderEditForm(
 
     fun buildHeader(): DocumentHeader? = header?.copy(
         name = name.trim(),
-        headerType = headerType,
         doctorName = doctorName.trim(),
         subtitle = subtitle.trim(),
         description = description.trim(),
@@ -118,35 +109,11 @@ fun HeaderEditForm(
         infoLines = emptyList(),
     )
 
-    val titleLabel = if (headerType == HeaderType.CLINICA) {
-        "Texto principal — nombre de la clínica *"
-    } else {
-        "Texto principal — nombre del médico *"
-    }
-    val subtitleLabel = if (headerType == HeaderType.CLINICA) {
-        "Texto secundario (servicios, opcional)"
-    } else {
-        "Texto secundario (especialidad, opcional)"
-    }
-
     Column(modifier = modifier.fillMaxWidth()) {
         buildHeader()?.let { HeaderPreview(header = it) }
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text("Tipo de encabezado", style = MaterialTheme.typography.labelLarge)
-        Spacer(modifier = Modifier.height(8.dp))
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            HeaderType.entries.forEachIndexed { index, type ->
-                SegmentedButton(
-                    selected = headerType == type,
-                    onClick = { headerType = type },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = HeaderType.entries.size),
-                ) { Text(type.label) }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        PremiumTextField("Nombre interno", name, { name = it }, prefixIcon = Icons.Outlined.Label)
+        PremiumTextField("Nombre de la plantilla", name, { name = it }, prefixIcon = Icons.Outlined.Label)
         Spacer(modifier = Modifier.height(16.dp))
         OutlinedButton(
             onClick = { imagePicker.launch("image/*") },
@@ -162,7 +129,7 @@ fun HeaderEditForm(
             )
         }
         Text(
-            "Se ajusta automáticamente (recomendado: cuadrada 256–1024 px)",
+            "Se acepta completa; si es rectangular, el resto del cuadrado queda en blanco (máx. 1024 px)",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),
@@ -175,17 +142,22 @@ fun HeaderEditForm(
         }
         Spacer(modifier = Modifier.height(16.dp))
         PremiumTextField(
-            titleLabel,
+            "Título — Nombre de la clínica o médico",
             doctorName,
             { doctorName = it },
             prefixIcon = Icons.Outlined.Person,
             keyboardOptions = keyboardCapitalizationWords(),
         )
         Spacer(modifier = Modifier.height(16.dp))
-        PremiumTextField(subtitleLabel, subtitle, { subtitle = it }, prefixIcon = Icons.Outlined.MedicalServices)
+        PremiumTextField(
+            "Subtítulo — dirección, especialidad o servicios que ofrece",
+            subtitle,
+            { subtitle = it },
+            prefixIcon = Icons.Outlined.MedicalServices,
+        )
         Spacer(modifier = Modifier.height(16.dp))
         PremiumTextField(
-            "Texto descriptivo (dirección, teléfono, etc., opcional)",
+            "Complemento — RIF, MPPS u otro dato importante que quiera mostrar",
             description,
             { description = it },
             prefixIcon = Icons.Outlined.Notes,
@@ -202,7 +174,11 @@ fun HeaderEditForm(
             onClick = {
                 val h = buildHeader() ?: return@PremiumPrimaryButton
                 if (h.name.isBlank() || h.doctorName.isBlank()) {
-                    Toast.makeText(context, "Completa el nombre interno y el texto principal", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        "Completa el nombre de la plantilla y el título",
+                        Toast.LENGTH_SHORT,
+                    ).show()
                     return@PremiumPrimaryButton
                 }
                 scope.launch {

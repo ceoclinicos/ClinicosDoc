@@ -669,6 +669,108 @@ dialog {
   margin: 0;
 }
 
+.tutorial-dialog {
+  max-width: 440px;
+}
+
+.tutorial-body {
+  gap: 0.85rem;
+}
+
+.tutorial-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.tutorial-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--divider, #d8e0e8);
+  flex-shrink: 0;
+}
+
+.tutorial-dot.is-active {
+  width: 10px;
+  height: 10px;
+  background: var(--teal);
+}
+
+.tutorial-dot.is-done {
+  background: color-mix(in srgb, var(--teal) 55%, white);
+}
+
+.tutorial-dot-line {
+  width: 20px;
+  height: 2px;
+  background: var(--divider, #d8e0e8);
+  flex-shrink: 0;
+}
+
+.tutorial-step-card {
+  background: var(--surface, #f4f7fa);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+}
+
+.tutorial-step-title {
+  margin: 0 0 0.45rem;
+  font-size: 1.15rem;
+}
+
+.tutorial-step-body {
+  margin: 0;
+  color: var(--text-secondary, #5a6b7d);
+  line-height: 1.45;
+}
+
+.tutorial-quote {
+  margin: 0.85rem 0 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--teal) 8%, white);
+  border: 1px solid var(--border);
+  color: var(--navy, #0b1f33);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.tutorial-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.tutorial-step-card textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font: inherit;
+  background: #fff;
+}
+
+.tutorial-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.tutorial-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .check-row {
   display: flex;
   flex-direction: row;

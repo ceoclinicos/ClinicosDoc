@@ -131,7 +131,7 @@ function capitalizeFirst(text: string): string {
   return t.charAt(0).toLocaleUpperCase("es") + t.slice(1);
 }
 
-function formatRecetaMedsHtml(body: string, opts: { omitDisponase?: boolean; extraGap?: boolean }): string {
+function formatRecetaMedsHtml(body: string, opts: { extraGap?: boolean }): string {
   const blocks = body
     .trim()
     .split(/\n\s*\n+/)
@@ -139,12 +139,7 @@ function formatRecetaMedsHtml(body: string, opts: { omitDisponase?: boolean; ext
       b
         .split("\n")
         .map((l) => l.trim())
-        .filter(Boolean)
-        .filter(
-          (l) =>
-            !opts.omitDisponase ||
-            (!/disp[oó]ngase/i.test(l) && !/disponase/i.test(l)),
-        ),
+        .filter(Boolean),
     )
     .filter((b) => b.length > 0);
 
@@ -190,7 +185,7 @@ function buildRecetaLandscapeHtml(options: {
       ${renderHeaderHtml(options.header)}
       <h2 class="receta-half-title">${escapeHtml(title)}</h2>
       ${patientBlock}
-      ${formatRecetaMedsHtml(body, { omitDisponase: isRecipe, extraGap: isRecipe })}
+      ${formatRecetaMedsHtml(body, { extraGap: isRecipe })}
       ${footer}
     </div>`;
   return `

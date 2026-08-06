@@ -426,6 +426,8 @@ export async function pushDocument(d: ClinicalDocument, userId = userIdOrThrow()
     doctorId: userId,
     doctorNombre,
     sourceDocumentId: d.sourceDocumentId ?? null,
+    clinicId: d.clinicId ?? null,
+    clinicName: d.clinicName ?? null,
   };
   await setDoc(doc(sub(userId, FirestorePaths.SUB_DOCUMENTS), d.id), payload);
   await pushGlobalDocument(userId, doctorNombre, d);

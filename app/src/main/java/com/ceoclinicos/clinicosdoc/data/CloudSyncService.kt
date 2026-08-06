@@ -24,6 +24,7 @@ import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
 import com.ceoclinicos.clinicosdoc.util.PatientFirestoreId
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
 import java.io.File
 import java.time.Instant
@@ -119,11 +120,30 @@ object CloudSyncService {
     suspend fun pushDocument(context: Context, userId: String, document: ClinicalDocument) {
         if (!DoctorAuthService.isConfigured(context)) return
         val profile = DoctorStorage.loadProfile(context)
-        val doctorNombre = profile?.nombre.orEmpty()
+        val doctorNombre = profile?.nombre.orEmpty().ifBlank { document.doctorNombre.orEmpty() }
         documentsRef(userId).document(document.id)
             .set(document.toSyncDto(doctorId = userId, doctorNombre = doctorNombre).toMap())
             .await()
         pushGlobalDocument(userId, doctorNombre, document)
+        val clinicId = document.clinicId
+        if (!clinicId.isNullOrBlank()) {
+            var lastError: Exception? = null
+            repeat(5) { attempt ->
+                try {
+                    ClinicService.pushClinicDocument(clinicId, document, doctorNombre)
+                    lastError = null
+                    return@repeat
+                } catch (e: Exception) {
+                    lastError = e
+                    if (attempt < 4) {
+                        delay(2_000L * (1L shl attempt))
+                    }
+                }
+            }
+            lastError?.let {
+                Log.w(TAG, "No se pudo sincronizar informe a clínica tras reintentos: ${it.message}")
+            }
+        }
     }
 
     private suspend fun pushGlobalDocument(userId: String, doctorNombre: String, document: ClinicalDocument) {
@@ -530,6 +550,9 @@ object CloudSyncService {
             headerSnapshot = dto.headerSnapshot?.toHeaderModel(),
             membrete = dto.toMembrete(),
             sourceDocumentId = dto.sourceDocumentId,
+            clinicId = dto.clinicId,
+            clinicName = dto.clinicName,
+            doctorNombre = dto.doctorNombre,
         )
     }
 
@@ -659,6 +682,8 @@ object CloudSyncService {
         doctorNombre = doctorNombre,
         patientFirestoreKey = patientFirestoreKey,
         sourceDocumentId = sourceDocumentId,
+        clinicId = clinicId,
+        clinicName = clinicName,
     )
 
     private fun DocumentHeader.toSyncDto() = DocumentHeaderDto(

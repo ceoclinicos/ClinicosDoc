@@ -624,7 +624,8 @@ object DocumentAiService {
                     appendLine("- Incluye TODOS los sistemas activos, aunque el dictado solo mencione uno.")
                     appendLine("- Sistemas no dictados → texto base intacto. Solo edita los mencionados.")
                     appendLine("- Signos vitales SOLO si hay valores dictados (ej. TA: 120/80 mmHg | FC: 82 lpm).")
-                    appendLine("- Signos en 0 o no dictados: omitirlos.")
+                    appendLine("- Signos no dictados: omitir por completo. PROHIBIDO escribir «no tomados», «no aportados» o similares.")
+                    appendLine("- Si no hay signos en el dictado, no menciones signos vitales en absoluto.")
                     if (physicalExamBlock.isNotBlank()) {
                         appendLine()
                         appendLine(physicalExamBlock)

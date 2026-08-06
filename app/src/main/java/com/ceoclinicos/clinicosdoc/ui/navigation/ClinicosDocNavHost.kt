@@ -42,6 +42,7 @@ import com.ceoclinicos.clinicosdoc.ui.screens.HeadersScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.InformeDetailScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.MainShell
 import com.ceoclinicos.clinicosdoc.ui.screens.RedactarFlowScreen
+import com.ceoclinicos.clinicosdoc.ui.screens.JoinClinicScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.SettingsScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.PhysicalExamCatalogScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.PlantillasHubScreen
@@ -138,7 +139,11 @@ fun ClinicosDocNavHost() {
                 onBack = { navController.popBackStack() },
                 onTemplates = { navController.navigate(Routes.TEMPLATES) },
                 onHeaders = { navController.navigate(Routes.HEADERS) },
+                onJoinClinic = { navController.navigate(Routes.JOIN_CLINIC) },
             )
+        }
+        composable(Routes.JOIN_CLINIC) {
+            JoinClinicScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.TEMPLATES) {
             TemplatesScreen(

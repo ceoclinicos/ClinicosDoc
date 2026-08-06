@@ -1,5 +1,13 @@
-import { getNavRoutes, isMedicoLoggedIn, matchRoute, navigate, onRouteChange } from "./router";
+import {
+  getNavRoutes,
+  isClinicLoggedIn,
+  isMedicoLoggedIn,
+  matchRoute,
+  navigate,
+  onRouteChange,
+} from "./router";
 import { getPatientSession, isUserLoggedIn, logoutAllSessions } from "../registro/session";
+import { clearClinicSession } from "../clinic/session";
 
 function linksHtml(
   items: { path: string; title: string; navLabel?: string }[],
@@ -12,21 +20,26 @@ function linksHtml(
     )
     .join("");
   const logout =
-    withLogout && isUserLoggedIn()
+    withLogout && (isUserLoggedIn() || isClinicLoggedIn())
       ? `<button type="button" class="nav-link nav-link-logout" id="btn-nav-logout">Cerrar sesión</button>`
       : "";
   return links + logout;
 }
 
-/** Bottom bar tipo app: Home | Paciente | Informe */
+/** Bottom bar tipo app */
 function bottomNavItems() {
+  if (isClinicLoggedIn()) {
+    const order = ["/clinica/panel", "/clinica/plantillas", "/clinica/equipo"];
+    return order
+      .map((p) => getNavRoutes().find((r) => r.path === p))
+      .filter((r): r is NonNullable<typeof r> => !!r);
+  }
   if (!isMedicoLoggedIn()) {
     const patient = getPatientSession();
     if (patient) {
-      // Paciente logueado: no “Inicio”, solo su portal / ficha
       return [{ path: "/paciente", title: "Mi ficha", navLabel: "Mi ficha" }];
     }
-    return getNavRoutes().filter((r) => !r.medicoOnly);
+    return getNavRoutes().filter((r) => !r.medicoOnly && !r.clinicOnly);
   }
   const all = getNavRoutes();
   const order = ["/", "/pacientes", "/informes"];
@@ -36,6 +49,7 @@ function bottomNavItems() {
 }
 
 function topNavItems() {
+  if (isClinicLoggedIn()) return getNavRoutes();
   if (getPatientSession() && !isMedicoLoggedIn()) {
     return [
       { path: "/paciente", title: "Mi ficha", navLabel: "Mi ficha" },
@@ -47,6 +61,11 @@ function topNavItems() {
 
 function bindLogout(root: HTMLElement): void {
   root.querySelector("#btn-nav-logout")?.addEventListener("click", () => {
+    if (isClinicLoggedIn()) {
+      clearClinicSession();
+      navigate("/");
+      return;
+    }
     logoutAllSessions();
     navigate("/");
   });
@@ -73,6 +92,11 @@ export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => v
   const bottomnav = root.querySelector("#bottomnav") as HTMLElement;
 
   root.querySelector("#brand-home")?.addEventListener("click", (e) => {
+    if (isClinicLoggedIn()) {
+      e.preventDefault();
+      navigate("/clinica/panel");
+      return;
+    }
     if (getPatientSession() && !isMedicoLoggedIn()) {
       e.preventDefault();
       navigate("/paciente");
@@ -86,10 +110,16 @@ export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => v
     bindLogout(bottomnav);
 
     const current = matchRoute(window.location.hash)?.path ?? "/";
-    const activePath =
-      getPatientSession() && !isMedicoLoggedIn() && (current === "/" || current === "/paciente")
-        ? "/paciente"
-        : current;
+    let activePath = current;
+    if (isClinicLoggedIn() && (current === "/" || current === "/clinica")) {
+      activePath = "/clinica/panel";
+    } else if (
+      getPatientSession() &&
+      !isMedicoLoggedIn() &&
+      (current === "/" || current === "/paciente")
+    ) {
+      activePath = "/paciente";
+    }
     root.querySelectorAll(".nav-link[data-path]").forEach((a) => {
       a.classList.toggle("active", a.getAttribute("data-path") === activePath);
     });
@@ -97,7 +127,11 @@ export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => v
 
   function render(): void {
     const raw = (window.location.hash.replace(/^#/, "").split("?")[0] || "/") || "/";
-    if ((raw === "/" || raw === "") && getPatientSession() && !isMedicoLoggedIn()) {
+    if (isClinicLoggedIn() && (raw === "/" || raw === "" || raw === "/clinica")) {
+      navigate("/clinica/panel");
+      return;
+    }
+    if ((raw === "/" || raw === "") && getPatientSession() && !isMedicoLoggedIn() && !isClinicLoggedIn()) {
       navigate("/paciente");
       return;
     }
