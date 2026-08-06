@@ -1,5 +1,6 @@
 name: Deploy web (GitHub Pages)
 
+# Redeploy trigger: 2026-08-06 clinic button
 on:
   push:
     branches: [main]
