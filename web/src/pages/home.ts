@@ -138,7 +138,7 @@ function publicHome(): HTMLElement {
     </button>
     <button type="button" class="hero-card" data-nav="/clinica">
       <span class="hero-title">Modo empresa / centro de salud</span>
-      <span class="hero-sub">Plantillas institucionales · Pacientes del centro · Equipo médico</span>
+      <span class="hero-sub">Plantillas del centro · Pacientes · Equipo médico</span>
     </button>
     `,
   );
