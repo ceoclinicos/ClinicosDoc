@@ -434,7 +434,7 @@ function renderAyudemos(): HTMLElement {
 registerRoute({
   path: "/ayudemos",
   title: "Ayudemos",
-  nav: true,
+  nav: false,
   navLabel: "Ayudemos",
   render: renderAyudemos,
 });

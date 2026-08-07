@@ -134,7 +134,7 @@ function publicHome(): HTMLElement {
     </button>
     <button type="button" class="hero-card hero-card-alt" data-nav="/paciente">
       <span class="hero-title">Soy paciente</span>
-      <span class="hero-sub">Ficha de emergencia (QR) · Ayudemos</span>
+      <span class="hero-sub">Ficha de emergencia (QR)</span>
     </button>
     <button type="button" class="hero-card" data-nav="/clinica">
       <span class="hero-title">Modo empresa / centro de salud</span>

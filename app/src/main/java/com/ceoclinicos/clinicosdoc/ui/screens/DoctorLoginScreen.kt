@@ -397,6 +397,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CedulaInputRow(
     letter: String,

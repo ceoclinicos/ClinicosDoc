@@ -51,10 +51,7 @@ function bottomNavItems() {
 function topNavItems() {
   if (isClinicLoggedIn()) return getNavRoutes();
   if (getPatientSession() && !isMedicoLoggedIn()) {
-    return [
-      { path: "/paciente", title: "Mi ficha", navLabel: "Mi ficha" },
-      { path: "/ayudemos", title: "Ayudemos", navLabel: "Ayudemos" },
-    ];
+    return [{ path: "/paciente", title: "Mi ficha", navLabel: "Mi ficha" }];
   }
   return getNavRoutes();
 }

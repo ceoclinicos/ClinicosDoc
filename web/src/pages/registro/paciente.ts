@@ -401,14 +401,11 @@ registerRoute({
       session ? `Hola, ${session.nombre.split(" ")[0]}` : "Portal del paciente",
       session
         ? `
-        <p class="lead">Aquí gestiona su ficha de emergencia. Para pedir ayuda comunitaria use <strong>Ayudemos</strong> (sin ver informes médicos).</p>
-        <div class="grid-2" style="margin-bottom:1rem">
-          <button type="button" class="tile" data-nav="/ayudemos">Ir a Ayudemos</button>
-        </div>
+        <p class="lead">Aquí gestiona su ficha de emergencia.</p>
         <div id="ficha-slot"></div>
       `
         : `
-        <p class="lead">Regístrese para crear su ficha de emergencia (QR) y publicar en Ayudemos.</p>
+        <p class="lead">Regístrese para crear su ficha de emergencia (QR).</p>
         ${tabs("entrar")}
         <form class="form" id="pac-login">
           ${cedulaFieldHtml({ autocomplete: "username" })}

@@ -47,6 +47,7 @@ object DoctorAuthService {
                 mpps = auth.mpps,
                 sexo = auth.sexo,
                 especialidad = auth.especialidad,
+                whatsapp = "",
                 correo = auth.correo,
                 nacionalidad = auth.nacionalidad,
             )
