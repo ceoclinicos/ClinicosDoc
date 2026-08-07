@@ -19,8 +19,6 @@ import type {
   ClinicRegistro,
   ClinicSession,
 } from "./models";
-import { findCloudUserByCedula } from "../services/app-account";
-import { getProfesional } from "../registro/store";
 
 function assertPin4(pin: string): void {
   if (!/^\d{4}$/.test(pin)) throw new Error("El PIN debe tener exactamente 4 dígitos");
@@ -232,45 +230,52 @@ export async function inviteDoctorByCedula(input: {
   doctorCedula: string;
   doctorNombreHint?: string;
 }): Promise<ClinicDoctorInvitation> {
-  const clinic = await getClinic(input.clinicId);
-  if (!clinic) throw new Error("Centro no encontrado");
-
-  const doctorCedula = normalizeCedula(input.doctorCedula);
-  if (doctorCedula.length < 5) throw new Error("Indique una cédula válida");
-
-  const existingMember = await getDoc(doc(membersCol(input.clinicId), doctorCedula));
-  if (existingMember.exists()) throw new Error("Ese médico ya está en el equipo");
-
-  const pendingRef = doc(invitationsCol(input.clinicId), doctorCedula);
-  const pendingSnap = await getDoc(pendingRef);
-  if (pendingSnap.exists() && (pendingSnap.data() as ClinicDoctorInvitation).status === "pending") {
-    throw new Error("Ya hay una invitación pendiente para esa cédula");
+  const { getIdToken } = await import("../services/firebase-auth");
+  const token = await getIdToken(true);
+  if (!token) {
+    throw new Error("Sesión de centro vencida. Cierre sesión e ingrese de nuevo.");
   }
 
-  const prof = await getProfesional(doctorCedula);
-  const cloud = await findCloudUserByCedula(doctorCedula);
-  const doctorNombre =
-    (prof?.nombre || cloud?.nombre || input.doctorNombreHint || "").trim() ||
-    `Médico C.I. ${doctorCedula}`;
-  if (!prof && !cloud && !(input.doctorNombreHint || "").trim()) {
-    throw new Error(
-      "No encontramos esa cédula en ClinicosDoc. Indique el nombre del médico o pídale que se registre primero.",
-    );
+  const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(
+    /\/$/,
+    "",
+  );
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/clinic-invite`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        clinicId: input.clinicId,
+        doctorCedula: input.doctorCedula,
+        doctorNombreHint: input.doctorNombreHint,
+      }),
+    });
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : "No se pudo conectar con el servidor");
   }
 
-  const invitation: ClinicDoctorInvitation = {
-    clinicId: clinic.id,
-    clinicName: clinic.nombre,
-    doctorCedula,
-    doctorNombre,
-    cloudUserId: cloud?.id,
+  const raw = await res.text();
+  let data: ClinicDoctorInvitation & { error?: string } = {
+    clinicId: "",
+    clinicName: "",
+    doctorCedula: "",
+    doctorNombre: "",
     status: "pending",
-    invitedAt: new Date().toISOString(),
+    invitedAt: "",
   };
-
-  await setDoc(pendingRef, invitation as DocumentData);
-  await setDoc(doc(doctorPendingInvitesCol(doctorCedula), clinic.id), invitation as DocumentData);
-  return invitation;
+  try {
+    data = raw ? JSON.parse(raw) : data;
+  } catch {
+    /* ignore */
+  }
+  if (!res.ok) {
+    throw new Error(data.error || "No se pudo enviar la invitación");
+  }
+  return data as ClinicDoctorInvitation;
 }
 
 export async function listPendingInvitationsForClinic(

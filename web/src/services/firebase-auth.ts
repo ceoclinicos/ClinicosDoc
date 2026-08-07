@@ -40,3 +40,11 @@ export async function signOutFirebase(): Promise<void> {
 export function currentAuthUid(): string | null {
   return getFirebaseAuth().currentUser?.uid ?? null;
 }
+
+/** ID token para APIs Admin (Authorization: Bearer …). */
+export async function getIdToken(forceRefresh = false): Promise<string | null> {
+  await waitForAuth();
+  const user = getFirebaseAuth().currentUser;
+  if (!user) return null;
+  return user.getIdToken(forceRefresh);
+}
