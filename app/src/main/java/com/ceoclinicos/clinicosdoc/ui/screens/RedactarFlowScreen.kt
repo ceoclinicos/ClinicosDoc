@@ -76,6 +76,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.ceoclinicos.clinicosdoc.data.ClinicCatalogStorage
 import com.ceoclinicos.clinicosdoc.data.ClinicMembershipStorage
 import com.ceoclinicos.clinicosdoc.data.ClinicService
 import com.ceoclinicos.clinicosdoc.data.CloudSyncService
@@ -177,7 +178,7 @@ fun RedactarFlowScreen(
     val scope = rememberCoroutineScope()
     val speechService = remember { SpeechService(context) }
 
-    var step by rememberSaveable(stateSaver = RedactarStepSaver) { mutableStateOf(RedactarStep.PACIENTE) }
+    var step by rememberSaveable(stateSaver = RedactarStepSaver) { mutableStateOf(RedactarStep.ORIGEN) }
     var selectedPatientId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedHeaderId by rememberSaveable { mutableStateOf(headerId) }
     var patients by remember { mutableStateOf<List<Patient>>(emptyList()) }
@@ -234,11 +235,18 @@ fun RedactarFlowScreen(
     var showLeaveResultDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        // Usa lo ya descargado al abrir la app; refresca solo si hace falta
-        doctorMemberships = ClinicMembershipStorage.load(context)
-        if (doctorMemberships.isEmpty()) {
-            doctorMemberships = runCatching { ClinicService.syncAffiliationsOnEnter(context) }
-                .getOrElse { emptyList() }
+        // Al abrir Redactar: primero origen (mis moldes vs clínica), luego plantillas
+        origenLoading = true
+        doctorMemberships = runCatching {
+            ClinicService.syncAffiliationsOnEnter(context, force = true)
+        }.getOrElse { ClinicMembershipStorage.load(context) }
+        origenLoading = false
+        if (!draftLoaded) {
+            step = if (doctorMemberships.isNotEmpty()) {
+                RedactarStep.ORIGEN
+            } else {
+                RedactarStep.PACIENTE
+            }
         }
     }
 
@@ -394,43 +402,26 @@ fun RedactarFlowScreen(
     fun showMsg(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
 
     fun goAfterPatientSelected() {
-        clinicId = null
-        clinicName = null
-        scope.launch {
-            origenLoading = true
-            try {
-                // Preferir caché del arranque; forzar sync solo si aún no hay afiliaciones
-                doctorMemberships = ClinicMembershipStorage.load(context).ifEmpty {
-                    runCatching { ClinicService.syncAffiliationsOnEnter(context) }
-                        .getOrElse { emptyList() }
-                }
-                if (doctorMemberships.isNotEmpty()) {
-                    step = RedactarStep.ORIGEN
-                } else {
-                    val pending = runCatching { ClinicService.listPendingInvitations(context) }
-                        .getOrDefault(emptyList())
-                    if (pending.isNotEmpty()) {
-                        showMsg(
-                            "Tiene invitación pendiente de ${pending.first().clinicName}. Acéptela en Centros de salud.",
-                        )
-                    }
-                    step = RedactarStep.PLANTILLA
-                }
-            } finally {
-                origenLoading = false
-            }
-        }
+        // Origen/molde ya elegidos → configurar plantilla
+        step = RedactarStep.PLANTILLA
     }
 
     fun usePersonalMold() {
         clinicId = null
         clinicName = null
-        clinicMoldChoices = emptyList()
         usedMoldePicker = false
         reloadTemplate()
         template?.let { applyTemplateConfig(it) }
         refreshHeaders()
-        step = RedactarStep.PLANTILLA
+        if (availableTemplates.size > 1) {
+            usedMoldePicker = true
+            clinicMoldChoices = availableTemplates
+            clinicName = "Mis plantillas"
+            step = RedactarStep.MOLDE
+        } else {
+            clinicMoldChoices = emptyList()
+            step = RedactarStep.PACIENTE
+        }
     }
 
     fun applyClinicTemplateChoice(chosen: DocumentTemplate) {
@@ -445,7 +436,7 @@ fun RedactarFlowScreen(
         } else {
             refreshHeaders()
         }
-        step = RedactarStep.PLANTILLA
+        step = RedactarStep.PACIENTE
     }
 
     fun useClinicMold(membership: ClinicMembership) {
@@ -454,8 +445,12 @@ fun RedactarFlowScreen(
             try {
                 clinicId = membership.clinicId
                 clinicName = membership.clinicName
-                val tpls = ClinicService.listTemplates(context, membership.clinicId, documentType)
-                val hdrs = ClinicService.listHeaders(context, membership.clinicId)
+                val tpls = ClinicService.listTemplates(context, membership.clinicId, documentType).ifEmpty {
+                    ClinicCatalogStorage.loadTemplates(context, membership.clinicId, documentType)
+                }
+                val hdrs = ClinicService.listHeaders(context, membership.clinicId).ifEmpty {
+                    ClinicCatalogStorage.loadHeaders(context, membership.clinicId)
+                }
                 pendingClinicHeaders = hdrs
                 if (tpls.isEmpty()) {
                     showMsg(
@@ -688,19 +683,6 @@ fun RedactarFlowScreen(
                 Text("Paciente", style = MaterialTheme.typography.headlineMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("¿Para qué paciente es este ${documentType.label.lowercase()}?", style = MaterialTheme.typography.bodyMedium)
-                if (origenLoading) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Teal)
-                    }
-                    Text(
-                        "Buscando centros afiliados…",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    return@Column
-                }
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -779,6 +761,18 @@ fun RedactarFlowScreen(
                     }
                 }
                 PremiumPrimaryButton("Agregar paciente", onClick = onAddPatient, icon = Icons.Default.PersonAdd)
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        when {
+                            usedMoldePicker && clinicMoldChoices.isNotEmpty() -> step = RedactarStep.MOLDE
+                            doctorMemberships.isNotEmpty() -> step = RedactarStep.ORIGEN
+                            else -> onBack()
+                        }
+                    },
+                ) {
+                    Text("Volver")
+                }
             }
 
             RedactarStep.ORIGEN -> Column(
@@ -790,7 +784,7 @@ fun RedactarFlowScreen(
                 Text("Origen del molde", style = MaterialTheme.typography.headlineMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "¿Con qué plantilla crearás este ${documentType.label.lowercase()}?",
+                    "¿Con qué plantillas crearás este ${documentType.label.lowercase()}?",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -798,6 +792,12 @@ fun RedactarFlowScreen(
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = Teal)
                     }
+                    Text(
+                        "Consultando centros afiliados…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
                 } else {
                     Card(
                         onClick = { usePersonalMold() },
@@ -824,9 +824,20 @@ fun RedactarFlowScreen(
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                     }
+                    if (doctorMemberships.isEmpty()) {
+                        Text(
+                            "No hay centros afiliados. Continúa con tus plantillas personales.",
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedButton(onClick = { usePersonalMold() }) {
+                            Text("Continuar con mis plantillas")
+                        }
+                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(onClick = { step = RedactarStep.PACIENTE }) {
+                OutlinedButton(onClick = onBack) {
                     Text("Volver")
                 }
             }
@@ -840,7 +851,7 @@ fun RedactarFlowScreen(
                 Text("Elegir molde", style = MaterialTheme.typography.headlineMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "${clinicName ?: "Centro"}: ¿cuál ${documentType.label.lowercase()}?",
+                    "${clinicName ?: "Plantillas"}: ¿cuál ${documentType.label.lowercase()}?",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
