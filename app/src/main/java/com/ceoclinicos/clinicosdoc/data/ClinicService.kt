@@ -229,12 +229,16 @@ object ClinicService {
     suspend fun refreshMemberships(context: Context): List<ClinicMembership> {
         val local = ClinicMembershipStorage.load(context)
         if (!DoctorAuthService.isConfigured(context)) return local
+        val profile = DoctorStorage.loadProfile(context)
+        val doctorCedula = profile?.cedula?.let { CedulaNormalizer.normalize(it) }.orEmpty()
         return runCatching {
             val idToken = idTokenOrThrow()
             withContext(Dispatchers.IO) {
+                val body = JSONObject()
+                if (doctorCedula.isNotBlank()) body.put("doctorCedula", doctorCedula)
                 val request = Request.Builder()
                     .url(MEMBERSHIPS_URL)
-                    .get()
+                    .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                     .header("Accept", "application/json")
                     .header("Authorization", "Bearer $idToken")
                     .build()
@@ -268,8 +272,8 @@ object ClinicService {
                     list
                 }
             }
-        }.getOrElse {
-            // Fallback Firestore local / nube
+        }.getOrElse { apiError ->
+            // Fallback Firestore (puede fallar con rules cerradas)
             runCatching {
                 val userId = DoctorStorage.userId(context) ?: return@runCatching local
                 val snap = membershipsCol(userId).get().await()
@@ -282,9 +286,16 @@ object ClinicService {
                         role = doc.getString("role") ?: "medico",
                     )
                 }.sortedBy { it.clinicName }
-                ClinicMembershipStorage.save(context, list)
-                list
-            }.getOrElse { local }
+                if (list.isNotEmpty()) {
+                    ClinicMembershipStorage.save(context, list)
+                    list
+                } else {
+                    throw apiError
+                }
+            }.getOrElse {
+                if (local.isNotEmpty()) local
+                else throw (apiError as? Exception ?: IllegalStateException(apiError.message))
+            }
         }
     }
 

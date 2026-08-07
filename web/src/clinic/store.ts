@@ -417,11 +417,13 @@ export async function listMembershipsForDoctor(doctorCedula: string, cloudUserId
         "",
       );
       const res = await fetch(`${API_BASE}/api/clinic-memberships`, {
-        method: "GET",
+        method: "POST",
         headers: {
           Accept: "application/json",
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ doctorCedula: doctorCedula || undefined }),
       });
       if (res.ok) {
         const data = (await res.json()) as {

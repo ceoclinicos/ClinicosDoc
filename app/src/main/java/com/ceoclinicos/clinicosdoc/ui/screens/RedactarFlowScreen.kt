@@ -393,14 +393,38 @@ fun RedactarFlowScreen(
         clinicId = null
         clinicName = null
         scope.launch {
-            val local = ClinicMembershipStorage.load(context)
-            val remote = runCatching { ClinicService.refreshMemberships(context) }.getOrNull()
-            doctorMemberships = when {
-                !remote.isNullOrEmpty() -> remote
-                local.isNotEmpty() -> local
-                else -> remote ?: emptyList()
+            origenLoading = true
+            try {
+                val local = ClinicMembershipStorage.load(context)
+                val authUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+                if (authUser == null) {
+                    showMsg("Cierre sesión y vuelva a entrar para ver moldes de clínica")
+                    doctorMemberships = local
+                    step = if (local.isNotEmpty()) RedactarStep.ORIGEN else RedactarStep.PLANTILLA
+                    return@launch
+                }
+                val remote = runCatching { ClinicService.refreshMemberships(context) }
+                doctorMemberships = remote.getOrElse { err ->
+                    if (local.isEmpty()) {
+                        showMsg(err.message ?: "No se pudieron cargar centros afiliados")
+                    }
+                    local
+                }
+                if (doctorMemberships.isNotEmpty()) {
+                    step = RedactarStep.ORIGEN
+                } else {
+                    val pending = runCatching { ClinicService.listPendingInvitations(context) }
+                        .getOrDefault(emptyList())
+                    if (pending.isNotEmpty()) {
+                        showMsg(
+                            "Tiene invitación pendiente de ${pending.first().clinicName}. Acéptela en Centros de salud.",
+                        )
+                    }
+                    step = RedactarStep.PLANTILLA
+                }
+            } finally {
+                origenLoading = false
             }
-            step = if (doctorMemberships.isNotEmpty()) RedactarStep.ORIGEN else RedactarStep.PLANTILLA
         }
     }
 
@@ -670,6 +694,19 @@ fun RedactarFlowScreen(
                 Text("Paciente", style = MaterialTheme.typography.headlineMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("¿Para qué paciente es este ${documentType.label.lowercase()}?", style = MaterialTheme.typography.bodyMedium)
+                if (origenLoading) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Teal)
+                    }
+                    Text(
+                        "Buscando centros afiliados…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    return@Column
+                }
                 Spacer(modifier = Modifier.height(16.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),

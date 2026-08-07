@@ -1,5 +1,5 @@
 const { getAdmin } = require("./_lib/firebase");
-const { normalizeCedula } = require("./_lib/pin");
+const { normalizeCedula, cedulaLookupKeys } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
@@ -20,6 +20,16 @@ async function requireMedicoAuth(req) {
   return { admin, uid: decoded.uid, decoded };
 }
 
+async function resolveDoctorCedula(db, uid, decoded, body) {
+  const fromBody = normalizeCedula(body.doctorCedula || "");
+  if (fromBody.length >= 7) return fromBody;
+  const fromClaim = normalizeCedula(decoded.cedula || "");
+  if (fromClaim.length >= 7) return fromClaim;
+  const userSnap = await db.collection("clinicosdoc_user").doc(uid).get();
+  const data = userSnap.data() || {};
+  return normalizeCedula(data.cedulaNormalizada || data.cedula || "");
+}
+
 async function membershipsFromUser(db, uid) {
   const snap = await db
     .collection("clinicosdoc_user")
@@ -36,59 +46,82 @@ async function membershipsFromUser(db, uid) {
   });
 }
 
-/** Recupera afiliaciones si el médico está en members pero falta clinic_memberships. */
-async function healFromClinicMembers(db, uid, cedula) {
+async function upsertMembership(db, uid, clinicId, clinicName, role, joinedAt) {
+  await db
+    .collection("clinicosdoc_user")
+    .doc(uid)
+    .collection("clinic_memberships")
+    .doc(clinicId)
+    .set(
+      {
+        clinicId,
+        clinicName,
+        role,
+        joinedAt: joinedAt || new Date().toISOString(),
+        healedAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+}
+
+/** Si el médico está en members (o invitación aceptada) pero falta clinic_memberships. */
+async function healFromClinics(db, uid, cedula) {
+  if (!cedula || cedula.length < 7) return [];
+  const keys = cedulaLookupKeys(cedula);
+  const clinicsSnap = await db.collection("clinicosdoc_clinics").limit(300).get();
   const out = [];
   const seen = new Set();
 
-  const queries = [];
-  if (cedula) {
-    queries.push(
-      db.collectionGroup("members").where("doctorCedula", "==", cedula).limit(30).get(),
-    );
-  }
-  queries.push(db.collectionGroup("members").where("cloudUserId", "==", uid).limit(30).get());
+  for (const clinicDoc of clinicsSnap.docs) {
+    const clinicId = clinicDoc.id;
+    if (seen.has(clinicId)) continue;
 
-  const snaps = await Promise.all(queries);
-  for (const snap of snaps) {
-    for (const d of snap.docs) {
-      // path: clinicosdoc_clinics/{clinicId}/members/{cedula}
-      const parts = d.ref.path.split("/");
-      if (parts.length < 4 || parts[0] !== "clinicosdoc_clinics") continue;
-      const clinicId = parts[1];
-      if (seen.has(clinicId)) continue;
-      seen.add(clinicId);
-
-      const data = d.data() || {};
-      const clinicSnap = await db.collection("clinicosdoc_clinics").doc(clinicId).get();
-      const clinicName = String(
-        clinicSnap.data()?.nombre || data.clinicName || "Centro",
-      );
-      const role = String(data.role || "medico");
-
-      await db
-        .collection("clinicosdoc_user")
-        .doc(uid)
-        .collection("clinic_memberships")
-        .doc(clinicId)
-        .set(
-          {
-            clinicId,
-            clinicName,
-            role,
-            joinedAt: data.joinedAt || new Date().toISOString(),
-            healedAt: new Date().toISOString(),
-          },
-          { merge: true },
-        );
-
-      if (cedula && !data.cloudUserId) {
-        await d.ref.set({ cloudUserId: uid }, { merge: true });
+    let memberSnap = null;
+    for (const key of keys) {
+      const snap = await clinicDoc.ref.collection("members").doc(key).get();
+      if (snap.exists) {
+        memberSnap = snap;
+        break;
       }
-
-      out.push({ clinicId, clinicName, role });
     }
+
+    let acceptedInvite = false;
+    if (!memberSnap) {
+      for (const key of keys) {
+        const inv = await clinicDoc.ref.collection("invitations").doc(key).get();
+        if (inv.exists && String(inv.data()?.status || "") === "accepted") {
+          acceptedInvite = true;
+          break;
+        }
+      }
+    }
+
+    if (!memberSnap && !acceptedInvite) continue;
+    seen.add(clinicId);
+
+    const clinicName = String(clinicDoc.data()?.nombre || "Centro");
+    const role = String(memberSnap?.data()?.role || "medico");
+    const joinedAt = memberSnap?.data()?.joinedAt || new Date().toISOString();
+
+    if (!memberSnap) {
+      await clinicDoc.ref.collection("members").doc(cedula).set(
+        {
+          doctorCedula: cedula,
+          doctorNombre: `Médico C.I. ${cedula}`,
+          cloudUserId: uid,
+          role: "medico",
+          joinedAt,
+        },
+        { merge: true },
+      );
+    } else if (!memberSnap.data()?.cloudUserId) {
+      await memberSnap.ref.set({ cloudUserId: uid }, { merge: true });
+    }
+
+    await upsertMembership(db, uid, clinicId, clinicName, role, joinedAt);
+    out.push({ clinicId, clinicName, role });
   }
+
   return out;
 }
 
@@ -103,17 +136,17 @@ module.exports = async function handler(req, res) {
     const { admin, uid, decoded } = await requireMedicoAuth(req);
     const db = admin.firestore();
     const body = req.method === "POST" ? parseBody(req) : {};
-    const cedula = normalizeCedula(body.doctorCedula || decoded.cedula || "");
+    const cedula = await resolveDoctorCedula(db, uid, decoded, body);
 
     let memberships = await membershipsFromUser(db, uid);
 
     if (!memberships.length) {
-      const healed = await healFromClinicMembers(db, uid, cedula);
+      const healed = await healFromClinics(db, uid, cedula);
       if (healed.length) memberships = healed;
     }
 
     memberships.sort((a, b) => a.clinicName.localeCompare(b.clinicName));
-    return res.status(200).json({ memberships });
+    return res.status(200).json({ memberships, cedula: cedula || null });
   } catch (err) {
     const status = err?.status || (err?.code === "auth/id-token-expired" ? 401 : 500);
     if (status < 500) {
