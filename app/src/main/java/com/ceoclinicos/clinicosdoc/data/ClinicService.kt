@@ -11,18 +11,21 @@ import com.ceoclinicos.clinicosdoc.model.HeaderType
 import com.ceoclinicos.clinicosdoc.service.DoctorAuthService
 import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
-
+import kotlin.coroutines.resume
 object ClinicService {
     private fun db() = FirebaseFirestore.getInstance()
 
@@ -35,10 +38,65 @@ object ClinicService {
     private const val MEMBERSHIPS_URL = "https://clinicos-doc.vercel.app/api/clinic-memberships"
     private const val TEMPLATES_URL = "https://clinicos-doc.vercel.app/api/clinic-templates"
 
-    private suspend fun idTokenOrThrow(): String =
-        FirebaseAuth.getInstance().currentUser?.getIdToken(true)?.await()?.token
-            ?: throw IllegalStateException("Sesión Firebase vencida. Vuelva a iniciar sesión.")
+    private suspend fun awaitAuthUser(timeoutMs: Long = 4_000L): FirebaseUser? {
+        val auth = FirebaseAuth.getInstance()
+        auth.currentUser?.let { return it }
+        return withTimeoutOrNull(timeoutMs) {
+            suspendCancellableCoroutine { cont ->
+                val listener = object : FirebaseAuth.AuthStateListener {
+                    override fun onAuthStateChanged(firebaseAuth: FirebaseAuth) {
+                        val user = firebaseAuth.currentUser
+                        if (user != null && cont.isActive) {
+                            firebaseAuth.removeAuthStateListener(this)
+                            cont.resume(user)
+                        }
+                    }
+                }
+                auth.addAuthStateListener(listener)
+                cont.invokeOnCancellation { auth.removeAuthStateListener(listener) }
+                // Si ya restauró entre medias
+                auth.currentUser?.let {
+                    auth.removeAuthStateListener(listener)
+                    if (cont.isActive) cont.resume(it)
+                }
+            }
+        }
+    }
 
+    private suspend fun idTokenOrThrow(): String {
+        val user = awaitAuthUser()
+            ?: throw IllegalStateException("Sincronizando sesión… intente de nuevo en unos segundos")
+        return user.getIdToken(true).await().token
+            ?: throw IllegalStateException("No se pudo obtener sesión segura")
+    }
+
+    /**
+     * Cada vez que el médico entra: confirma afiliaciones en la nube
+     * y descarga moldes/encabezados de cada clínica.
+     */
+    suspend fun syncAffiliationsOnEnter(context: Context): List<ClinicMembership> {
+        if (!DoctorAuthService.isConfigured(context)) {
+            return ClinicMembershipStorage.load(context)
+        }
+        if (DoctorStorage.loadProfile(context) == null) {
+            return emptyList()
+        }
+        // Esperar restauración de Auth (no pedir cerrar sesión)
+        awaitAuthUser()
+        val memberships = runCatching { refreshMemberships(context) }
+            .getOrElse { ClinicMembershipStorage.load(context) }
+        ClinicMembershipStorage.save(context, memberships)
+        ClinicCatalogStorage.retainClinics(context, memberships.map { it.clinicId }.toSet())
+        for (m in memberships) {
+            runCatching {
+                val tpls = listTemplates(context, m.clinicId, documentType = null)
+                val hdrs = listHeaders(context, m.clinicId)
+                ClinicCatalogStorage.saveTemplates(context, m.clinicId, tpls)
+                ClinicCatalogStorage.saveHeaders(context, m.clinicId, hdrs)
+            }
+        }
+        return memberships
+    }
     private fun inviteRef(code: String) =
         db().collection(FirestorePaths.CLINIC_INVITES).document(code.trim().uppercase())
 
@@ -299,7 +357,12 @@ object ClinicService {
         }
     }
 
-    suspend fun listTemplates(clinicId: String, documentType: DocumentType? = null): List<DocumentTemplate> {
+    suspend fun listTemplates(
+        context: Context,
+        clinicId: String,
+        documentType: DocumentType? = null,
+    ): List<DocumentTemplate> {
+        val cached = ClinicCatalogStorage.loadTemplates(context, clinicId, documentType)
         return runCatching {
             val idToken = idTokenOrThrow()
             withContext(Dispatchers.IO) {
@@ -327,7 +390,6 @@ object ClinicService {
                             val data = arr.optJSONObject(i) ?: continue
                             val typeRaw = data.optString("documentType")
                             if (typeRaw.isBlank()) continue
-                            @Suppress("UNCHECKED_CAST")
                             val sectionsJson = data.optJSONArray("sections")
                             val sections = buildList {
                                 if (sectionsJson != null) {
@@ -369,9 +431,17 @@ object ClinicService {
                         }
                     }
                 }
+            }.also { remote ->
+                if (documentType == null) {
+                    ClinicCatalogStorage.saveTemplates(context, clinicId, remote)
+                } else {
+                    val merged = ClinicCatalogStorage.loadTemplates(context, clinicId)
+                        .filterNot { it.documentType == documentType } + remote
+                    ClinicCatalogStorage.saveTemplates(context, clinicId, merged)
+                }
             }
         }.getOrElse {
-            // Fallback directo a Firestore
+            if (cached.isNotEmpty()) return@getOrElse cached
             val snap = templatesCol(clinicId).get().await()
             snap.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null
@@ -398,7 +468,8 @@ object ClinicService {
         }
     }
 
-    suspend fun listHeaders(clinicId: String): List<DocumentHeader> {
+    suspend fun listHeaders(context: Context, clinicId: String): List<DocumentHeader> {
+        val cached = ClinicCatalogStorage.loadHeaders(context, clinicId)
         return runCatching {
             val idToken = idTokenOrThrow()
             withContext(Dispatchers.IO) {
@@ -438,8 +509,9 @@ object ClinicService {
                         }
                     }
                 }
-            }
+            }.also { ClinicCatalogStorage.saveHeaders(context, clinicId, it) }
         }.getOrElse {
+            if (cached.isNotEmpty()) return@getOrElse cached
             val snap = headersCol(clinicId).get().await()
             snap.documents.mapNotNull { doc ->
                 val data = doc.data ?: return@mapNotNull null

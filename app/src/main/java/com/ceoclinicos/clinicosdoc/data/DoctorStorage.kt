@@ -32,6 +32,7 @@ object DoctorStorage {
             .remove("${PREFIX}nacionalidad")
             .apply()
         ClinicMembershipStorage.clear(context)
+        ClinicCatalogStorage.clear(context)
     }
 
     fun loadProfile(context: Context): DoctorProfile? {

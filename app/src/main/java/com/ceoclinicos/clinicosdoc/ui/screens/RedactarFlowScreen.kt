@@ -234,7 +234,7 @@ fun RedactarFlowScreen(
     var showLeaveResultDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        doctorMemberships = runCatching { ClinicService.refreshMemberships(context) }
+        doctorMemberships = runCatching { ClinicService.syncAffiliationsOnEnter(context) }
             .getOrElse { ClinicMembershipStorage.load(context) }
     }
 
@@ -395,21 +395,8 @@ fun RedactarFlowScreen(
         scope.launch {
             origenLoading = true
             try {
-                val local = ClinicMembershipStorage.load(context)
-                val authUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-                if (authUser == null) {
-                    showMsg("Cierre sesión y vuelva a entrar para ver moldes de clínica")
-                    doctorMemberships = local
-                    step = if (local.isNotEmpty()) RedactarStep.ORIGEN else RedactarStep.PLANTILLA
-                    return@launch
-                }
-                val remote = runCatching { ClinicService.refreshMemberships(context) }
-                doctorMemberships = remote.getOrElse { err ->
-                    if (local.isEmpty()) {
-                        showMsg(err.message ?: "No se pudieron cargar centros afiliados")
-                    }
-                    local
-                }
+                doctorMemberships = runCatching { ClinicService.syncAffiliationsOnEnter(context) }
+                    .getOrElse { ClinicMembershipStorage.load(context) }
                 if (doctorMemberships.isNotEmpty()) {
                     step = RedactarStep.ORIGEN
                 } else {
@@ -460,8 +447,8 @@ fun RedactarFlowScreen(
             try {
                 clinicId = membership.clinicId
                 clinicName = membership.clinicName
-                val tpls = ClinicService.listTemplates(membership.clinicId, documentType)
-                val hdrs = ClinicService.listHeaders(membership.clinicId)
+                val tpls = ClinicService.listTemplates(context, membership.clinicId, documentType)
+                val hdrs = ClinicService.listHeaders(context, membership.clinicId)
                 pendingClinicHeaders = hdrs
                 if (tpls.isEmpty()) {
                     showMsg(

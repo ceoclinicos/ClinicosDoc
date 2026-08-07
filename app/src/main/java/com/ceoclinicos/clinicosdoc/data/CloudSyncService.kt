@@ -43,6 +43,7 @@ object CloudSyncService {
             if (!hasCloudData) {
                 pushAllLocal(appContext, userId)
             }
+            runCatching { ClinicService.syncAffiliationsOnEnter(appContext) }
         } catch (e: Exception) {
             Log.e(TAG, "syncOnLogin falló: ${e.message}", e)
         }

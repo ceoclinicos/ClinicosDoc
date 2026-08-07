@@ -1,6 +1,7 @@
 package com.ceoclinicos.clinicosdoc
 
 import android.app.Application
+import com.ceoclinicos.clinicosdoc.data.ClinicService
 import com.ceoclinicos.clinicosdoc.data.CloudSyncService
 import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.data.HeaderStorage
@@ -30,6 +31,9 @@ class ClinicosDocApplication : Application() {
             val userId = DoctorStorage.userId(this@ClinicosDocApplication)
             if (userId != null && DoctorAuthService.isConfigured(this@ClinicosDocApplication)) {
                 CloudSyncService.syncOnLogin(this@ClinicosDocApplication, userId)
+                runCatching {
+                    ClinicService.syncAffiliationsOnEnter(this@ClinicosDocApplication)
+                }
             }
         }
     }
