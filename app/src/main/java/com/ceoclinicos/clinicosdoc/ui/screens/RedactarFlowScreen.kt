@@ -234,8 +234,12 @@ fun RedactarFlowScreen(
     var showLeaveResultDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        doctorMemberships = runCatching { ClinicService.syncAffiliationsOnEnter(context) }
-            .getOrElse { ClinicMembershipStorage.load(context) }
+        // Usa lo ya descargado al abrir la app; refresca solo si hace falta
+        doctorMemberships = ClinicMembershipStorage.load(context)
+        if (doctorMemberships.isEmpty()) {
+            doctorMemberships = runCatching { ClinicService.syncAffiliationsOnEnter(context) }
+                .getOrElse { emptyList() }
+        }
     }
 
     fun requestLeave() {
@@ -395,8 +399,11 @@ fun RedactarFlowScreen(
         scope.launch {
             origenLoading = true
             try {
-                doctorMemberships = runCatching { ClinicService.syncAffiliationsOnEnter(context) }
-                    .getOrElse { ClinicMembershipStorage.load(context) }
+                // Preferir caché del arranque; forzar sync solo si aún no hay afiliaciones
+                doctorMemberships = ClinicMembershipStorage.load(context).ifEmpty {
+                    runCatching { ClinicService.syncAffiliationsOnEnter(context) }
+                        .getOrElse { emptyList() }
+                }
                 if (doctorMemberships.isNotEmpty()) {
                     step = RedactarStep.ORIGEN
                 } else {

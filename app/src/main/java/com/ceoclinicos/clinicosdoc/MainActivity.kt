@@ -4,10 +4,16 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.lifecycleScope
+import com.ceoclinicos.clinicosdoc.data.ClinicService
+import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.receiver.AppointmentReminderReceiver
+import com.ceoclinicos.clinicosdoc.service.DoctorAuthService
 import com.ceoclinicos.clinicosdoc.ui.navigation.ClinicosDocNavHost
 import com.ceoclinicos.clinicosdoc.ui.theme.ClinicosDocTheme
 import com.ceoclinicos.clinicosdoc.util.WhatsAppHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -18,6 +24,16 @@ class MainActivity : ComponentActivity() {
             ClinicosDocTheme {
                 ClinicosDocNavHost()
             }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Al abrir/volver a la app: confirmar clínicas y descargar moldes si hay novedades
+        if (DoctorStorage.loadProfile(this) == null) return
+        if (!DoctorAuthService.isConfigured(this)) return
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { ClinicService.syncAffiliationsOnEnter(applicationContext) }
         }
     }
 

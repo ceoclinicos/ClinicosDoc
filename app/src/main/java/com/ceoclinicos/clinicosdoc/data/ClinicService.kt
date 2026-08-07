@@ -38,6 +38,10 @@ object ClinicService {
     private const val MEMBERSHIPS_URL = "https://clinicos-doc.vercel.app/api/clinic-memberships"
     private const val TEMPLATES_URL = "https://clinicos-doc.vercel.app/api/clinic-templates"
 
+    @Volatile
+    private var lastAffiliationSyncAtMs: Long = 0L
+    private const val AFFILIATION_SYNC_MIN_INTERVAL_MS = 90_000L
+
     private suspend fun awaitAuthUser(timeoutMs: Long = 4_000L): FirebaseUser? {
         val auth = FirebaseAuth.getInstance()
         auth.currentUser?.let { return it }
@@ -71,15 +75,22 @@ object ClinicService {
     }
 
     /**
-     * Cada vez que el médico entra: confirma afiliaciones en la nube
-     * y descarga moldes/encabezados de cada clínica.
+     * Confirma afiliaciones en la nube y descarga moldes/encabezados.
+     * Ideal al abrir la app. [force] ignora el intervalo mínimo (p. ej. tras aceptar invitación).
      */
-    suspend fun syncAffiliationsOnEnter(context: Context): List<ClinicMembership> {
+    suspend fun syncAffiliationsOnEnter(
+        context: Context,
+        force: Boolean = false,
+    ): List<ClinicMembership> {
         if (!DoctorAuthService.isConfigured(context)) {
             return ClinicMembershipStorage.load(context)
         }
         if (DoctorStorage.loadProfile(context) == null) {
             return emptyList()
+        }
+        val now = System.currentTimeMillis()
+        if (!force && now - lastAffiliationSyncAtMs < AFFILIATION_SYNC_MIN_INTERVAL_MS) {
+            return ClinicMembershipStorage.load(context)
         }
         // Esperar restauración de Auth (no pedir cerrar sesión)
         awaitAuthUser()
@@ -95,6 +106,7 @@ object ClinicService {
                 ClinicCatalogStorage.saveHeaders(context, m.clinicId, hdrs)
             }
         }
+        lastAffiliationSyncAtMs = System.currentTimeMillis()
         return memberships
     }
     private fun inviteRef(code: String) =
@@ -246,7 +258,7 @@ object ClinicService {
             }
         }
         ClinicMembershipStorage.upsert(context, result)
-        runCatching { refreshMemberships(context) }
+        runCatching { syncAffiliationsOnEnter(context, force = true) }
         return result
     }
 

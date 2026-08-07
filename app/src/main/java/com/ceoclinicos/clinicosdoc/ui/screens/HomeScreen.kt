@@ -48,7 +48,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.ceoclinicos.clinicosdoc.data.ClinicService
 import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.data.OnboardingStorage
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
@@ -76,10 +75,6 @@ fun HomeScreen(
         doctor = DoctorStorage.loadProfile(context)
         if (!OnboardingStorage.hasSeenRedactarTutorial(context)) {
             showTutorial = true
-        }
-        // Cada vez que entra al inicio: confirmar afiliaciones y bajar moldes de clínica
-        if (doctor != null) {
-            runCatching { ClinicService.syncAffiliationsOnEnter(context) }
         }
     }
 
