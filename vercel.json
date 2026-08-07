@@ -5,6 +5,9 @@
     { "src": "/api/auth-login", "dest": "/api/auth-login.js" },
     { "src": "/api/auth-register", "dest": "/api/auth-register.js" },
     { "src": "/api/clinic-invite", "dest": "/api/clinic-invite.js" },
+    { "src": "/api/clinic-accept-invite", "dest": "/api/clinic-accept-invite.js" },
+    { "src": "/api/clinic-memberships", "dest": "/api/clinic-memberships.js" },
+    { "src": "/api/clinic-templates", "dest": "/api/clinic-templates.js" },
     { "src": "/api/pin-reset-request", "dest": "/api/pin-reset-request.js" },
     { "src": "/api/pin-reset-confirm", "dest": "/api/pin-reset-confirm.js" },
     { "src": "/api/validar-mpps", "dest": "/api/validar-mpps.js" }

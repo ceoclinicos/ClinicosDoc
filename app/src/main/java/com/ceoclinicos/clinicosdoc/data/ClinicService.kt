@@ -10,12 +10,34 @@ import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.HeaderType
 import com.ceoclinicos.clinicosdoc.service.DoctorAuthService
 import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 object ClinicService {
     private fun db() = FirebaseFirestore.getInstance()
+
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(45, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
+        .build()
+
+    private const val ACCEPT_INVITE_URL = "https://clinicos-doc.vercel.app/api/clinic-accept-invite"
+    private const val MEMBERSHIPS_URL = "https://clinicos-doc.vercel.app/api/clinic-memberships"
+    private const val TEMPLATES_URL = "https://clinicos-doc.vercel.app/api/clinic-templates"
+
+    private suspend fun idTokenOrThrow(): String =
+        FirebaseAuth.getInstance().currentUser?.getIdToken(true)?.await()?.token
+            ?: throw IllegalStateException("Sesión Firebase vencida. Vuelva a iniciar sesión.")
 
     private fun inviteRef(code: String) =
         db().collection(FirestorePaths.CLINIC_INVITES).document(code.trim().uppercase())
@@ -132,32 +154,42 @@ object ClinicService {
         }
         val profile = DoctorStorage.loadProfile(context)
             ?: throw IllegalStateException("Sin sesión de médico")
-        val userId = DoctorStorage.userId(context)
-            ?: throw IllegalStateException("Sin cuenta cloud")
+        DoctorStorage.userId(context) ?: throw IllegalStateException("Sin cuenta cloud")
         val doctorCedula = CedulaNormalizer.normalize(profile.cedula)
+        val idToken = FirebaseAuth.getInstance().currentUser?.getIdToken(true)?.await()?.token
+            ?: throw IllegalStateException("Sesión Firebase vencida. Vuelva a iniciar sesión.")
 
-        val invSnap = invitationsCol(clinicId).document(doctorCedula).get().await()
-        if (!invSnap.exists()) throw IllegalArgumentException("Invitación no encontrada")
-        val status = invSnap.getString("status") ?: "pending"
-        if (status != "pending") throw IllegalArgumentException("Esta invitación ya no está pendiente")
-
-        val clinicSnap = clinicRef(clinicId).get().await()
-        if (!clinicSnap.exists()) throw IllegalArgumentException("Centro no encontrado")
-        val clinicName = clinicSnap.getString("nombre").orEmpty()
-            .ifBlank { invSnap.getString("clinicName").orEmpty().ifBlank { "Centro" } }
-
-        val membership = writeMembership(
-            context = context,
-            clinicId = clinicId,
-            clinicName = clinicName,
-            doctorCedula = doctorCedula,
-            doctorNombre = profile.nombre,
-            userId = userId,
-        )
-        invitationsCol(clinicId).document(doctorCedula)
-            .set(mapOf("status" to "accepted"), SetOptions.merge()).await()
-        doctorPendingInvitesCol(doctorCedula).document(clinicId).delete().await()
-        return membership
+        val result = withContext(Dispatchers.IO) {
+            val bodyJson = JSONObject()
+                .put("action", "accept")
+                .put("clinicId", clinicId)
+                .put("doctorCedula", doctorCedula)
+                .put("doctorNombre", profile.nombre)
+                .toString()
+            val request = Request.Builder()
+                .url(ACCEPT_INVITE_URL)
+                .post(bodyJson.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .header("Accept", "application/json")
+                .header("Authorization", "Bearer $idToken")
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                val raw = response.body?.string().orEmpty()
+                val json = runCatching { JSONObject(raw) }.getOrElse {
+                    error("Respuesta inválida del servidor")
+                }
+                if (!response.isSuccessful) {
+                    error(json.optString("error").ifBlank { "No se pudo aceptar la invitación" })
+                }
+                ClinicMembership(
+                    clinicId = json.optString("clinicId", clinicId),
+                    clinicName = json.optString("clinicName", "Centro"),
+                    role = json.optString("role", "medico"),
+                )
+            }
+        }
+        ClinicMembershipStorage.upsert(context, result)
+        runCatching { refreshMemberships(context) }
+        return result
     }
 
     suspend fun rejectInvitation(context: Context, clinicId: String) {
@@ -167,69 +199,252 @@ object ClinicService {
         val profile = DoctorStorage.loadProfile(context)
             ?: throw IllegalStateException("Sin sesión de médico")
         val doctorCedula = CedulaNormalizer.normalize(profile.cedula)
-        invitationsCol(clinicId).document(doctorCedula)
-            .set(mapOf("status" to "rejected"), SetOptions.merge()).await()
-        doctorPendingInvitesCol(doctorCedula).document(clinicId).delete().await()
+        val idToken = FirebaseAuth.getInstance().currentUser?.getIdToken(true)?.await()?.token
+            ?: throw IllegalStateException("Sesión Firebase vencida. Vuelva a iniciar sesión.")
+
+        withContext(Dispatchers.IO) {
+            val bodyJson = JSONObject()
+                .put("action", "reject")
+                .put("clinicId", clinicId)
+                .put("doctorCedula", doctorCedula)
+                .toString()
+            val request = Request.Builder()
+                .url(ACCEPT_INVITE_URL)
+                .post(bodyJson.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                .header("Accept", "application/json")
+                .header("Authorization", "Bearer $idToken")
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                val raw = response.body?.string().orEmpty()
+                val json = runCatching { JSONObject(raw) }.getOrElse {
+                    error("Respuesta inválida del servidor")
+                }
+                if (!response.isSuccessful) {
+                    error(json.optString("error").ifBlank { "No se pudo rechazar" })
+                }
+            }
+        }
     }
 
     suspend fun refreshMemberships(context: Context): List<ClinicMembership> {
-        val userId = DoctorStorage.userId(context) ?: return ClinicMembershipStorage.load(context)
-        if (!DoctorAuthService.isConfigured(context)) return ClinicMembershipStorage.load(context)
-        val snap = membershipsCol(userId).get().await()
-        val list = snap.documents.mapNotNull { doc ->
-            val id = doc.getString("clinicId") ?: doc.id
-            val name = doc.getString("clinicName") ?: return@mapNotNull null
-            ClinicMembership(
-                clinicId = id,
-                clinicName = name,
-                role = doc.getString("role") ?: "medico",
-            )
-        }.sortedBy { it.clinicName }
-        ClinicMembershipStorage.save(context, list)
-        return list
+        val local = ClinicMembershipStorage.load(context)
+        if (!DoctorAuthService.isConfigured(context)) return local
+        return runCatching {
+            val idToken = idTokenOrThrow()
+            withContext(Dispatchers.IO) {
+                val request = Request.Builder()
+                    .url(MEMBERSHIPS_URL)
+                    .get()
+                    .header("Accept", "application/json")
+                    .header("Authorization", "Bearer $idToken")
+                    .build()
+                httpClient.newCall(request).execute().use { response ->
+                    val raw = response.body?.string().orEmpty()
+                    val json = runCatching { JSONObject(raw) }.getOrElse {
+                        error("Respuesta inválida del servidor")
+                    }
+                    if (!response.isSuccessful) {
+                        error(json.optString("error").ifBlank { "No se pudieron cargar centros" })
+                    }
+                    val arr = json.optJSONArray("memberships")
+                    val list = buildList {
+                        if (arr != null) {
+                            for (i in 0 until arr.length()) {
+                                val o = arr.optJSONObject(i) ?: continue
+                                val id = o.optString("clinicId")
+                                val name = o.optString("clinicName")
+                                if (id.isBlank() || name.isBlank()) continue
+                                add(
+                                    ClinicMembership(
+                                        clinicId = id,
+                                        clinicName = name,
+                                        role = o.optString("role", "medico"),
+                                    ),
+                                )
+                            }
+                        }
+                    }.sortedBy { it.clinicName }
+                    ClinicMembershipStorage.save(context, list)
+                    list
+                }
+            }
+        }.getOrElse {
+            // Fallback Firestore local / nube
+            runCatching {
+                val userId = DoctorStorage.userId(context) ?: return@runCatching local
+                val snap = membershipsCol(userId).get().await()
+                val list = snap.documents.mapNotNull { doc ->
+                    val id = doc.getString("clinicId") ?: doc.id
+                    val name = doc.getString("clinicName") ?: return@mapNotNull null
+                    ClinicMembership(
+                        clinicId = id,
+                        clinicName = name,
+                        role = doc.getString("role") ?: "medico",
+                    )
+                }.sortedBy { it.clinicName }
+                ClinicMembershipStorage.save(context, list)
+                list
+            }.getOrElse { local }
+        }
     }
 
-    suspend fun listTemplates(clinicId: String): List<DocumentTemplate> {
-        val snap = templatesCol(clinicId).get().await()
-        return snap.documents.mapNotNull { doc ->
-            val data = doc.data ?: return@mapNotNull null
-            val typeRaw = data["documentType"]?.toString() ?: return@mapNotNull null
-            @Suppress("UNCHECKED_CAST")
-            DocumentTemplate(
-                id = data["id"]?.toString() ?: doc.id,
-                name = data["name"]?.toString() ?: "Plantilla",
-                documentType = DocumentType.fromName(typeRaw),
-                sections = (data["sections"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty(),
-                isDefault = data["isDefault"] as? Boolean ?: false,
-                enabledPhysicalExamSystemIds =
-                    (data["enabledPhysicalExamSystemIds"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty(),
-                sectionDefaultTexts =
-                    (data["sectionDefaultTexts"] as? Map<*, *>)?.mapNotNull { (k, v) ->
-                        val key = k?.toString() ?: return@mapNotNull null
-                        val value = v?.toString() ?: return@mapNotNull null
-                        key to value
-                    }?.toMap().orEmpty(),
-                enfermedadActualEjemplo = data["enfermedadActualEjemplo"]?.toString().orEmpty(),
-            )
+    suspend fun listTemplates(clinicId: String, documentType: DocumentType? = null): List<DocumentTemplate> {
+        return runCatching {
+            val idToken = idTokenOrThrow()
+            withContext(Dispatchers.IO) {
+                val body = JSONObject().put("clinicId", clinicId)
+                if (documentType != null) {
+                    body.put("documentType", DocumentType.storageName(documentType))
+                }
+                val request = Request.Builder()
+                    .url(TEMPLATES_URL)
+                    .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .header("Accept", "application/json")
+                    .header("Authorization", "Bearer $idToken")
+                    .build()
+                httpClient.newCall(request).execute().use { response ->
+                    val raw = response.body?.string().orEmpty()
+                    val json = runCatching { JSONObject(raw) }.getOrElse {
+                        error("Respuesta inválida del servidor")
+                    }
+                    if (!response.isSuccessful) {
+                        error(json.optString("error").ifBlank { "No se pudieron cargar plantillas" })
+                    }
+                    val arr = json.optJSONArray("templates") ?: return@use emptyList()
+                    buildList {
+                        for (i in 0 until arr.length()) {
+                            val data = arr.optJSONObject(i) ?: continue
+                            val typeRaw = data.optString("documentType")
+                            if (typeRaw.isBlank()) continue
+                            @Suppress("UNCHECKED_CAST")
+                            val sectionsJson = data.optJSONArray("sections")
+                            val sections = buildList {
+                                if (sectionsJson != null) {
+                                    for (j in 0 until sectionsJson.length()) {
+                                        add(sectionsJson.optString(j))
+                                    }
+                                }
+                            }
+                            val examIdsJson = data.optJSONArray("enabledPhysicalExamSystemIds")
+                            val examIds = buildList {
+                                if (examIdsJson != null) {
+                                    for (j in 0 until examIdsJson.length()) {
+                                        add(examIdsJson.optString(j))
+                                    }
+                                }
+                            }
+                            val defaultsObj = data.optJSONObject("sectionDefaultTexts")
+                            val defaults = buildMap {
+                                if (defaultsObj != null) {
+                                    val keys = defaultsObj.keys()
+                                    while (keys.hasNext()) {
+                                        val k = keys.next()
+                                        put(k, defaultsObj.optString(k))
+                                    }
+                                }
+                            }
+                            add(
+                                DocumentTemplate(
+                                    id = data.optString("id"),
+                                    name = data.optString("name", "Plantilla"),
+                                    documentType = DocumentType.fromName(typeRaw),
+                                    sections = sections,
+                                    isDefault = data.optBoolean("isDefault", false),
+                                    enabledPhysicalExamSystemIds = examIds,
+                                    sectionDefaultTexts = defaults,
+                                    enfermedadActualEjemplo = data.optString("enfermedadActualEjemplo"),
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }.getOrElse {
+            // Fallback directo a Firestore
+            val snap = templatesCol(clinicId).get().await()
+            snap.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                val typeRaw = data["documentType"]?.toString() ?: return@mapNotNull null
+                DocumentTemplate(
+                    id = data["id"]?.toString() ?: doc.id,
+                    name = data["name"]?.toString() ?: "Plantilla",
+                    documentType = DocumentType.fromName(typeRaw),
+                    sections = (data["sections"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty(),
+                    isDefault = data["isDefault"] as? Boolean ?: false,
+                    enabledPhysicalExamSystemIds =
+                        (data["enabledPhysicalExamSystemIds"] as? List<*>)?.mapNotNull { it?.toString() }.orEmpty(),
+                    sectionDefaultTexts =
+                        (data["sectionDefaultTexts"] as? Map<*, *>)?.mapNotNull { (k, v) ->
+                            val key = k?.toString() ?: return@mapNotNull null
+                            val value = v?.toString() ?: return@mapNotNull null
+                            key to value
+                        }?.toMap().orEmpty(),
+                    enfermedadActualEjemplo = data["enfermedadActualEjemplo"]?.toString().orEmpty(),
+                )
+            }.let { list ->
+                if (documentType != null) list.filter { it.documentType == documentType } else list
+            }
         }
     }
 
     suspend fun listHeaders(clinicId: String): List<DocumentHeader> {
-        val snap = headersCol(clinicId).get().await()
-        return snap.documents.mapNotNull { doc ->
-            val data = doc.data ?: return@mapNotNull null
-            DocumentHeader(
-                id = data["id"]?.toString() ?: doc.id,
-                name = data["name"]?.toString() ?: "Encabezado",
-                logoPath = data["logoPath"]?.toString(),
-                logoBase64 = data["logoBase64"]?.toString(),
-                doctorName = data["doctorName"]?.toString().orEmpty(),
-                subtitle = data["subtitle"]?.toString().orEmpty(),
-                description = data["description"]?.toString().orEmpty(),
-                infoLines = DocumentHeader.emptyInfoLines(),
-                isDefault = data["isDefault"] as? Boolean ?: false,
-                headerType = HeaderType.CLINICA,
-            )
+        return runCatching {
+            val idToken = idTokenOrThrow()
+            withContext(Dispatchers.IO) {
+                val body = JSONObject().put("clinicId", clinicId)
+                val request = Request.Builder()
+                    .url(TEMPLATES_URL)
+                    .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .header("Accept", "application/json")
+                    .header("Authorization", "Bearer $idToken")
+                    .build()
+                httpClient.newCall(request).execute().use { response ->
+                    val raw = response.body?.string().orEmpty()
+                    val json = runCatching { JSONObject(raw) }.getOrElse {
+                        error("Respuesta inválida del servidor")
+                    }
+                    if (!response.isSuccessful) {
+                        error(json.optString("error").ifBlank { "No se pudieron cargar encabezados" })
+                    }
+                    val arr = json.optJSONArray("headers") ?: return@use emptyList()
+                    buildList {
+                        for (i in 0 until arr.length()) {
+                            val data = arr.optJSONObject(i) ?: continue
+                            add(
+                                DocumentHeader(
+                                    id = data.optString("id"),
+                                    name = data.optString("name", "Encabezado"),
+                                    logoPath = null,
+                                    logoBase64 = data.optString("logoBase64").takeIf { it.isNotBlank() },
+                                    doctorName = data.optString("doctorName"),
+                                    subtitle = data.optString("subtitle"),
+                                    description = data.optString("description"),
+                                    infoLines = DocumentHeader.emptyInfoLines(),
+                                    isDefault = data.optBoolean("isDefault", false),
+                                    headerType = HeaderType.CLINICA,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }.getOrElse {
+            val snap = headersCol(clinicId).get().await()
+            snap.documents.mapNotNull { doc ->
+                val data = doc.data ?: return@mapNotNull null
+                DocumentHeader(
+                    id = data["id"]?.toString() ?: doc.id,
+                    name = data["name"]?.toString() ?: "Encabezado",
+                    logoPath = data["logoPath"]?.toString(),
+                    logoBase64 = data["logoBase64"]?.toString(),
+                    doctorName = data["doctorName"]?.toString().orEmpty(),
+                    subtitle = data["subtitle"]?.toString().orEmpty(),
+                    description = data["description"]?.toString().orEmpty(),
+                    infoLines = DocumentHeader.emptyInfoLines(),
+                    isDefault = data["isDefault"] as? Boolean ?: false,
+                    headerType = HeaderType.CLINICA,
+                )
+            }
         }
     }
 

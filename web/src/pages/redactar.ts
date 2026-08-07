@@ -301,14 +301,14 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
 
     if (!membershipsLoaded) {
       membershipsLoaded = true;
-      try {
-        const cedula = session?.cedula || doctor.cedula;
-        if (cedula) {
-          doctorMemberships = await listMembershipsForDoctor(cedula, session?.cloudUserId);
-        }
-      } catch {
-        doctorMemberships = [];
+    }
+    try {
+      const cedula = session?.cedula || doctor.cedula;
+      if (cedula) {
+        doctorMemberships = await listMembershipsForDoctor(cedula, session?.cloudUserId);
       }
+    } catch {
+      doctorMemberships = [];
     }
 
     if (doctorMemberships.length > 0) {

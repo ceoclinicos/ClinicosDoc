@@ -233,6 +233,11 @@ fun RedactarFlowScreen(
     var addingFarmaco by remember { mutableStateOf(false) }
     var showLeaveResultDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(Unit) {
+        doctorMemberships = runCatching { ClinicService.refreshMemberships(context) }
+            .getOrElse { ClinicMembershipStorage.load(context) }
+    }
+
     fun requestLeave() {
         if (step == RedactarStep.RESULTADO) {
             showLeaveResultDialog = true
@@ -388,8 +393,13 @@ fun RedactarFlowScreen(
         clinicId = null
         clinicName = null
         scope.launch {
-            doctorMemberships = runCatching { ClinicService.refreshMemberships(context) }
-                .getOrElse { ClinicMembershipStorage.load(context) }
+            val local = ClinicMembershipStorage.load(context)
+            val remote = runCatching { ClinicService.refreshMemberships(context) }.getOrNull()
+            doctorMemberships = when {
+                !remote.isNullOrEmpty() -> remote
+                local.isNotEmpty() -> local
+                else -> remote ?: emptyList()
+            }
             step = if (doctorMemberships.isNotEmpty()) RedactarStep.ORIGEN else RedactarStep.PLANTILLA
         }
     }
@@ -426,8 +436,7 @@ fun RedactarFlowScreen(
             try {
                 clinicId = membership.clinicId
                 clinicName = membership.clinicName
-                val tpls = ClinicService.listTemplates(membership.clinicId)
-                    .filter { it.documentType == documentType }
+                val tpls = ClinicService.listTemplates(membership.clinicId, documentType)
                 val hdrs = ClinicService.listHeaders(membership.clinicId)
                 pendingClinicHeaders = hdrs
                 if (tpls.isEmpty()) {

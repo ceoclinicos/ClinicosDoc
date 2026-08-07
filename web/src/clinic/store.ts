@@ -313,45 +313,75 @@ export async function acceptDoctorInvitation(input: {
   doctorNombre: string;
   cloudUserId?: string;
 }): Promise<{ clinicId: string; clinicName: string }> {
-  const doctorCedula = normalizeCedula(input.doctorCedula);
-  const clinic = await getClinic(input.clinicId);
-  if (!clinic) throw new Error("Centro no encontrado");
-
-  const invRef = doc(invitationsCol(input.clinicId), doctorCedula);
-  const invSnap = await getDoc(invRef);
-  if (!invSnap.exists()) throw new Error("Invitación no encontrada");
-  const inv = invSnap.data() as ClinicDoctorInvitation;
-  if (inv.status !== "pending") throw new Error("Esta invitación ya no está pendiente");
-
-  await writeClinicMembership({
-    clinicId: clinic.id,
-    clinicName: clinic.nombre,
-    doctorCedula,
-    doctorNombre: input.doctorNombre || inv.doctorNombre,
-    cloudUserId: input.cloudUserId || inv.cloudUserId,
-  });
-
-  await setDoc(
-    invRef,
-    { status: "accepted" } as DocumentData,
-    { merge: true },
+  const { getIdToken } = await import("../services/firebase-auth");
+  const token = await getIdToken(true);
+  if (!token) {
+    throw new Error("Sesión vencida. Vuelva a iniciar sesión.");
+  }
+  const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(
+    /\/$/,
+    "",
   );
-  await deleteDoc(doc(doctorPendingInvitesCol(doctorCedula), clinic.id));
-
-  return { clinicId: clinic.id, clinicName: clinic.nombre };
+  const res = await fetch(`${API_BASE}/api/clinic-accept-invite`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      action: "accept",
+      clinicId: input.clinicId,
+      doctorCedula: input.doctorCedula,
+      doctorNombre: input.doctorNombre,
+    }),
+  });
+  const raw = await res.text();
+  let data: { error?: string; clinicId?: string; clinicName?: string } = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = {};
+  }
+  if (!res.ok) throw new Error(data.error || "No se pudo aceptar la invitación");
+  return {
+    clinicId: data.clinicId || input.clinicId,
+    clinicName: data.clinicName || "Centro",
+  };
 }
 
 export async function rejectDoctorInvitation(input: {
   clinicId: string;
   doctorCedula: string;
 }): Promise<void> {
-  const doctorCedula = normalizeCedula(input.doctorCedula);
-  const invRef = doc(invitationsCol(input.clinicId), doctorCedula);
-  const invSnap = await getDoc(invRef);
-  if (invSnap.exists()) {
-    await setDoc(invRef, { status: "rejected" } as DocumentData, { merge: true });
+  const { getIdToken } = await import("../services/firebase-auth");
+  const token = await getIdToken(true);
+  if (!token) {
+    throw new Error("Sesión vencida. Vuelva a iniciar sesión.");
   }
-  await deleteDoc(doc(doctorPendingInvitesCol(doctorCedula), input.clinicId));
+  const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(
+    /\/$/,
+    "",
+  );
+  const res = await fetch(`${API_BASE}/api/clinic-accept-invite`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      action: "reject",
+      clinicId: input.clinicId,
+      doctorCedula: input.doctorCedula,
+    }),
+  });
+  const raw = await res.text();
+  let data: { error?: string } = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = {};
+  }
+  if (!res.ok) throw new Error(data.error || "No se pudo rechazar");
 }
 
 export async function listClinicMembers(clinicId: string): Promise<ClinicMember[]> {
@@ -378,6 +408,38 @@ export async function removeClinicMember(
 export async function listMembershipsForDoctor(doctorCedula: string, cloudUserId?: string): Promise<
   Array<{ clinicId: string; clinicName: string; role: ClinicMemberRole; inviteCode?: string }>
 > {
+  try {
+    const { getIdToken } = await import("../services/firebase-auth");
+    const token = await getIdToken(true);
+    if (token) {
+      const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(
+        /\/$/,
+        "",
+      );
+      const res = await fetch(`${API_BASE}/api/clinic-memberships`, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as {
+          memberships?: Array<{ clinicId: string; clinicName: string; role?: string }>;
+        };
+        return (data.memberships || [])
+          .map((m) => ({
+            clinicId: m.clinicId,
+            clinicName: m.clinicName,
+            role: (m.role as ClinicMemberRole) || "medico",
+          }))
+          .sort((a, b) => a.clinicName.localeCompare(b.clinicName));
+      }
+    }
+  } catch {
+    /* fallback abajo */
+  }
+
   if (cloudUserId) {
     const snap = await getDocs(
       collection(getDb(), FirestorePaths.USERS, cloudUserId, "clinic_memberships"),
@@ -396,26 +458,54 @@ export async function listMembershipsForDoctor(doctorCedula: string, cloudUserId
     }
   }
 
-  // Fallback: escanear clínicas (MVP / cuentas antiguas)
+  // Fallback legado: escanear clínicas (puede fallar con rules cerradas)
   const ced = normalizeCedula(doctorCedula);
-  const clinicsSnap = await getDocs(collection(getDb(), FirestorePaths.CLINICS));
-  const out: Array<{ clinicId: string; clinicName: string; role: ClinicMemberRole; inviteCode?: string }> = [];
-  for (const c of clinicsSnap.docs) {
-    const memberSnap = await getDoc(doc(membersCol(c.id), ced));
-    if (!memberSnap.exists()) continue;
-    const clinic = c.data() as ClinicRegistro;
-    const member = memberSnap.data() as ClinicMember;
-    out.push({
-      clinicId: clinic.id,
-      clinicName: clinic.nombre,
-      role: member.role,
-      inviteCode: clinic.inviteCode,
-    });
+  try {
+    const clinicsSnap = await getDocs(collection(getDb(), FirestorePaths.CLINICS));
+    const out: Array<{ clinicId: string; clinicName: string; role: ClinicMemberRole; inviteCode?: string }> = [];
+    for (const c of clinicsSnap.docs) {
+      const memberSnap = await getDoc(doc(membersCol(c.id), ced));
+      if (!memberSnap.exists()) continue;
+      const clinic = c.data() as ClinicRegistro;
+      const member = memberSnap.data() as ClinicMember;
+      out.push({
+        clinicId: clinic.id,
+        clinicName: clinic.nombre,
+        role: member.role,
+        inviteCode: clinic.inviteCode,
+      });
+    }
+    return out.sort((a, b) => a.clinicName.localeCompare(b.clinicName));
+  } catch {
+    return [];
   }
-  return out.sort((a, b) => a.clinicName.localeCompare(b.clinicName));
 }
 
 export async function listClinicTemplates(clinicId: string): Promise<DocumentTemplate[]> {
+  try {
+    const { getIdToken } = await import("../services/firebase-auth");
+    const token = await getIdToken(true);
+    if (token) {
+      const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(
+        /\/$/,
+        "",
+      );
+      const res = await fetch(`${API_BASE}/api/clinic-templates`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ clinicId }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { templates?: DocumentTemplate[] };
+        return (data.templates || []) as DocumentTemplate[];
+      }
+    }
+  } catch {
+    /* fallback */
+  }
   const snap = await getDocs(templatesCol(clinicId));
   return snap.docs.map((d) => {
     const data = d.data();
@@ -455,6 +545,30 @@ export async function deleteClinicTemplate(clinicId: string, templateId: string)
 }
 
 export async function listClinicHeaders(clinicId: string): Promise<DocumentHeader[]> {
+  try {
+    const { getIdToken } = await import("../services/firebase-auth");
+    const token = await getIdToken(true);
+    if (token) {
+      const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(
+        /\/$/,
+        "",
+      );
+      const res = await fetch(`${API_BASE}/api/clinic-templates`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ clinicId }),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { headers?: DocumentHeader[] };
+        return (data.headers || []) as DocumentHeader[];
+      }
+    }
+  } catch {
+    /* fallback */
+  }
   const snap = await getDocs(headersCol(clinicId));
   return snap.docs.map((d) => {
     const data = d.data();
