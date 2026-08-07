@@ -2,6 +2,7 @@
   "version": 2,
   "routes": [
     { "src": "/api/chat", "dest": "/api/chat.js" },
+    { "src": "/api/auth-login", "dest": "/api/auth-login.js" },
     { "src": "/api/pin-reset-request", "dest": "/api/pin-reset-request.js" },
     { "src": "/api/pin-reset-confirm", "dest": "/api/pin-reset-confirm.js" },
     { "src": "/api/validar-mpps", "dest": "/api/validar-mpps.js" }

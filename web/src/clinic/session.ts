@@ -1,4 +1,5 @@
 import type { ClinicSession } from "./models";
+import { signOutFirebase } from "../services/firebase-auth";
 
 const CLINIC_KEY = "registro_clinica";
 
@@ -57,5 +58,6 @@ export function setClinicSession(session: ClinicSession): void {
 
 export function clearClinicSession(): void {
   localStorage.removeItem(CLINIC_KEY);
+  void signOutFirebase();
   notifySessionChange();
 }

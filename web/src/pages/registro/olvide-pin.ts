@@ -1,5 +1,6 @@
 import { registerRoute } from "../../app/router";
 import { requestPinReset } from "../../services/pin-reset";
+import { composeCedula } from "../../services/cedula";
 import { showErrorDialog } from "../../ui/error-dialog";
 import { page } from "../helpers";
 
@@ -23,7 +24,7 @@ registerRoute({
             <option value="clinica" ${tipoPref === "clinica" || tipoPref === "centro" ? "selected" : ""}>Centro de salud / clínica</option>
           </select>
         </label>
-        <label id="id-label">Cédula<input name="cedula" id="id-input" required placeholder="Ej. 23536843" /></label>
+        <div id="id-field-wrap"></div>
         <button type="submit" class="btn btn-primary">Enviar enlace</button>
       </form>
       <p class="muted">
@@ -36,7 +37,7 @@ registerRoute({
     );
 
     const tipoSelect = el.querySelector("#tipo-cuenta") as HTMLSelectElement;
-    const idLabel = el.querySelector("#id-label") as HTMLElement;
+    const idWrap = el.querySelector("#id-field-wrap") as HTMLElement;
     const lead = el.querySelector("#olvide-lead") as HTMLElement;
 
     function syncTipoUi(): void {
@@ -44,13 +45,21 @@ registerRoute({
       if (isClinic) {
         lead.textContent =
           "Ingrese el RIF del centro. Si tiene correo administrativo, le enviaremos un enlace para restablecer el PIN.";
-        idLabel.innerHTML =
-          'RIF o código del centro<input name="cedula" id="id-input" required placeholder="Ej. J123456789" />';
+        idWrap.innerHTML =
+          '<label>RIF o código del centro<input name="cedula" id="id-input" required placeholder="Ej. J123456789" /></label>';
       } else {
         lead.textContent =
           "Ingrese su cédula. Si tiene correo registrado, le enviaremos un enlace para restablecer su PIN.";
-        idLabel.innerHTML =
-          'Cédula<input name="cedula" id="id-input" required placeholder="Ej. 23536843" inputmode="numeric" />';
+        idWrap.innerHTML = `
+          <label>Cédula
+            <span class="cedula-field">
+              <select name="cedulaLetter" aria-label="Tipo de cédula (V o E)">
+                <option value="V" selected>V</option>
+                <option value="E">E</option>
+              </select>
+              <input name="cedula" id="id-input" required inputmode="numeric" pattern="[0-9]{6,9}" minlength="6" maxlength="9" placeholder="Solo números" />
+            </span>
+          </label>`;
       }
     }
 
@@ -65,7 +74,12 @@ registerRoute({
       btn.disabled = true;
       msg.innerHTML = `<p class="muted">Enviando…</p>`;
       try {
-        const text = await requestPinReset(String(fd.get("cedula")), String(fd.get("tipo") || "paciente"));
+        const tipo = String(fd.get("tipo") || "paciente");
+        const id =
+          tipo === "clinica"
+            ? String(fd.get("cedula") || "")
+            : composeCedula(String(fd.get("cedulaLetter") || "V"), String(fd.get("cedula") || ""));
+        const text = await requestPinReset(id, tipo);
         msg.innerHTML = `<p class="status-badge status-ok">${text}</p>`;
         (e.target as HTMLFormElement).reset();
         tipoSelect.value = tipoPref === "clinica" ? "clinica" : tipoSelect.value;

@@ -18,6 +18,7 @@ import {
   openStreetMapUrl,
 } from "../../services/geolocation";
 import { bindNavButtons, page } from "../helpers";
+import { cedulaFieldHtml, readCedulaFromForm } from "../../services/cedula";
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -146,7 +147,7 @@ function registroRapidoForm(): string {
     <form class="form" id="form-registro-rapido">
       <div class="grid-2">
         <label>Nombre completo<input name="nombre" required /></label>
-        <label>Cédula<input name="cedula" required placeholder="V-12345678" /></label>
+        <div class="grid-full">${cedulaFieldHtml()}</div>
         <label>Edad<input name="edad" type="number" min="0" max="120" required /></label>
         <label>Fecha de nacimiento<input name="fechaNacimiento" type="date" required /></label>
         <label>Sexo
@@ -172,7 +173,7 @@ function registroRapidoForm(): string {
 function ingresoCedulaForm(): string {
   return `
     <form class="form" id="form-ingreso-cedula">
-      <label>Cédula<input name="cedula" required placeholder="V-12345678" /></label>
+      ${cedulaFieldHtml()}
       <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
       <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN (contraseña)</a></p>
       <div class="compose-actions">
@@ -350,7 +351,7 @@ function bindRegistroRapido(
     btn.disabled = true;
     try {
       const p = await registerPaciente({
-        cedula: String(fd.get("cedula")),
+        cedula: readCedulaFromForm(fd),
         nombre: String(fd.get("nombre")),
         edad: Number(fd.get("edad")),
         fechaNacimiento: String(fd.get("fechaNacimiento")),
@@ -384,7 +385,7 @@ function bindIngresoCedula(
     e.preventDefault();
     const fd = new FormData(e.target as HTMLFormElement);
     try {
-      const p = await loginPaciente(String(fd.get("cedula")), String(fd.get("pin")));
+      const p = await loginPaciente(readCedulaFromForm(fd), String(fd.get("pin")));
       setPatientSession({ cedula: p.cedula, nombre: p.nombre });
       renderComposeArea(root, getFiltro);
     } catch (err) {

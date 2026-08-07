@@ -40,15 +40,18 @@ object DoctorAuthService {
             return Result.failure(IllegalStateException("El PIN debe tener exactamente 4 dígitos"))
         }
         return runCatching {
-            val doc = findUserDocument(cedulaInput)
-                ?: error("Cédula o PIN incorrectos")
-            val hash = doc.getString("passwordHash").orEmpty()
-            if (hash.isEmpty() || hash != hashPassword(password)) {
-                error("Cédula o PIN incorrectos")
-            }
-            val profile = doc.toDoctorProfile()
-            DoctorStorage.saveSession(context, profile, doc.id)
-            CloudSyncService.syncOnLogin(context, doc.id)
+            val auth = AuthLoginService.login(cedulaInput, password, "app").getOrThrow()
+            val profile = DoctorProfile(
+                nombre = auth.nombre,
+                cedula = auth.cedula.ifBlank { CedulaNormalizer.normalize(cedulaInput) },
+                mpps = auth.mpps,
+                sexo = auth.sexo,
+                especialidad = auth.especialidad,
+                correo = auth.correo,
+                nacionalidad = auth.nacionalidad,
+            )
+            DoctorStorage.saveSession(context, profile, auth.uid)
+            CloudSyncService.syncOnLogin(context, auth.uid)
             profile
         }
     }
@@ -124,6 +127,8 @@ object DoctorAuthService {
                 ),
             ).await()
             DoctorStorage.saveSession(context, profileValidated, docRef.id)
+            // Abrir Firebase Auth (necesario cuando las rules exigen token)
+            AuthLoginService.login(profileValidated.cedula, password, "app").getOrThrow()
             CloudSyncService.syncOnLogin(context, docRef.id)
             profileValidated
         }
@@ -144,6 +149,7 @@ object DoctorAuthService {
     }
 
     fun signOut(context: Context) {
+        AuthLoginService.signOut()
         DoctorStorage.clearSession(context)
     }
 

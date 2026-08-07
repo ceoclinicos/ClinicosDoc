@@ -1,6 +1,7 @@
 package com.ceoclinicos.clinicosdoc.data
 
 import android.content.Context
+import com.ceoclinicos.clinicosdoc.model.ClinicDoctorInvitation
 import com.ceoclinicos.clinicosdoc.model.ClinicMembership
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
@@ -38,6 +39,45 @@ object ClinicService {
         db().collection(FirestorePaths.USERS).document(userId)
             .collection(FirestorePaths.SUB_CLINIC_MEMBERSHIPS)
 
+    private fun invitationsCol(clinicId: String) =
+        clinicRef(clinicId).collection(FirestorePaths.SUB_INVITATIONS)
+
+    private fun doctorPendingInvitesCol(doctorCedula: String) =
+        db().collection(FirestorePaths.DOCTOR_INVITES)
+            .document(CedulaNormalizer.normalize(doctorCedula))
+            .collection(FirestorePaths.SUB_PENDING)
+
+    private suspend fun writeMembership(
+        context: Context,
+        clinicId: String,
+        clinicName: String,
+        doctorCedula: String,
+        doctorNombre: String,
+        userId: String,
+    ): ClinicMembership {
+        val joinedAt = java.time.Instant.now().toString()
+        membersCol(clinicId).document(doctorCedula).set(
+            mapOf(
+                "doctorCedula" to doctorCedula,
+                "doctorNombre" to doctorNombre,
+                "cloudUserId" to userId,
+                "role" to "medico",
+                "joinedAt" to joinedAt,
+            ),
+        ).await()
+        membershipsCol(userId).document(clinicId).set(
+            mapOf(
+                "clinicId" to clinicId,
+                "clinicName" to clinicName,
+                "role" to "medico",
+                "joinedAt" to joinedAt,
+            ),
+        ).await()
+        val membership = ClinicMembership(clinicId = clinicId, clinicName = clinicName, role = "medico")
+        ClinicMembershipStorage.upsert(context, membership)
+        return membership
+    }
+
     suspend fun joinByInvite(context: Context, inviteCode: String): ClinicMembership {
         if (!DoctorAuthService.isConfigured(context)) {
             throw IllegalStateException("Firebase no configurado")
@@ -58,30 +98,78 @@ object ClinicService {
         if (!clinicSnap.exists()) throw IllegalArgumentException("Centro no encontrado")
         val clinicName = clinicSnap.getString("nombre").orEmpty().ifBlank { "Centro" }
 
+        return writeMembership(
+            context = context,
+            clinicId = clinicId,
+            clinicName = clinicName,
+            doctorCedula = CedulaNormalizer.normalize(profile.cedula),
+            doctorNombre = profile.nombre,
+            userId = userId,
+        )
+    }
+
+    suspend fun listPendingInvitations(context: Context): List<ClinicDoctorInvitation> {
+        if (!DoctorAuthService.isConfigured(context)) return emptyList()
+        val profile = DoctorStorage.loadProfile(context) ?: return emptyList()
+        val snap = doctorPendingInvitesCol(profile.cedula).get().await()
+        return snap.documents.mapNotNull { doc ->
+            val data = doc.data ?: return@mapNotNull null
+            if ((data["status"]?.toString() ?: "pending") != "pending") return@mapNotNull null
+            ClinicDoctorInvitation(
+                clinicId = data["clinicId"]?.toString() ?: doc.id,
+                clinicName = data["clinicName"]?.toString() ?: "Centro",
+                doctorCedula = data["doctorCedula"]?.toString().orEmpty(),
+                doctorNombre = data["doctorNombre"]?.toString().orEmpty(),
+                status = "pending",
+                invitedAt = data["invitedAt"]?.toString().orEmpty(),
+            )
+        }.sortedByDescending { it.invitedAt }
+    }
+
+    suspend fun acceptInvitation(context: Context, clinicId: String): ClinicMembership {
+        if (!DoctorAuthService.isConfigured(context)) {
+            throw IllegalStateException("Firebase no configurado")
+        }
+        val profile = DoctorStorage.loadProfile(context)
+            ?: throw IllegalStateException("Sin sesión de médico")
+        val userId = DoctorStorage.userId(context)
+            ?: throw IllegalStateException("Sin cuenta cloud")
         val doctorCedula = CedulaNormalizer.normalize(profile.cedula)
-        val joinedAt = java.time.Instant.now().toString()
-        membersCol(clinicId).document(doctorCedula).set(
-            mapOf(
-                "doctorCedula" to doctorCedula,
-                "doctorNombre" to profile.nombre,
-                "cloudUserId" to userId,
-                "role" to "medico",
-                "joinedAt" to joinedAt,
-            ),
-        ).await()
 
-        membershipsCol(userId).document(clinicId).set(
-            mapOf(
-                "clinicId" to clinicId,
-                "clinicName" to clinicName,
-                "role" to "medico",
-                "joinedAt" to joinedAt,
-            ),
-        ).await()
+        val invSnap = invitationsCol(clinicId).document(doctorCedula).get().await()
+        if (!invSnap.exists()) throw IllegalArgumentException("Invitación no encontrada")
+        val status = invSnap.getString("status") ?: "pending"
+        if (status != "pending") throw IllegalArgumentException("Esta invitación ya no está pendiente")
 
-        val membership = ClinicMembership(clinicId = clinicId, clinicName = clinicName, role = "medico")
-        ClinicMembershipStorage.upsert(context, membership)
+        val clinicSnap = clinicRef(clinicId).get().await()
+        if (!clinicSnap.exists()) throw IllegalArgumentException("Centro no encontrado")
+        val clinicName = clinicSnap.getString("nombre").orEmpty()
+            .ifBlank { invSnap.getString("clinicName").orEmpty().ifBlank { "Centro" } }
+
+        val membership = writeMembership(
+            context = context,
+            clinicId = clinicId,
+            clinicName = clinicName,
+            doctorCedula = doctorCedula,
+            doctorNombre = profile.nombre,
+            userId = userId,
+        )
+        invitationsCol(clinicId).document(doctorCedula)
+            .set(mapOf("status" to "accepted"), SetOptions.merge()).await()
+        doctorPendingInvitesCol(doctorCedula).document(clinicId).delete().await()
         return membership
+    }
+
+    suspend fun rejectInvitation(context: Context, clinicId: String) {
+        if (!DoctorAuthService.isConfigured(context)) {
+            throw IllegalStateException("Firebase no configurado")
+        }
+        val profile = DoctorStorage.loadProfile(context)
+            ?: throw IllegalStateException("Sin sesión de médico")
+        val doctorCedula = CedulaNormalizer.normalize(profile.cedula)
+        invitationsCol(clinicId).document(doctorCedula)
+            .set(mapOf("status" to "rejected"), SetOptions.merge()).await()
+        doctorPendingInvitesCol(doctorCedula).document(clinicId).delete().await()
     }
 
     suspend fun refreshMemberships(context: Context): List<ClinicMembership> {

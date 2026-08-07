@@ -85,44 +85,90 @@ service cloud.firestore {
       }
     }
 
-    // ── Clínicos Doc (consultorio + muro humanitario) ──
-    match /clinicosdoc_user/{userId}/{document=**} {
-      allow read, write: if true;
+    // ── Clínicos Doc (requiere Firebase Auth + claims role) ──
+    function isSignedIn() {
+      return request.auth != null;
     }
-    match /clinicosdoc_user/{docId} {
-      allow read, write: if true;
+    function isMedico() {
+      return isSignedIn() && request.auth.token.role == 'medico';
+    }
+    function isClinica() {
+      return isSignedIn() && request.auth.token.role == 'clinica';
+    }
+    function isPaciente() {
+      return isSignedIn() && request.auth.token.role == 'paciente';
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    function isClinicAdmin(clinicId) {
+      return isSignedIn() && request.auth.uid == clinicId;
+    }
+    function isClinicMember(clinicId) {
+      return isMedico()
+        && exists(/databases/$(database)/documents/clinicosdoc_user/$(request.auth.uid)/clinic_memberships/$(clinicId));
+    }
+
+    match /clinicosdoc_user/{userId} {
+      // create sin auth: registro app (luego auth-login). Lectura solo dueño/médico propio.
+      allow create: if true;
+      allow read, update, delete: if isOwner(userId);
+      match /{document=**} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     match /clinicosdoc_patients/{patientKey} {
-      allow read, write: if true;
+      allow read, write: if isMedico();
       match /documents/{docId} {
-        allow read, write: if true;
+        allow read, write: if isMedico();
       }
     }
 
     match /pacientes/{cedula} {
-      allow read, write: if true;
+      allow create: if true;
+      allow read, update, delete: if isOwner(cedula) || isMedico();
       match /atenciones/{atencionId} {
-        allow read, write: if true;
+        allow read, write: if isOwner(cedula) || isMedico();
       }
     }
     match /profesionales/{cedula} {
-      allow read, write: if true;
+      allow create: if true;
+      allow read, update, delete: if isMedico() || isOwner(cedula);
     }
 
     match /solicitudes/{solicitudId} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn()
+        && (resource.data.patientCedula == request.auth.token.cedula
+            || isMedico());
+    }
+
+    match /fichas_emergencia/{fichaId} {
+      allow read, write: if isSignedIn();
+    }
+    match /fichas_emergencia_cedula/{cedula} {
+      allow read, write: if isSignedIn() && (isOwner(cedula) || isMedico() || isPaciente());
     }
 
     // ── Modo empresa / centro de salud ──
     match /clinicosdoc_clinics/{clinicId} {
-      allow read, write: if true;
+      allow create: if true;
+      allow read, update, delete: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
       match /{document=**} {
-        allow read, write: if true;
+        allow read, write: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
       }
     }
     match /clinicosdoc_clinic_invites/{code} {
-      allow read, write: if true;
+      allow read: if isSignedIn();
+      allow write: if isClinica() || isMedico();
+    }
+    match /clinicosdoc_doctor_invites/{cedula} {
+      allow read, write: if isSignedIn();
+      match /{document=**} {
+        allow read, write: if isSignedIn();
+      }
     }
   }
 }

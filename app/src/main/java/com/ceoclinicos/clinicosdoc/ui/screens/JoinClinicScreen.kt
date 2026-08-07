@@ -2,6 +2,7 @@ package com.ceoclinicos.clinicosdoc.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -10,8 +11,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,9 +27,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.ceoclinicos.clinicosdoc.data.ClinicMembershipStorage
 import com.ceoclinicos.clinicosdoc.data.ClinicService
+import com.ceoclinicos.clinicosdoc.model.ClinicDoctorInvitation
 import com.ceoclinicos.clinicosdoc.model.ClinicMembership
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
-import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
@@ -38,11 +41,18 @@ fun JoinClinicScreen(onBack: () -> Unit) {
     var code by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var memberships by remember { mutableStateOf(ClinicMembershipStorage.load(context)) }
+    var invitations by remember { mutableStateOf<List<ClinicDoctorInvitation>>(emptyList()) }
 
-    LaunchedEffect(Unit) {
-        runCatching { ClinicService.refreshMemberships(context) }
-            .onSuccess { memberships = it }
+    fun reload() {
+        scope.launch {
+            runCatching { ClinicService.refreshMemberships(context) }
+                .onSuccess { memberships = it }
+            runCatching { ClinicService.listPendingInvitations(context) }
+                .onSuccess { invitations = it }
+        }
     }
+
+    LaunchedEffect(Unit) { reload() }
 
     AppScaffold(title = "Centros de salud", onBack = onBack) { padding ->
         Column(
@@ -52,12 +62,82 @@ fun JoinClinicScreen(onBack: () -> Unit) {
                 .verticalScroll(rememberScrollState()),
         ) {
             Text(
-                "Unirme a un centro",
+                "Invitaciones pendientes",
                 style = MaterialTheme.typography.titleLarge,
             )
             Spacer(modifier = Modifier.height(8.dp))
+            if (invitations.isEmpty()) {
+                Text(
+                    "No tiene invitaciones. El centro puede agregarlo por su cédula desde Equipo (web).",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                )
+            } else {
+                invitations.forEach { inv ->
+                    Text(
+                        inv.clinicName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    Row {
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    loading = true
+                                    try {
+                                        val joined = ClinicService.acceptInvitation(context, inv.clinicId)
+                                        Toast.makeText(
+                                            context,
+                                            "Te uniste a ${joined.clinicName}",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                        reload()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            e.message ?: "No se pudo aceptar",
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                    } finally {
+                                        loading = false
+                                    }
+                                }
+                            },
+                            enabled = !loading,
+                        ) { Text("Aceptar") }
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    loading = true
+                                    try {
+                                        ClinicService.rejectInvitation(context, inv.clinicId)
+                                        Toast.makeText(context, "Invitación rechazada", Toast.LENGTH_SHORT).show()
+                                        reload()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            e.message ?: "No se pudo rechazar",
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                    } finally {
+                                        loading = false
+                                    }
+                                }
+                            },
+                            enabled = !loading,
+                        ) { Text("Rechazar") }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
             Text(
-                "Pide el código de invitación al administrador del centro (web → Equipo).",
+                "Unirme con código",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Opción secundaria si el centro le da un código.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
             )
@@ -71,24 +151,23 @@ fun JoinClinicScreen(onBack: () -> Unit) {
                 enabled = !loading,
             )
             Spacer(modifier = Modifier.height(12.dp))
-            PremiumPrimaryButton(
-                if (loading) "Uniendo…" else "Unirme",
+            OutlinedButton(
                 onClick = {
                     if (code.isBlank()) {
                         Toast.makeText(context, "Ingresa el código", Toast.LENGTH_SHORT).show()
-                        return@PremiumPrimaryButton
+                        return@OutlinedButton
                     }
                     scope.launch {
                         loading = true
                         try {
                             val joined = ClinicService.joinByInvite(context, code)
-                            memberships = ClinicMembershipStorage.load(context)
                             code = ""
                             Toast.makeText(
                                 context,
                                 "Te uniste a ${joined.clinicName}",
                                 Toast.LENGTH_SHORT,
                             ).show()
+                            reload()
                         } catch (e: Exception) {
                             Toast.makeText(
                                 context,
@@ -101,7 +180,10 @@ fun JoinClinicScreen(onBack: () -> Unit) {
                     }
                 },
                 enabled = !loading,
-            )
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (loading) "Uniendo…" else "Unirme con código")
+            }
 
             Spacer(modifier = Modifier.height(28.dp))
             Text("Mis centros", style = MaterialTheme.typography.titleMedium)

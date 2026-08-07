@@ -10,6 +10,7 @@ import {
   birthDateFieldsHtml,
   parseBirthFromForm,
 } from "../../services/birth-date";
+import { cedulaFieldHtml, readCedulaFromForm } from "../../services/cedula";
 import {
   TIPOS_SANGRE,
   emergenciaPublicUrl,
@@ -306,7 +307,7 @@ function bindPacientePage(el: HTMLElement): void {
           ? `
           ${tabs("entrar")}
           <form class="form" id="pac-login">
-            <label>Cédula<input name="cedula" required placeholder="Ej. V-12345678" /></label>
+            ${cedulaFieldHtml({ autocomplete: "username" })}
             <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
             <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN (contraseña)</a></p>
             <button type="submit" class="btn btn-primary">Entrar</button>
@@ -316,7 +317,7 @@ function bindPacientePage(el: HTMLElement): void {
           ${tabs("registro")}
           <form class="form" id="pac-registro">
             <label>Nombre completo<input name="nombre" required /></label>
-            <label>Cédula<input name="cedula" required /></label>
+            ${cedulaFieldHtml()}
             <label>Sexo
               <select name="sexo" required>
                 <option value="">Seleccione…</option>
@@ -346,7 +347,7 @@ function bindPacientePage(el: HTMLElement): void {
         e.preventDefault();
         const fd = new FormData(e.target as HTMLFormElement);
         try {
-          const p = await loginPaciente(String(fd.get("cedula")), String(fd.get("pin")));
+          const p = await loginPaciente(readCedulaFromForm(fd), String(fd.get("pin")));
           setPatientSession({ cedula: p.cedula, nombre: p.nombre });
           navigate("/paciente");
         } catch (err) {
@@ -360,7 +361,7 @@ function bindPacientePage(el: HTMLElement): void {
         try {
           const birth = parseBirthFromForm(fd, "nac");
           const p = await registerPaciente({
-            cedula: String(fd.get("cedula")),
+            cedula: readCedulaFromForm(fd),
             nombre: String(fd.get("nombre")),
             edad: birth.age,
             fechaNacimiento: birth.iso.slice(0, 10),
@@ -410,7 +411,7 @@ registerRoute({
         <p class="lead">Regístrese para crear su ficha de emergencia (QR) y publicar en Ayudemos.</p>
         ${tabs("entrar")}
         <form class="form" id="pac-login">
-          <label>Cédula<input name="cedula" required placeholder="Ej. V-12345678" /></label>
+          ${cedulaFieldHtml({ autocomplete: "username" })}
           <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
           <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN (contraseña)</a></p>
           <button type="submit" class="btn btn-primary">Entrar</button>

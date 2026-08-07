@@ -9,7 +9,8 @@ import {
   type DocumentData,
 } from "firebase/firestore";
 import { normalizeCedula, cedulaLookupKeys } from "../services/cedula";
-import { createCloudUser, findCloudUserByCedula, resolveCloudAccount } from "../services/app-account";
+import { createCloudUser, findCloudUserByCedula } from "../services/app-account";
+import { authLogin } from "../services/auth-login";
 import { getDb } from "./firebase";
 import type {
   AtencionRegistro,
@@ -87,6 +88,7 @@ export async function registerPaciente(input: {
     updatedAt: now,
   };
   await setDoc(patientRef(cedula), data as DocumentData);
+  await authLogin({ tipo: "paciente", cedula, pin: input.pin });
   return data;
 }
 
@@ -141,6 +143,7 @@ export async function registerProfesional(input: {
     nacionalidad: data.nacionalidad,
   });
 
+  await authLogin({ tipo: "profesional", cedula, pin: input.pin });
   return data;
 }
 
@@ -151,12 +154,23 @@ export async function consultarPaciente(cedula: string): Promise<PacienteRegistr
 }
 
 export async function loginPaciente(cedula: string, pin: string): Promise<PacienteRegistro> {
-  const p = await getPaciente(cedula);
-  if (!p) throw new Error("No hay registro con esa cédula");
-  if (!p.pinHash) throw new Error("Debe completar su registro con PIN de 4 dígitos");
   assertPin4(pin);
-  const pinHash = await hashPin(p.cedula, pin);
-  if (p.pinHash !== pinHash) throw new Error("PIN incorrecto");
+  const auth = await authLogin({ tipo: "paciente", cedula, pin });
+  const p = await getPaciente(auth.cedula || cedula);
+  if (!p) {
+    return {
+      cedula: auth.cedula || normalizeCedula(cedula),
+      nombre: auth.nombre || "",
+      edad: 0,
+      fechaNacimiento: "",
+      sexo: "",
+      telefono: "",
+      correo: auth.correo || "",
+      pinHash: "",
+      createdAt: "",
+      updatedAt: "",
+    };
+  }
   return p;
 }
 
@@ -166,30 +180,19 @@ export async function loginProfesional(
   _mpps = "",
 ): Promise<ProfesionalSession> {
   assertPin4(pin);
-  const cedNorm = normalizeCedula(cedula);
+  const auth = await authLogin({ tipo: "profesional", cedula, pin });
+  const cedNorm = normalizeCedula(auth.cedula || cedula);
   const p = await getProfesional(cedNorm);
-
-  if (p) {
-    if (!p.activo) throw new Error("Cuenta pendiente de activación");
-    const pinHash = await hashPin(p.cedula, pin);
-    if (p.pinHash !== pinHash) throw new Error("PIN incorrecto");
-  }
-
-  try {
-    const { session } = await resolveCloudAccount({
-      cedula: cedNorm,
-      pin,
-      profesional: p,
-    });
-    return {
-      ...session,
-      sexo: p?.sexo ?? session.sexo,
-      nacionalidad: p?.nacionalidad ?? session.nacionalidad,
-    };
-  } catch (err) {
-    if (!p) throw new Error("No hay profesional registrado con esa cédula");
-    throw err instanceof Error ? err : new Error("No se pudo vincular la cuenta de consultorio");
-  }
+  return {
+    cedula: cedNorm,
+    nombre: auth.nombre || p?.nombre || "Médico",
+    especialidad: auth.especialidad || p?.especialidad || "Médico general",
+    esMedicoGeneral: p?.esMedicoGeneral ?? /general/i.test(auth.especialidad || ""),
+    mpps: auth.mpps || p?.mpps || "",
+    cloudUserId: auth.cloudUserId || auth.uid,
+    sexo: auth.sexo || p?.sexo,
+    nacionalidad: auth.nacionalidad || p?.nacionalidad,
+  };
 }
 
 export async function upsertPacienteMinimo(input: {

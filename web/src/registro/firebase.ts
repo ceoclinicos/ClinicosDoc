@@ -1,4 +1,4 @@
-import { initializeApp, type FirebaseApp } from "firebase/app";
+import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getFirestore, type Firestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -11,10 +11,20 @@ const firebaseConfig = {
 let app: FirebaseApp | undefined;
 let db: Firestore | undefined;
 
+function ensureApp(): FirebaseApp {
+  if (!app) {
+    app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
+  }
+  return app;
+}
+
+export function getApp(): FirebaseApp {
+  return ensureApp();
+}
+
 export function getDb(): Firestore {
   if (!db) {
-    app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
+    db = getFirestore(ensureApp());
   }
   return db;
 }

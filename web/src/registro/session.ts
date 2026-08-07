@@ -1,5 +1,6 @@
 import type { PacienteSession, ProfesionalSession } from "./models";
 import { normalizeCedula } from "../services/cedula";
+import { signOutFirebase } from "../services/firebase-auth";
 
 const PROF_KEY = "registro_profesional";
 const PAC_KEY = "registro_paciente";
@@ -71,6 +72,7 @@ export function logoutAllSessions(): void {
   remove(PROF_KEY);
   remove(PAC_KEY);
   clearAtencionCedula();
+  void signOutFirebase();
   notifySessionChange();
 }
 
@@ -85,6 +87,7 @@ export function setProfessionalSession(session: ProfesionalSession): void {
 
 export function clearProfessionalSession(): void {
   remove(PROF_KEY);
+  void signOutFirebase();
   notifySessionChange();
 }
 
@@ -99,6 +102,7 @@ export function setPatientSession(session: PacienteSession): void {
 
 export function clearPatientSession(): void {
   remove(PAC_KEY);
+  void signOutFirebase();
   notifySessionChange();
 }
 

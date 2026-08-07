@@ -19,6 +19,7 @@ import {
 import { clearClinicSession } from "../../clinic/session";
 import type { AtencionRegistro, PacienteRegistro, ProfesionalSession } from "../../registro/models";
 import { validarMpps } from "../../services/mpps-validation";
+import { cedulaFieldHtml, composeCedula, readCedulaFromForm } from "../../services/cedula";
 import { ESPECIALIDADES_MEDICAS_VE } from "../../registro/especialidades";
 import { loadDoctorProfile, saveDoctorProfile } from "../../services/doctor-local";
 import { syncOnLogin } from "../../services/cloud-sync";
@@ -53,7 +54,7 @@ function loginForm(): string {
   return `
     ${tabs("login")}
     <form class="form" id="prof-login">
-      <label>Cédula<input name="cedula" required autocomplete="username" /></label>
+      ${cedulaFieldHtml({ autocomplete: "username" })}
       <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required autocomplete="current-password" /></label>
       <p class="muted"><a href="#/olvide-pin?tipo=profesional">Olvidé mi PIN (contraseña)</a></p>
       <button type="submit" class="btn btn-primary">Ingresar</button>
@@ -66,7 +67,7 @@ function registerForm(): string {
     ${tabs("registro")}
     <form class="form" id="prof-registro">
       <label>Nombre completo<input name="nombre" required /></label>
-      <label>Cédula<input name="cedula" required /></label>
+      ${cedulaFieldHtml()}
       <label>Correo electrónico<input name="correo" type="email" required placeholder="para recuperar PIN (contraseña)" /></label>
       <label>Sexo
         <select name="sexo" required>
@@ -187,7 +188,7 @@ function bindProfesionalPage(el: HTMLElement): void {
         const fd = new FormData(e.target as HTMLFormElement);
         try {
           const s = await loginProfesional(
-            String(fd.get("cedula")),
+            readCedulaFromForm(fd),
             String(fd.get("pin")),
           );
           clearClinicSession();
@@ -217,7 +218,7 @@ function bindProfesionalPage(el: HTMLElement): void {
         if (btn) btn.disabled = true;
         try {
           if (sexo !== "Masculino" && sexo !== "Femenino") throw new Error("Seleccione el sexo");
-          const cedula = String(fd.get("cedula"));
+          const cedula = readCedulaFromForm(fd);
           let mpps = String(fd.get("mpps") ?? "").trim();
           let especialidad = String(fd.get("especialidad") ?? "").trim();
           if (!esGeneral) {
@@ -277,9 +278,11 @@ function bindProfesionalPage(el: HTMLElement): void {
   });
 
   el.querySelector("#btn-buscar")?.addEventListener("click", async () => {
-    const input = el.querySelector<HTMLInputElement>("#cedula-buscar");
+    const letter =
+      el.querySelector<HTMLSelectElement>("#cedula-buscar-letter")?.value || "V";
+    const digits = el.querySelector<HTMLInputElement>("#cedula-buscar")?.value.trim() ?? "";
     const result = el.querySelector("#resultado") as HTMLElement;
-    const cedula = input?.value.trim() ?? "";
+    const cedula = composeCedula(letter, digits);
     if (!cedula) return;
 
     result.innerHTML = `<p class="muted">Buscando…</p>`;
@@ -358,7 +361,15 @@ registerRoute({
         <p class="muted"><a href="#/">← Volver al consultorio (Redactar, informes, plantillas)</a></p>
         <div class="search-row">
           <label class="search-label">Cédula del paciente
-            <input id="cedula-buscar" placeholder="Ej. V-12345678" autocomplete="off" />
+            <label>Cédula
+              <span class="cedula-field">
+                <select id="cedula-buscar-letter" aria-label="Tipo de cédula (V o E)">
+                  <option value="V" selected>V</option>
+                  <option value="E">E</option>
+                </select>
+                <input id="cedula-buscar" placeholder="Solo números" inputmode="numeric" pattern="[0-9]{6,9}" maxlength="9" autocomplete="off" />
+              </span>
+            </label>
           </label>
           <button type="button" class="btn btn-primary" id="btn-buscar">Buscar</button>
         </div>

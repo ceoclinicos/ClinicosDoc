@@ -9,15 +9,19 @@ import {
 } from "firebase/firestore";
 import { getDb } from "../registro/firebase";
 import { hashPin } from "../registro/session";
+import { authLogin } from "../services/auth-login";
 import { normalizeCedula } from "../services/cedula";
 import { FirestorePaths, type ClinicalDocument, type DocumentHeader, type DocumentTemplate } from "../shared/models";
 import type {
+  ClinicDoctorInvitation,
   ClinicMember,
   ClinicMemberRole,
   ClinicPatientRow,
   ClinicRegistro,
   ClinicSession,
 } from "./models";
+import { findCloudUserByCedula } from "../services/app-account";
+import { getProfesional } from "../registro/store";
 
 function assertPin4(pin: string): void {
   if (!/^\d{4}$/.test(pin)) throw new Error("El PIN debe tener exactamente 4 dígitos");
@@ -45,6 +49,49 @@ function headersCol(clinicId: string) {
 
 function documentsCol(clinicId: string) {
   return collection(getDb(), FirestorePaths.CLINICS, clinicId, FirestorePaths.SUB_DOCUMENTS);
+}
+
+function invitationsCol(clinicId: string) {
+  return collection(getDb(), FirestorePaths.CLINICS, clinicId, FirestorePaths.SUB_INVITATIONS);
+}
+
+function doctorPendingInvitesCol(doctorCedula: string) {
+  return collection(
+    getDb(),
+    FirestorePaths.DOCTOR_INVITES,
+    normalizeCedula(doctorCedula),
+    "pending",
+  );
+}
+
+async function writeClinicMembership(input: {
+  clinicId: string;
+  clinicName: string;
+  doctorCedula: string;
+  doctorNombre: string;
+  cloudUserId?: string;
+}): Promise<ClinicMember> {
+  const doctorCedula = normalizeCedula(input.doctorCedula);
+  const member: ClinicMember = {
+    doctorCedula,
+    doctorNombre: input.doctorNombre.trim(),
+    cloudUserId: input.cloudUserId,
+    role: "medico",
+    joinedAt: new Date().toISOString(),
+  };
+  await setDoc(doc(membersCol(input.clinicId), doctorCedula), member as DocumentData);
+  if (input.cloudUserId) {
+    await setDoc(
+      doc(getDb(), FirestorePaths.USERS, input.cloudUserId, "clinic_memberships", input.clinicId),
+      {
+        clinicId: input.clinicId,
+        clinicName: input.clinicName,
+        role: "medico",
+        joinedAt: member.joinedAt,
+      } as DocumentData,
+    );
+  }
+  return member;
 }
 
 function inviteRef(code: string) {
@@ -120,6 +167,8 @@ export async function registerClinic(input: {
     createdAt: now,
   });
 
+  await authLogin({ tipo: "clinica", cedula: rif, pin: input.pin });
+
   return {
     clinicId: id,
     nombre: data.nombre,
@@ -131,16 +180,13 @@ export async function registerClinic(input: {
 
 export async function loginClinic(rif: string, pin: string): Promise<ClinicSession> {
   assertPin4(pin);
-  const clinic = await getClinicByRif(rif);
-  if (!clinic) throw new Error("No hay centro registrado con ese RIF");
-  const pinHash = await hashPin(clinic.rif, pin);
-  if (clinic.pinHash !== pinHash) throw new Error("PIN incorrecto");
+  const auth = await authLogin({ tipo: "clinica", cedula: rif, pin });
   return {
-    clinicId: clinic.id,
-    nombre: clinic.nombre,
-    rif: clinic.rif,
-    correo: clinic.correo,
-    inviteCode: clinic.inviteCode,
+    clinicId: auth.clinicId || auth.uid,
+    nombre: auth.nombre || "",
+    rif: auth.rif || normalizeRif(rif),
+    correo: auth.correo || "",
+    inviteCode: auth.inviteCode || "",
   };
 }
 
@@ -192,35 +238,138 @@ export async function joinClinicByInvite(input: {
   const clinic = await getClinic(clinicId);
   if (!clinic) throw new Error("Centro no encontrado");
 
-  const doctorCedula = normalizeCedula(input.doctorCedula);
-  const member: ClinicMember = {
-    doctorCedula,
-    doctorNombre: input.doctorNombre.trim(),
+  await writeClinicMembership({
+    clinicId,
+    clinicName: clinic.nombre,
+    doctorCedula: input.doctorCedula,
+    doctorNombre: input.doctorNombre,
     cloudUserId: input.cloudUserId,
-    role: "medico",
-    joinedAt: new Date().toISOString(),
-  };
-  await setDoc(doc(membersCol(clinicId), doctorCedula), member as DocumentData);
+  });
 
-  if (input.cloudUserId) {
-    await setDoc(
-      doc(
-        getDb(),
-        FirestorePaths.USERS,
-        input.cloudUserId,
-        "clinic_memberships",
-        clinicId,
-      ),
-      {
-        clinicId,
-        clinicName: clinic.nombre,
-        role: "medico",
-        joinedAt: member.joinedAt,
-      } as DocumentData,
+  return { clinicId, clinicName: clinic.nombre };
+}
+
+/** Clínica invita a un médico por cédula (queda pendiente hasta que acepte). */
+export async function inviteDoctorByCedula(input: {
+  clinicId: string;
+  doctorCedula: string;
+  doctorNombreHint?: string;
+}): Promise<ClinicDoctorInvitation> {
+  const clinic = await getClinic(input.clinicId);
+  if (!clinic) throw new Error("Centro no encontrado");
+
+  const doctorCedula = normalizeCedula(input.doctorCedula);
+  if (doctorCedula.length < 5) throw new Error("Indique una cédula válida");
+
+  const existingMember = await getDoc(doc(membersCol(input.clinicId), doctorCedula));
+  if (existingMember.exists()) throw new Error("Ese médico ya está en el equipo");
+
+  const pendingRef = doc(invitationsCol(input.clinicId), doctorCedula);
+  const pendingSnap = await getDoc(pendingRef);
+  if (pendingSnap.exists() && (pendingSnap.data() as ClinicDoctorInvitation).status === "pending") {
+    throw new Error("Ya hay una invitación pendiente para esa cédula");
+  }
+
+  const prof = await getProfesional(doctorCedula);
+  const cloud = await findCloudUserByCedula(doctorCedula);
+  const doctorNombre =
+    (prof?.nombre || cloud?.nombre || input.doctorNombreHint || "").trim() ||
+    `Médico C.I. ${doctorCedula}`;
+  if (!prof && !cloud && !(input.doctorNombreHint || "").trim()) {
+    throw new Error(
+      "No encontramos esa cédula en ClinicosDoc. Indique el nombre del médico o pídale que se registre primero.",
     );
   }
 
-  return { clinicId, clinicName: clinic.nombre };
+  const invitation: ClinicDoctorInvitation = {
+    clinicId: clinic.id,
+    clinicName: clinic.nombre,
+    doctorCedula,
+    doctorNombre,
+    cloudUserId: cloud?.id,
+    status: "pending",
+    invitedAt: new Date().toISOString(),
+  };
+
+  await setDoc(pendingRef, invitation as DocumentData);
+  await setDoc(doc(doctorPendingInvitesCol(doctorCedula), clinic.id), invitation as DocumentData);
+  return invitation;
+}
+
+export async function listPendingInvitationsForClinic(
+  clinicId: string,
+): Promise<ClinicDoctorInvitation[]> {
+  const snap = await getDocs(invitationsCol(clinicId));
+  return snap.docs
+    .map((d) => d.data() as ClinicDoctorInvitation)
+    .filter((i) => i.status === "pending")
+    .sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
+}
+
+export async function listPendingInvitationsForDoctor(
+  doctorCedula: string,
+): Promise<ClinicDoctorInvitation[]> {
+  const snap = await getDocs(doctorPendingInvitesCol(doctorCedula));
+  return snap.docs
+    .map((d) => d.data() as ClinicDoctorInvitation)
+    .filter((i) => i.status === "pending")
+    .sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
+}
+
+export async function cancelClinicInvitation(
+  clinicId: string,
+  doctorCedula: string,
+): Promise<void> {
+  const ced = normalizeCedula(doctorCedula);
+  await deleteDoc(doc(invitationsCol(clinicId), ced));
+  await deleteDoc(doc(doctorPendingInvitesCol(ced), clinicId));
+}
+
+export async function acceptDoctorInvitation(input: {
+  clinicId: string;
+  doctorCedula: string;
+  doctorNombre: string;
+  cloudUserId?: string;
+}): Promise<{ clinicId: string; clinicName: string }> {
+  const doctorCedula = normalizeCedula(input.doctorCedula);
+  const clinic = await getClinic(input.clinicId);
+  if (!clinic) throw new Error("Centro no encontrado");
+
+  const invRef = doc(invitationsCol(input.clinicId), doctorCedula);
+  const invSnap = await getDoc(invRef);
+  if (!invSnap.exists()) throw new Error("Invitación no encontrada");
+  const inv = invSnap.data() as ClinicDoctorInvitation;
+  if (inv.status !== "pending") throw new Error("Esta invitación ya no está pendiente");
+
+  await writeClinicMembership({
+    clinicId: clinic.id,
+    clinicName: clinic.nombre,
+    doctorCedula,
+    doctorNombre: input.doctorNombre || inv.doctorNombre,
+    cloudUserId: input.cloudUserId || inv.cloudUserId,
+  });
+
+  await setDoc(
+    invRef,
+    { status: "accepted" } as DocumentData,
+    { merge: true },
+  );
+  await deleteDoc(doc(doctorPendingInvitesCol(doctorCedula), clinic.id));
+
+  return { clinicId: clinic.id, clinicName: clinic.nombre };
+}
+
+export async function rejectDoctorInvitation(input: {
+  clinicId: string;
+  doctorCedula: string;
+}): Promise<void> {
+  const doctorCedula = normalizeCedula(input.doctorCedula);
+  const invRef = doc(invitationsCol(input.clinicId), doctorCedula);
+  const invSnap = await getDoc(invRef);
+  if (invSnap.exists()) {
+    await setDoc(invRef, { status: "rejected" } as DocumentData, { merge: true });
+  }
+  await deleteDoc(doc(doctorPendingInvitesCol(doctorCedula), input.clinicId));
 }
 
 export async function listClinicMembers(clinicId: string): Promise<ClinicMember[]> {

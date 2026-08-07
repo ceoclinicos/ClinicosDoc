@@ -31,6 +31,18 @@ export interface ClinicMember {
   joinedAt: string;
 }
 
+export type ClinicInviteStatus = "pending" | "accepted" | "rejected";
+
+export interface ClinicDoctorInvitation {
+  clinicId: string;
+  clinicName: string;
+  doctorCedula: string;
+  doctorNombre: string;
+  cloudUserId?: string;
+  status: ClinicInviteStatus;
+  invitedAt: string;
+}
+
 /** Paciente agregado desde documentos de la clínica (sin duplicar ficha). */
 export interface ClinicPatientRow {
   patientCedula: string;

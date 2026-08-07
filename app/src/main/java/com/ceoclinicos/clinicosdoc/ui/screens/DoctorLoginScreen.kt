@@ -88,7 +88,9 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
     var loading by remember { mutableStateOf(false) }
 
     var nombre by remember { mutableStateOf("") }
-    var cedula by remember { mutableStateOf("") }
+    var cedulaLetter by remember { mutableStateOf("V") }
+    var cedulaDigits by remember { mutableStateOf("") }
+    val cedula = CedulaNormalizer.compose(cedulaLetter, cedulaDigits)
     var mpps by remember { mutableStateOf("") }
     var correo by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -178,8 +180,10 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
 
             when (authMode) {
                 AuthMode.LOGIN -> LoginForm(
-                    cedula = cedula,
-                    onCedulaChange = { cedula = it },
+                    cedulaLetter = cedulaLetter,
+                    onCedulaLetterChange = { cedulaLetter = it },
+                    cedulaDigits = cedulaDigits,
+                    onCedulaDigitsChange = { cedulaDigits = it.filter { c -> c.isDigit() }.take(9) },
                     password = password,
                     onPasswordChange = { password = it.filter { c -> c.isDigit() }.take(4) },
                     cedulaError = cedulaError,
@@ -187,8 +191,8 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                     loading = loading,
                     onLogin = {
                         cedulaError = when {
-                            cedula.isBlank() -> "Ingresa tu cédula"
-                            !CedulaNormalizer.isValid(cedula) -> "Cédula inválida"
+                            cedulaDigits.isBlank() -> "Ingresa tu cédula"
+                            !CedulaNormalizer.isValidDigits(cedulaDigits) -> "Cédula inválida"
                             else -> null
                         }
                         passwordError = when {
@@ -215,8 +219,8 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                     },
                     onForgotPassword = {
                         cedulaError = when {
-                            cedula.isBlank() -> "Ingresa tu cédula para recuperar"
-                            !CedulaNormalizer.isValid(cedula) -> "Cédula inválida"
+                            cedulaDigits.isBlank() -> "Ingresa tu cédula para recuperar"
+                            !CedulaNormalizer.isValidDigits(cedulaDigits) -> "Cédula inválida"
                             else -> null
                         }
                         if (cedulaError != null) return@LoginForm
@@ -236,8 +240,10 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                     0 -> RegistrationStep1(
                         nombre = nombre,
                         onNombreChange = { nombre = it },
-                        cedula = cedula,
-                        onCedulaChange = { cedula = it },
+                        cedulaLetter = cedulaLetter,
+                        onCedulaLetterChange = { cedulaLetter = it },
+                        cedulaDigits = cedulaDigits,
+                        onCedulaDigitsChange = { cedulaDigits = it.filter { c -> c.isDigit() }.take(9) },
                         correo = correo,
                         onCorreoChange = { correo = it.trim() },
                         nacionalidad = nacionalidad,
@@ -270,8 +276,8 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                         onNext = {
                             nombreError = if (nombre.isBlank()) "Ingresa tu nombre" else null
                             cedulaError = when {
-                                cedula.isBlank() -> "Ingresa tu cédula"
-                                !CedulaNormalizer.isValid(cedula) -> "Cédula inválida"
+                                cedulaDigits.isBlank() -> "Ingresa tu cédula"
+                                !CedulaNormalizer.isValidDigits(cedulaDigits) -> "Cédula inválida"
                                 else -> null
                             }
                             correoError = when {
@@ -392,9 +398,85 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
 }
 
 @Composable
+private fun CedulaInputRow(
+    letter: String,
+    onLetterChange: (String) -> Unit,
+    digits: String,
+    onDigitsChange: (String) -> Unit,
+    isError: Boolean,
+    errorMessage: String?,
+) {
+    var letterExpanded by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Cédula",
+            style = MaterialTheme.typography.labelLarge,
+            color = if (isError) MaterialTheme.colorScheme.error else TextSecondary,
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            ExposedDropdownMenuBox(
+                expanded = letterExpanded,
+                onExpandedChange = { letterExpanded = !letterExpanded },
+                modifier = Modifier.width(88.dp),
+            ) {
+                OutlinedTextField(
+                    value = letter,
+                    onValueChange = {},
+                    readOnly = true,
+                    singleLine = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = letterExpanded) },
+                    modifier = Modifier
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth(),
+                    isError = isError,
+                )
+                ExposedDropdownMenu(
+                    expanded = letterExpanded,
+                    onDismissRequest = { letterExpanded = false },
+                ) {
+                    listOf("V", "E").forEach { opt ->
+                        DropdownMenuItem(
+                            text = { Text(opt) },
+                            onClick = {
+                                onLetterChange(opt)
+                                letterExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = digits,
+                onValueChange = onDigitsChange,
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                placeholder = { Text("Solo números") },
+                leadingIcon = {
+                    Icon(Icons.Outlined.CreditCard, contentDescription = null)
+                },
+                keyboardOptions = keyboardDigits(),
+                isError = isError,
+                supportingText = if (isError && errorMessage != null) {
+                    { Text(errorMessage) }
+                } else {
+                    null
+                },
+            )
+        }
+    }
+}
+
+@Composable
 private fun LoginForm(
-    cedula: String,
-    onCedulaChange: (String) -> Unit,
+    cedulaLetter: String,
+    onCedulaLetterChange: (String) -> Unit,
+    cedulaDigits: String,
+    onCedulaDigitsChange: (String) -> Unit,
     password: String,
     onPasswordChange: (String) -> Unit,
     cedulaError: String?,
@@ -403,12 +485,11 @@ private fun LoginForm(
     onLogin: () -> Unit,
     onForgotPassword: () -> Unit,
 ) {
-    PremiumTextField(
-        "Cédula",
-        cedula,
-        onCedulaChange,
-        hint = "Ej. V-12345678",
-        prefixIcon = Icons.Outlined.CreditCard,
+    CedulaInputRow(
+        letter = cedulaLetter,
+        onLetterChange = onCedulaLetterChange,
+        digits = cedulaDigits,
+        onDigitsChange = onCedulaDigitsChange,
         isError = cedulaError != null,
         errorMessage = cedulaError,
     )
@@ -442,8 +523,10 @@ private fun LoginForm(
 private fun RegistrationStep1(
     nombre: String,
     onNombreChange: (String) -> Unit,
-    cedula: String,
-    onCedulaChange: (String) -> Unit,
+    cedulaLetter: String,
+    onCedulaLetterChange: (String) -> Unit,
+    cedulaDigits: String,
+    onCedulaDigitsChange: (String) -> Unit,
     correo: String,
     onCorreoChange: (String) -> Unit,
     nacionalidad: String,
@@ -481,12 +564,11 @@ private fun RegistrationStep1(
         errorMessage = nombreError,
     )
     Spacer(modifier = Modifier.height(20.dp))
-    PremiumTextField(
-        "Cédula",
-        cedula,
-        onCedulaChange,
-        hint = "Ej. V-12345678",
-        prefixIcon = Icons.Outlined.CreditCard,
+    CedulaInputRow(
+        letter = cedulaLetter,
+        onLetterChange = onCedulaLetterChange,
+        digits = cedulaDigits,
+        onDigitsChange = onCedulaDigitsChange,
         isError = cedulaError != null,
         errorMessage = cedulaError,
     )
