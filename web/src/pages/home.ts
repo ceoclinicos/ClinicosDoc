@@ -1,4 +1,9 @@
 import { registerRoute, isMedicoLoggedIn, navigate } from "../app/router";
+import { listMembershipsForDoctor } from "../clinic/store";
+import {
+  applyMembershipSnapshot,
+  showPendingAffiliationNotices,
+} from "../clinic/affiliation-notices";
 import { getPatientSession, getProfessionalSession } from "../registro/session";
 import { loadDocuments, loadDrafts } from "../services/clinical-store";
 import { hasSeenRedactarTutorial, resetRedactarTutorial } from "../services/onboarding";
@@ -119,6 +124,20 @@ function medicoHome(): HTMLElement {
   if (!hasSeenRedactarTutorial()) {
     requestAnimationFrame(openTutorial);
   }
+
+  void (async () => {
+    try {
+      const cedula = prof?.cedula || "";
+      if (!cedula) return;
+      const list = await listMembershipsForDoctor(cedula, prof?.cloudUserId);
+      applyMembershipSnapshot(
+        list.map((m) => ({ clinicId: m.clinicId, clinicName: m.clinicName })),
+      );
+      showPendingAffiliationNotices();
+    } catch {
+      /* silencioso */
+    }
+  })();
 
   return el;
 }

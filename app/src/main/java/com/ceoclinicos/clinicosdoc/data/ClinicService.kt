@@ -96,7 +96,9 @@ object ClinicService {
         awaitAuthUser()
         val memberships = runCatching { refreshMemberships(context) }
             .getOrElse { ClinicMembershipStorage.load(context) }
-        ClinicMembershipStorage.save(context, memberships)
+        // refreshMemberships ya guarda; comparar con snapshot previo requiere detectar antes.
+        // Re-aplicar detección: refreshMemberships llama save() sin detección.
+        ClinicMembershipStorage.saveDetectingChanges(context, memberships)
         ClinicCatalogStorage.retainClinics(context, memberships.map { it.clinicId }.toSet())
         for (m in memberships) {
             runCatching {
@@ -338,7 +340,7 @@ object ClinicService {
                             }
                         }
                     }.sortedBy { it.clinicName }
-                    ClinicMembershipStorage.save(context, list)
+                    ClinicMembershipStorage.saveDetectingChanges(context, list)
                     list
                 }
             }
@@ -357,7 +359,7 @@ object ClinicService {
                     )
                 }.sortedBy { it.clinicName }
                 if (list.isNotEmpty()) {
-                    ClinicMembershipStorage.save(context, list)
+                    ClinicMembershipStorage.saveDetectingChanges(context, list)
                     list
                 } else {
                     throw apiError

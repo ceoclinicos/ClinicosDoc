@@ -98,7 +98,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
   const existingDraft = draftId ? getDraft(draftId) : undefined;
 
   let step: "paciente" | "origen" | "molde" | "plantilla" | "dictado" | "resultado" =
-    existingDraft?.generatedContent ? "resultado" : "paciente";
+    existingDraft?.generatedContent ? "resultado" : "origen";
   let dictation = existingDraft?.dictation ?? "";
   let generatedContent = existingDraft?.generatedContent ?? "";
   /** Si ya se guardó el documento en esta sesión, regenerar/guardar actualiza el mismo. */
@@ -119,7 +119,6 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
   /** Contexto de clínica si eligió molde institucional */
   let clinicContext: { clinicId: string; clinicName: string } | null = null;
   let doctorMemberships: Array<{ clinicId: string; clinicName: string }> = [];
-  let membershipsLoaded = false;
   let availableHeaders: DocumentHeader[] = loadHeaders();
   /** Varios moldes del centro del mismo tipo (HC femenina / masculina / pediatría…) */
   let clinicMoldChoices: DocumentTemplate[] = [];
@@ -266,14 +265,15 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
   }
 
   function stepTotal(): number {
-    return doctorMemberships.length ? 6 : 4;
+    if (!doctorMemberships.length) return 4;
+    return usedMoldePicker ? 6 : 5;
   }
 
   function applyClinicTemplate(chosen: DocumentTemplate, hdrs: DocumentHeader[]): void {
     workingTemplate = structuredClone(chosen);
     availableHeaders = hdrs.length ? hdrs : loadHeaders();
     selectedHeader = availableHeaders.find((h) => h.isDefault) ?? availableHeaders[0];
-    step = "plantilla";
+    step = "paciente";
     render();
   }
 
@@ -292,31 +292,15 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     return usedMoldePicker ? `6 / ${stepTotal()}` : `5 / ${stepTotal()}`;
   }
 
-  async function goAfterPatient(): Promise<void> {
-    workingTemplate = structuredClone(templateForType(docType));
-    clinicContext = null;
-    availableHeaders = loadHeaders();
-    selectedHeader = defaultHeader();
+  function goAfterPatient(): void {
     persistDraft();
-
-    if (!membershipsLoaded) {
-      membershipsLoaded = true;
-    }
-    try {
-      const cedula = session?.cedula || doctor.cedula;
-      if (cedula) {
-        doctorMemberships = await listMembershipsForDoctor(cedula, session?.cloudUserId);
-      }
-    } catch {
-      doctorMemberships = [];
-    }
-
-    if (doctorMemberships.length > 0) {
-      step = "origen";
-    } else {
-      step = "plantilla";
-    }
+    step = "plantilla";
     render();
+  }
+
+  function pacienteStepLabel(): string {
+    if (!doctorMemberships.length) return "1 / 4";
+    return usedMoldePicker ? `3 / ${stepTotal()}` : `2 / ${stepTotal()}`;
   }
 
   function renderPaciente(): void {
@@ -340,7 +324,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       .join("");
 
     root.innerHTML = `
-      <p class="step-badge">1 / 4 · Paciente</p>
+      <p class="step-badge">${pacienteStepLabel()} · Paciente</p>
       <p class="lead">¿Para qué paciente es este ${DocumentTypeLabels[docType].toLowerCase()}?</p>
       <div class="grid-2" style="margin-bottom:1rem">${typeBtns}</div>
       <div class="search-row">
@@ -365,12 +349,18 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
           <label>Especialidad<input name="docEsp" required value="${escapeHtml(doctor?.especialidad ?? "Médico general")}" /></label>
           <label>MPPS<input name="docMpps" value="${escapeHtml(doctor?.mpps ?? "")}" /></label>
         </fieldset>
-        <button type="submit" class="btn btn-primary" ${filtered.length ? "" : "disabled"}>Continuar a plantilla</button>
+        <button type="submit" class="btn btn-primary" ${filtered.length ? "" : "disabled"}>Continuar</button>
         <button type="button" class="btn btn-ghost" data-nav="/pacientes/nuevo">Agregar paciente</button>
-        <button type="button" class="btn btn-ghost" data-nav="/">Cancelar</button>
+        <button type="button" class="btn btn-ghost" id="btn-back-origen-pac">Volver</button>
       </form>
     `;
 
+    root.querySelector("#btn-back-origen-pac")?.addEventListener("click", () => {
+      if (usedMoldePicker && clinicMoldChoices.length) step = "molde";
+      else if (doctorMemberships.length) step = "origen";
+      else navigate("/");
+      render();
+    });
     root.querySelectorAll("[data-pick-type]").forEach((btn) => {
       btn.addEventListener("click", () => {
         docType = btn.getAttribute("data-pick-type") as DocumentType;
@@ -446,8 +436,8 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
 
   function renderOrigen(): void {
     root.innerHTML = `
-      <p class="step-badge">2 / ${stepTotal()} · Origen del molde</p>
-      <p class="lead">¿Con qué plantilla crearás este ${escapeHtml(DocumentTypeLabels[docType])}?</p>
+      <p class="step-badge">1 / ${stepTotal()} · Origen del molde</p>
+      <p class="lead">¿Con qué plantillas crearás este ${escapeHtml(DocumentTypeLabels[docType])}?</p>
       <div class="stack" id="origen-options">
         <button type="button" class="tile tile-full" data-origen="personal">
           <strong>Mis plantillas personales</strong>
@@ -463,12 +453,11 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
           )
           .join("")}
       </div>
-      <button type="button" class="btn btn-ghost" id="btn-back-pac" style="margin-top:1rem">Volver</button>
+      <button type="button" class="btn btn-ghost" id="btn-back-home" style="margin-top:1rem">Volver</button>
     `;
 
-    root.querySelector("#btn-back-pac")?.addEventListener("click", () => {
-      step = "paciente";
-      render();
+    root.querySelector("#btn-back-home")?.addEventListener("click", () => {
+      navigate("/");
     });
 
     root.querySelectorAll("[data-origen]").forEach((btn) => {
@@ -481,7 +470,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
           workingTemplate = structuredClone(templateForType(docType));
           availableHeaders = loadHeaders();
           selectedHeader = defaultHeader();
-          step = "plantilla";
+          step = "paciente";
           render();
           return;
         }
@@ -519,7 +508,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
 
   function renderMoldeClinic(): void {
     root.innerHTML = `
-      <p class="step-badge">3 / ${stepTotal()} · Elegir molde</p>
+      <p class="step-badge">2 / ${stepTotal()} · Elegir molde</p>
       <p class="lead">${escapeHtml(clinicContext?.clinicName ?? "Centro")}: ¿cuál ${escapeHtml(DocumentTypeLabels[docType].toLowerCase())}?</p>
       <div class="stack">
         ${clinicMoldChoices
@@ -618,7 +607,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     }
 
     root.querySelector("#btn-back-pac")?.addEventListener("click", () => {
-      step = doctorMemberships.length ? (usedMoldePicker ? "molde" : "origen") : "paciente";
+      step = "paciente";
       render();
     });
 
@@ -1197,5 +1186,18 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     upsertDraft(draft);
   }
 
-  render();
+  void (async () => {
+    try {
+      const cedula = session?.cedula || doctor.cedula;
+      if (cedula) {
+        doctorMemberships = await listMembershipsForDoctor(cedula, session?.cloudUserId);
+      }
+    } catch {
+      doctorMemberships = [];
+    }
+    if (!existingDraft?.generatedContent && !existingDraft?.dictation) {
+      step = doctorMemberships.length ? "origen" : "paciente";
+    }
+    render();
+  })();
 }
