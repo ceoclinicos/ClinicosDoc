@@ -8,7 +8,6 @@ import {
   type DocumentData,
 } from "firebase/firestore";
 import { getDb } from "../registro/firebase";
-import { hashPin } from "../registro/session";
 import { authLogin } from "../services/auth-login";
 import { normalizeCedula } from "../services/cedula";
 import { FirestorePaths, type ClinicalDocument, type DocumentHeader, type DocumentTemplate } from "../shared/models";
@@ -135,46 +134,62 @@ export async function registerClinic(input: {
   if (rif.length < 5) throw new Error("Indique un RIF o código de centro válido");
   const correo = input.correo.trim();
   if (!correo.includes("@")) throw new Error("Correo electrónico requerido");
+  if (!input.nombre.trim()) throw new Error("Nombre del centro requerido");
 
-  const existing = await getClinicByRif(rif);
-  if (existing) throw new Error("Ya existe un centro registrado con ese RIF");
-
-  let inviteCode = makeInviteCode();
-  for (let i = 0; i < 5; i++) {
-    const taken = await getDoc(inviteRef(inviteCode));
-    if (!taken.exists()) break;
-    inviteCode = makeInviteCode();
+  // Registro vía Admin API: las rules cerradas bloquean create/get sin Auth.
+  const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(
+    /\/$/,
+    "",
+  );
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/api/auth-register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tipo: "clinica",
+        nombre: input.nombre.trim(),
+        rif,
+        correo,
+        direccion: (input.direccion ?? "").trim(),
+        pin: input.pin,
+      }),
+    });
+  } catch (err) {
+    throw new Error(
+      err instanceof Error ? err.message : "No se pudo conectar con el servidor",
+    );
   }
 
-  const now = new Date().toISOString();
-  const id = makeClinicId(rif);
-  const data: ClinicRegistro = {
-    id,
-    nombre: input.nombre.trim(),
-    rif,
-    correo,
-    direccion: (input.direccion ?? "").trim(),
-    pinHash: await hashPin(rif, input.pin),
-    inviteCode,
-    createdAt: now,
-    updatedAt: now,
-  };
+  const raw = await res.text();
+  let data: {
+    error?: string;
+    token?: string;
+    clinicId?: string;
+    uid?: string;
+    nombre?: string;
+    rif?: string;
+    correo?: string;
+    inviteCode?: string;
+  } = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = {};
+  }
+  if (!res.ok || !data.token) {
+    throw new Error(data.error || "No se pudo registrar el centro");
+  }
 
-  await setDoc(clinicRef(id), data as DocumentData);
-  await setDoc(inviteRef(inviteCode), {
-    clinicId: id,
-    nombre: data.nombre,
-    createdAt: now,
-  });
-
-  await authLogin({ tipo: "clinica", cedula: rif, pin: input.pin });
+  const { signInWithFirebaseToken } = await import("../services/firebase-auth");
+  await signInWithFirebaseToken(data.token);
 
   return {
-    clinicId: id,
-    nombre: data.nombre,
-    rif: data.rif,
-    correo: data.correo,
-    inviteCode: data.inviteCode,
+    clinicId: data.clinicId || data.uid || makeClinicId(rif),
+    nombre: data.nombre || input.nombre.trim(),
+    rif: data.rif || rif,
+    correo: data.correo || correo,
+    inviteCode: data.inviteCode || "",
   };
 }
 

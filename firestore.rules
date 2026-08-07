@@ -154,8 +154,10 @@ service cloud.firestore {
 
     // ── Modo empresa / centro de salud ──
     match /clinicosdoc_clinics/{clinicId} {
-      allow create: if true;
-      allow read, update, delete: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
+      // create/get de registro van por API Admin; cliente solo con Auth
+      allow create: if false;
+      allow get, list: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
+      allow update, delete: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
       match /{document=**} {
         allow read, write: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
       }
