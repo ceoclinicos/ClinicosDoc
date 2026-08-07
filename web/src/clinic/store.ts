@@ -136,56 +136,18 @@ export async function registerClinic(input: {
   if (!correo.includes("@")) throw new Error("Correo electrónico requerido");
   if (!input.nombre.trim()) throw new Error("Nombre del centro requerido");
 
-  // Registro vía Admin API: las rules cerradas bloquean create/get sin Auth.
-  const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(
-    /\/$/,
-    "",
-  );
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}/api/auth-register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tipo: "clinica",
-        nombre: input.nombre.trim(),
-        rif,
-        correo,
-        direccion: (input.direccion ?? "").trim(),
-        pin: input.pin,
-      }),
-    });
-  } catch (err) {
-    throw new Error(
-      err instanceof Error ? err.message : "No se pudo conectar con el servidor",
-    );
-  }
-
-  const raw = await res.text();
-  let data: {
-    error?: string;
-    token?: string;
-    clinicId?: string;
-    uid?: string;
-    nombre?: string;
-    rif?: string;
-    correo?: string;
-    inviteCode?: string;
-  } = {};
-  try {
-    data = raw ? JSON.parse(raw) : {};
-  } catch {
-    data = {};
-  }
-  if (!res.ok || !data.token) {
-    throw new Error(data.error || "No se pudo registrar el centro");
-  }
-
-  const { signInWithFirebaseToken } = await import("../services/firebase-auth");
-  await signInWithFirebaseToken(data.token);
+  const { authRegister } = await import("../services/auth-register");
+  const data = await authRegister({
+    tipo: "clinica",
+    nombre: input.nombre.trim(),
+    rif,
+    correo,
+    direccion: (input.direccion ?? "").trim(),
+    pin: input.pin,
+  });
 
   return {
-    clinicId: data.clinicId || data.uid || makeClinicId(rif),
+    clinicId: data.clinicId || data.uid,
     nombre: data.nombre || input.nombre.trim(),
     rif: data.rif || rif,
     correo: data.correo || correo,

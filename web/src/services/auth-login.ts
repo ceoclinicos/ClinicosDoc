@@ -20,6 +20,7 @@ export type AuthLoginResult = {
   clinicId?: string;
   rif?: string;
   inviteCode?: string;
+  esMedicoGeneral?: boolean;
 };
 
 type ApiPayload = AuthLoginResult & {

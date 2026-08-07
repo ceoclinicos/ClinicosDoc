@@ -9,8 +9,8 @@ import {
   type DocumentData,
 } from "firebase/firestore";
 import { normalizeCedula, cedulaLookupKeys } from "../services/cedula";
-import { createCloudUser, findCloudUserByCedula } from "../services/app-account";
 import { authLogin } from "../services/auth-login";
+import { authRegister } from "../services/auth-register";
 import { getDb } from "./firebase";
 import type {
   AtencionRegistro,
@@ -20,7 +20,6 @@ import type {
   SolicitudAyuda,
 } from "./models";
 import { RegistroPaths } from "./models";
-import { hashPin } from "./session";
 
 function assertPin4(pin: string): void {
   if (!/^\d{4}$/.test(pin)) throw new Error("El PIN debe tener exactamente 4 dígitos");
@@ -33,10 +32,6 @@ function normalizeMpps(mpps: string): string {
 
 function patientRef(cedula: string) {
   return doc(getDb(), RegistroPaths.PACIENTES, normalizeCedula(cedula));
-}
-
-function professionalRef(cedula: string) {
-  return doc(getDb(), RegistroPaths.PROFESIONALES, normalizeCedula(cedula));
 }
 
 function atencionesRef(cedula: string) {
@@ -69,27 +64,31 @@ export async function registerPaciente(input: {
   correo: string;
   pin: string;
 }): Promise<PacienteRegistro> {
-  const cedula = normalizeCedula(input.cedula);
   assertPin4(input.pin);
-  const existing = await getPaciente(cedula);
-  if (existing) throw new Error("Ya existe un paciente con esa cédula");
-
-  const now = new Date().toISOString();
-  const data: PacienteRegistro = {
+  const auth = await authRegister({
+    tipo: "paciente",
+    cedula: input.cedula,
+    nombre: input.nombre,
+    edad: input.edad,
+    fechaNacimiento: input.fechaNacimiento,
+    sexo: input.sexo,
+    telefono: input.telefono,
+    correo: input.correo,
+    pin: input.pin,
+  });
+  const cedula = normalizeCedula(auth.cedula || input.cedula);
+  return {
     cedula,
-    nombre: input.nombre.trim(),
+    nombre: auth.nombre || input.nombre.trim(),
     edad: input.edad,
     fechaNacimiento: input.fechaNacimiento,
     sexo: input.sexo.trim(),
     telefono: input.telefono.trim(),
-    correo: input.correo.trim(),
-    pinHash: await hashPin(cedula, input.pin),
-    createdAt: now,
-    updatedAt: now,
+    correo: auth.correo || input.correo.trim(),
+    pinHash: "",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
-  await setDoc(patientRef(cedula), data as DocumentData);
-  await authLogin({ tipo: "paciente", cedula, pin: input.pin });
-  return data;
 }
 
 export async function registerProfesional(input: {
@@ -103,7 +102,6 @@ export async function registerProfesional(input: {
   sexo: string;
   nacionalidad: string;
 }): Promise<ProfesionalRegistro> {
-  const cedula = normalizeCedula(input.cedula);
   assertPin4(input.pin);
   const correo = input.correo.trim();
   if (!correo || !correo.includes("@")) throw new Error("Correo electrónico requerido");
@@ -111,40 +109,36 @@ export async function registerProfesional(input: {
     throw new Error("Seleccione el sexo");
   }
   const nacionalidad = input.nacionalidad === "Otros" ? "Otros" : "Venezuela";
-  const existing = await getProfesional(cedula);
-  if (existing) throw new Error("Ya existe un profesional con esa cédula");
-  if (await findCloudUserByCedula(cedula)) {
-    throw new Error("Esta cédula ya tiene cuenta en la app. Use Ingresar.");
-  }
+  const especialidad = input.esMedicoGeneral ? "Médico general" : input.especialidad.trim();
 
-  const data: ProfesionalRegistro = {
-    cedula,
-    nombre: input.nombre.trim(),
-    especialidad: input.esMedicoGeneral ? "Médico general" : input.especialidad.trim(),
+  const auth = await authRegister({
+    tipo: "profesional",
+    cedula: input.cedula,
+    nombre: input.nombre,
+    especialidad,
     esMedicoGeneral: input.esMedicoGeneral,
-    mpps: nacionalidad === "Venezuela" ? normalizeMpps(input.mpps) : "",
+    mpps: input.mpps,
     correo,
-    pinHash: await hashPin(cedula, input.pin),
+    pin: input.pin,
+    sexo: input.sexo,
+    nacionalidad,
+    source: "web",
+  });
+
+  const cedula = normalizeCedula(auth.cedula || input.cedula);
+  return {
+    cedula,
+    nombre: auth.nombre || input.nombre.trim(),
+    especialidad: auth.especialidad || especialidad,
+    esMedicoGeneral: input.esMedicoGeneral,
+    mpps: auth.mpps || (nacionalidad === "Venezuela" ? normalizeMpps(input.mpps) : ""),
+    correo,
+    pinHash: "",
     activo: true,
     createdAt: new Date().toISOString(),
     sexo: input.sexo,
     nacionalidad,
   };
-  await setDoc(professionalRef(cedula), data as DocumentData);
-
-  await createCloudUser({
-    cedula,
-    nombre: data.nombre,
-    especialidad: data.especialidad,
-    mpps: data.mpps,
-    correo: data.correo,
-    pin: input.pin,
-    sexo: data.sexo,
-    nacionalidad: data.nacionalidad,
-  });
-
-  await authLogin({ tipo: "profesional", cedula, pin: input.pin });
-  return data;
 }
 
 export async function consultarPaciente(cedula: string): Promise<PacienteRegistro> {

@@ -104,33 +104,28 @@ object DoctorAuthService {
         }
 
         return runCatching {
-            if (cedulaExists(profileValidated.cedula)) {
-                error("Esta cédula ya está registrada. Usa Login")
-            }
-            val db = firestore(context)
-            val cedulaNorm = CedulaNormalizer.normalize(profileValidated.cedula)
-            val docRef = db.collection(FirestorePaths.USERS).document()
-            docRef.set(
-                mapOf(
-                    "nombre" to profileValidated.nombre,
-                    "cedula" to profileValidated.cedula.trim(),
-                    "cedulaNormalizada" to cedulaNorm,
-                    "mpps" to profileValidated.mpps,
-                    "sexo" to profileValidated.sexo,
-                    "especialidad" to profileValidated.especialidad,
-                    "whatsapp" to profileValidated.whatsapp,
-                    "correo" to profileValidated.correo.trim(),
-                    "nacionalidad" to profileValidated.nacionalidad,
-                    "passwordHash" to hashPassword(password),
-                    "mppsValidado" to mppsValidado,
-                    "profesionSacs" to profesionSacs,
-                ),
-            ).await()
-            DoctorStorage.saveSession(context, profileValidated, docRef.id)
-            // Abrir Firebase Auth (necesario cuando las rules exigen token)
-            AuthLoginService.login(profileValidated.cedula, password, "app").getOrThrow()
-            CloudSyncService.syncOnLogin(context, docRef.id)
-            profileValidated
+            val auth = AuthLoginService.register(
+                cedula = profileValidated.cedula,
+                pin = password,
+                nombre = profileValidated.nombre,
+                correo = profileValidated.correo,
+                sexo = profileValidated.sexo,
+                especialidad = profileValidated.especialidad,
+                mpps = profileValidated.mpps,
+                nacionalidad = profileValidated.nacionalidad,
+                whatsapp = profileValidated.whatsapp,
+                esMedicoGeneral = profileValidated.especialidad.contains("general", ignoreCase = true),
+            ).getOrThrow()
+            val saved = profileValidated.copy(
+                nombre = auth.nombre.ifBlank { profileValidated.nombre },
+                cedula = auth.cedula.ifBlank { CedulaNormalizer.normalize(profileValidated.cedula) },
+                mpps = auth.mpps.ifBlank { profileValidated.mpps },
+                correo = auth.correo.ifBlank { profileValidated.correo },
+                especialidad = auth.especialidad.ifBlank { profileValidated.especialidad },
+            )
+            DoctorStorage.saveSession(context, saved, auth.uid)
+            CloudSyncService.syncOnLogin(context, auth.uid)
+            saved
         }
     }
 
