@@ -363,11 +363,11 @@ registerRoute({
           <label class="search-label">Cédula del paciente
             <label>Cédula
               <span class="cedula-field">
-                <select id="cedula-buscar-letter" aria-label="Tipo de cédula (V o E)">
+                <select id="cedula-buscar-letter" class="cedula-letter" aria-label="Tipo de cédula (V o E)">
                   <option value="V" selected>V</option>
                   <option value="E">E</option>
                 </select>
-                <input id="cedula-buscar" placeholder="Solo números" inputmode="numeric" pattern="[0-9]{6,9}" maxlength="9" autocomplete="off" />
+                <input class="cedula-digits" id="cedula-buscar" placeholder="Solo números" inputmode="numeric" pattern="[0-9]{6,9}" maxlength="9" autocomplete="off" />
               </span>
             </label>
           </label>

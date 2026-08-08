@@ -55,11 +55,11 @@ export function cedulaFieldHtml(opts?: {
   return `
     <label>Cédula
       <span class="cedula-field">
-        <select name="${letterName}" aria-label="Tipo de cédula (V o E)">
+        <select name="${letterName}" class="cedula-letter" aria-label="Tipo de cédula (V o E)">
           <option value="V" selected>V</option>
           <option value="E">E</option>
         </select>
-        <input name="${digitsName}"${idAttr} ${req} inputmode="numeric" pattern="[0-9]{6,9}" minlength="6" maxlength="9" placeholder="Solo números" ${ac} />
+        <input class="cedula-digits" name="${digitsName}"${idAttr} ${req} inputmode="numeric" pattern="[0-9]{6,9}" minlength="6" maxlength="9" placeholder="Solo números" ${ac} />
       </span>
     </label>`;
 }
