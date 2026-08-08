@@ -85,6 +85,16 @@ function medicoHome(): HTMLElement {
 
     <p class="muted home-panel-link"><a href="#/profesional">Panel de atenciones (registro por cédula)</a></p>
 
+    <dialog class="sheet-dialog" id="origin-sheet">
+      <form method="dialog" class="sheet-body">
+        <h2>Origen del molde</h2>
+        <p class="muted">¿Con qué plantillas quieres redactar?</p>
+        <div id="origin-options" class="stack"></div>
+        <p class="muted" id="origin-status" style="margin-top:0.5rem"></p>
+        <button type="submit" class="btn btn-ghost" value="cancel">Cancelar</button>
+      </form>
+    </dialog>
+
     <dialog class="sheet-dialog" id="doc-type-sheet">
       <form method="dialog" class="sheet-body">
         <h2>Redactar documento</h2>
@@ -99,14 +109,75 @@ function medicoHome(): HTMLElement {
     </dialog>
   `;
 
-  const sheet = el.querySelector("#doc-type-sheet") as HTMLDialogElement;
+  const originSheet = el.querySelector("#origin-sheet") as HTMLDialogElement;
+  const typeSheet = el.querySelector("#doc-type-sheet") as HTMLDialogElement;
+  const originOptions = el.querySelector("#origin-options") as HTMLElement;
+  const originStatus = el.querySelector("#origin-status") as HTMLElement;
+
+  function openTypeSheet(): void {
+    typeSheet.showModal();
+  }
+
+  async function openOriginSheet(): Promise<void> {
+    originOptions.innerHTML = `
+      <button type="button" class="tile tile-full" data-origen="personal">
+        <strong>Mis plantillas personales</strong>
+        <span class="muted">Consultorio propio</span>
+      </button>`;
+    originStatus.textContent = "Buscando centros afiliados…";
+    originSheet.showModal();
+
+    let memberships: Array<{ clinicId: string; clinicName: string }> = [];
+    try {
+      const cedula = prof?.cedula || "";
+      if (cedula) {
+        memberships = await listMembershipsForDoctor(cedula, prof?.cloudUserId);
+      }
+    } catch {
+      memberships = [];
+    }
+    originStatus.textContent = memberships.length
+      ? ""
+      : "No estás afiliado a ninguna clínica. Puedes usar tus plantillas personales.";
+    originOptions.innerHTML =
+      `
+      <button type="button" class="tile tile-full" data-origen="personal">
+        <strong>Mis plantillas personales</strong>
+        <span class="muted">Consultorio propio</span>
+      </button>` +
+      memberships
+        .map(
+          (m) => `
+        <button type="button" class="tile tile-full" data-origen="clinic" data-clinic-id="${m.clinicId}" data-clinic-name="${m.clinicName.replace(/"/g, "&quot;")}">
+          <strong>${m.clinicName}</strong>
+          <span class="muted">Moldes institucionales</span>
+        </button>`,
+        )
+        .join("");
+
+    originOptions.querySelectorAll("[data-origen]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const origen = btn.getAttribute("data-origen");
+        if (origen === "personal") {
+          sessionStorage.removeItem("redactarClinicId");
+          sessionStorage.removeItem("redactarClinicName");
+        } else {
+          sessionStorage.setItem("redactarClinicId", btn.getAttribute("data-clinic-id") || "");
+          sessionStorage.setItem("redactarClinicName", btn.getAttribute("data-clinic-name") || "");
+        }
+        originSheet.close();
+        openTypeSheet();
+      });
+    });
+  }
+
   const openTutorial = () => {
     openRedactarTutorial({
-      onStartRedactar: () => sheet.showModal(),
+      onStartRedactar: () => void openOriginSheet(),
     });
   };
 
-  el.querySelector("#btn-open-redactar")?.addEventListener("click", () => sheet.showModal());
+  el.querySelector("#btn-open-redactar")?.addEventListener("click", () => void openOriginSheet());
   el.querySelector("#btn-probar-tutorial")?.addEventListener("click", () => {
     resetRedactarTutorial();
     openTutorial();
@@ -114,7 +185,7 @@ function medicoHome(): HTMLElement {
   el.querySelectorAll("[data-type]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const type = btn.getAttribute("data-type");
-      sheet.close();
+      typeSheet.close();
       if (type) navigate(`/redactar?tipo=${type}`);
     });
   });

@@ -41,8 +41,10 @@ import com.ceoclinicos.clinicosdoc.ui.screens.HeaderEditScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.HeadersScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.InformeDetailScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.MainShell
+import com.ceoclinicos.clinicosdoc.ui.screens.MoldOriginSheet
 import com.ceoclinicos.clinicosdoc.ui.screens.RedactarFlowScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.JoinClinicScreen
+import com.ceoclinicos.clinicosdoc.model.ClinicMembership
 import com.ceoclinicos.clinicosdoc.ui.screens.SettingsScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.PhysicalExamCatalogScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.PlantillasHubScreen
@@ -59,7 +61,9 @@ fun ClinicosDocNavHost() {
     var patientRefreshKey by remember { mutableIntStateOf(0) }
     var informeRefreshKey by remember { mutableIntStateOf(0) }
     var calendarRefreshKey by remember { mutableIntStateOf(0) }
+    var showOriginSheet by remember { mutableStateOf(false) }
     var showDocTypeSheet by remember { mutableStateOf(false) }
+    var pendingClinic by remember { mutableStateOf<ClinicMembership?>(null) }
     var showExitDialog by remember { mutableStateOf(false) }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -95,7 +99,7 @@ fun ClinicosDocNavHost() {
         composable(Routes.MAIN) {
             MainShell(
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                onRedactar = { showDocTypeSheet = true },
+                onRedactar = { showOriginSheet = true },
                 onAddPatient = { navController.navigate(Routes.ADD_PATIENT) },
                 onEditPatient = { id -> navController.navigate(Routes.editPatient(id)) },
                 onOpenPlantillas = { navController.navigate(Routes.PLANTILLAS_HUB) },
@@ -266,8 +270,11 @@ fun ClinicosDocNavHost() {
                 templateId = templateId,
                 headerId = headerIdRaw.takeIf { it != "_none_" },
                 draftId = draftIdRaw.takeIf { it != "_none_" },
+                initialClinicId = pendingClinic?.clinicId,
+                initialClinicName = pendingClinic?.clinicName,
                 onBack = {
                     informeRefreshKey++
+                    pendingClinic = null
                     navController.popBackStack()
                 },
                 onAddPatient = { navController.navigate(Routes.ADD_PATIENT) },
@@ -300,6 +307,25 @@ fun ClinicosDocNavHost() {
                 }
             },
         )
+    }
+
+    if (showOriginSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(onDismissRequest = { showOriginSheet = false }, sheetState = sheetState) {
+            MoldOriginSheet(
+                onDismiss = { showOriginSheet = false },
+                onPersonal = {
+                    pendingClinic = null
+                    showOriginSheet = false
+                    showDocTypeSheet = true
+                },
+                onClinic = { membership ->
+                    pendingClinic = membership
+                    showOriginSheet = false
+                    showDocTypeSheet = true
+                },
+            )
+        }
     }
 
     if (showDocTypeSheet) {

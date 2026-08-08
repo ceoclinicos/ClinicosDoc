@@ -121,6 +121,7 @@ import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
 import com.ceoclinicos.clinicosdoc.util.PermissionHelper
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.util.UUID
 
@@ -169,6 +170,8 @@ fun RedactarFlowScreen(
     templateId: String,
     headerId: String?,
     draftId: String? = null,
+    initialClinicId: String? = null,
+    initialClinicName: String? = null,
     onBack: () -> Unit,
     onAddPatient: () -> Unit,
     onEditHeader: (headerId: String, isNew: Boolean) -> Unit,
@@ -178,7 +181,7 @@ fun RedactarFlowScreen(
     val scope = rememberCoroutineScope()
     val speechService = remember { SpeechService(context) }
 
-    var step by rememberSaveable(stateSaver = RedactarStepSaver) { mutableStateOf(RedactarStep.ORIGEN) }
+    var step by rememberSaveable(stateSaver = RedactarStepSaver) { mutableStateOf(RedactarStep.PACIENTE) }
     var selectedPatientId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedHeaderId by rememberSaveable { mutableStateOf(headerId) }
     var patients by remember { mutableStateOf<List<Patient>>(emptyList()) }
@@ -223,8 +226,8 @@ fun RedactarFlowScreen(
     /** Receta: dictar, informe o diagnóstico. */
     var recetaFuenteName by rememberSaveable { mutableStateOf(RecetaDefaults.Fuente.DICTAR.name) }
     var diagnosticoText by rememberSaveable { mutableStateOf("") }
-    var clinicId by rememberSaveable { mutableStateOf<String?>(null) }
-    var clinicName by rememberSaveable { mutableStateOf<String?>(null) }
+    var clinicId by rememberSaveable { mutableStateOf(initialClinicId) }
+    var clinicName by rememberSaveable { mutableStateOf(initialClinicName) }
     var doctorMemberships by remember { mutableStateOf(ClinicMembershipStorage.load(context)) }
     var origenLoading by remember { mutableStateOf(false) }
     var clinicMoldChoices by remember { mutableStateOf<List<DocumentTemplate>>(emptyList()) }
@@ -233,22 +236,7 @@ fun RedactarFlowScreen(
     var showAddFarmaco by remember { mutableStateOf(false) }
     var addingFarmaco by remember { mutableStateOf(false) }
     var showLeaveResultDialog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        // Al abrir Redactar: primero origen (mis moldes vs clínica), luego plantillas
-        origenLoading = true
-        doctorMemberships = runCatching {
-            ClinicService.syncAffiliationsOnEnter(context, force = true)
-        }.getOrElse { ClinicMembershipStorage.load(context) }
-        origenLoading = false
-        if (!draftLoaded) {
-            step = if (doctorMemberships.isNotEmpty()) {
-                RedactarStep.ORIGEN
-            } else {
-                RedactarStep.PACIENTE
-            }
-        }
-    }
+    var originApplied by rememberSaveable { mutableStateOf(false) }
 
     fun requestLeave() {
         if (step == RedactarStep.RESULTADO) {
@@ -475,6 +463,62 @@ fun RedactarFlowScreen(
         }
     }
 
+    suspend fun applyPreselectedOrigin() {
+        if (originApplied || draftLoaded) return
+        originApplied = true
+        doctorMemberships = ClinicMembershipStorage.load(context)
+        val cid = initialClinicId
+        if (cid.isNullOrBlank()) {
+            clinicId = null
+            clinicName = null
+            reloadTemplate()
+            template?.let { applyTemplateConfig(it) }
+            refreshHeaders()
+            step = RedactarStep.PACIENTE
+            return
+        }
+        clinicId = cid
+        clinicName = initialClinicName
+        origenLoading = true
+        try {
+            val tpls = withTimeoutOrNull(12_000L) {
+                ClinicService.listTemplates(context, cid, documentType)
+            }.orEmpty().ifEmpty {
+                ClinicCatalogStorage.loadTemplates(context, cid, documentType)
+            }
+            val hdrs = withTimeoutOrNull(12_000L) {
+                ClinicService.listHeaders(context, cid)
+            }.orEmpty().ifEmpty {
+                ClinicCatalogStorage.loadHeaders(context, cid)
+            }
+            pendingClinicHeaders = hdrs
+            if (tpls.isEmpty()) {
+                showMsg(
+                    "El centro no tiene molde de ${documentType.label}. Se usarán plantillas personales.",
+                )
+                clinicId = null
+                clinicName = null
+                reloadTemplate()
+                template?.let { applyTemplateConfig(it) }
+                refreshHeaders()
+                step = RedactarStep.PACIENTE
+            } else if (tpls.size == 1) {
+                usedMoldePicker = false
+                clinicMoldChoices = tpls
+                applyClinicTemplateChoice(tpls.first())
+            } else {
+                usedMoldePicker = true
+                clinicMoldChoices = tpls
+                step = RedactarStep.MOLDE
+            }
+        } catch (e: Exception) {
+            showMsg(e.message ?: "No se pudieron cargar moldes del centro")
+            step = RedactarStep.PACIENTE
+        } finally {
+            origenLoading = false
+        }
+    }
+
     fun persistGeneratedDocument(content: String, showToast: Boolean = true): Boolean {
         val patient = selectedPatient ?: return false
         val tpl = template ?: return false
@@ -562,13 +606,6 @@ fun RedactarFlowScreen(
         reloadTemplate()
         refreshExamCatalog()
         template?.let { applyTemplateConfig(it) }
-        if (!draftLoaded && draftId != null) {
-            DraftStorage.findById(context, draftId)?.let { draft ->
-                applyDraft(draft)
-                reloadTemplate()
-            }
-            draftLoaded = true
-        }
         selectedPatient = selectedPatientId?.let { id ->
             patients.firstOrNull { it.id == id }
         }
@@ -577,6 +614,16 @@ fun RedactarFlowScreen(
         }
         refreshHeaders()
         loading = false
+        if (!draftLoaded && draftId != null) {
+            DraftStorage.findById(context, draftId)?.let { draft ->
+                applyDraft(draft)
+                reloadTemplate()
+            }
+            draftLoaded = true
+            originApplied = true
+        } else {
+            applyPreselectedOrigin()
+        }
     }
 
     LaunchedEffect(selectedTemplateId) {
@@ -766,7 +813,6 @@ fun RedactarFlowScreen(
                     onClick = {
                         when {
                             usedMoldePicker && clinicMoldChoices.isNotEmpty() -> step = RedactarStep.MOLDE
-                            doctorMemberships.isNotEmpty() -> step = RedactarStep.ORIGEN
                             else -> onBack()
                         }
                     },
@@ -788,53 +834,42 @@ fun RedactarFlowScreen(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
+                // Siempre mostrar opciones; la carga no bloquea la elección
+                Card(
+                    onClick = { if (!origenLoading) usePersonalMold() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Mis plantillas personales", style = MaterialTheme.typography.titleMedium)
+                        Text("Consultorio propio", color = TextSecondary)
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                doctorMemberships.forEach { m ->
+                    Card(
+                        onClick = { if (!origenLoading) useClinicMold(m) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(m.clinicName, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "Moldes institucionales (femenina, masculina, pediatría…)",
+                                color = TextSecondary,
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
                 if (origenLoading) {
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = Teal)
                     }
+                } else if (doctorMemberships.isEmpty()) {
                     Text(
-                        "Consultando centros afiliados…",
-                        style = MaterialTheme.typography.bodySmall,
+                        "No hay centros afiliados. Continúa con tus plantillas personales.",
                         color = TextSecondary,
-                        modifier = Modifier.padding(top = 8.dp),
+                        style = MaterialTheme.typography.bodySmall,
                     )
-                } else {
-                    Card(
-                        onClick = { usePersonalMold() },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Mis plantillas personales", style = MaterialTheme.typography.titleMedium)
-                            Text("Consultorio propio", color = TextSecondary)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    doctorMemberships.forEach { m ->
-                        Card(
-                            onClick = { useClinicMold(m) },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(m.clinicName, style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    "Moldes institucionales (femenina, masculina, pediatría…)",
-                                    color = TextSecondary,
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                    }
-                    if (doctorMemberships.isEmpty()) {
-                        Text(
-                            "No hay centros afiliados. Continúa con tus plantillas personales.",
-                            color = TextSecondary,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedButton(onClick = { usePersonalMold() }) {
-                            Text("Continuar con mis plantillas")
-                        }
-                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedButton(onClick = onBack) {

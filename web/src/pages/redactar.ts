@@ -1195,8 +1195,43 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     } catch {
       doctorMemberships = [];
     }
+
+    // Origen ya se eligió en Home (antes del tipo de documento)
+    const preClinicId = sessionStorage.getItem("redactarClinicId") || "";
+    const preClinicName = sessionStorage.getItem("redactarClinicName") || "";
+    sessionStorage.removeItem("redactarClinicId");
+    sessionStorage.removeItem("redactarClinicName");
+
     if (!existingDraft?.generatedContent && !existingDraft?.dictation) {
-      step = doctorMemberships.length ? "origen" : "paciente";
+      if (preClinicId) {
+        clinicContext = { clinicId: preClinicId, clinicName: preClinicName || "Centro" };
+        try {
+          const [tpls, hdrs] = await Promise.all([
+            listClinicTemplates(preClinicId),
+            listClinicHeaders(preClinicId),
+          ]);
+          const ofType = tpls.filter((t) => t.documentType === docType);
+          if (!ofType.length) {
+            clinicContext = null;
+            step = "paciente";
+          } else if (ofType.length === 1) {
+            usedMoldePicker = false;
+            applyClinicTemplate(ofType[0], hdrs);
+            return;
+          } else {
+            clinicMoldChoices = ofType;
+            pendingClinicHeaders = hdrs;
+            usedMoldePicker = true;
+            step = "molde";
+          }
+        } catch {
+          clinicContext = null;
+          step = "paciente";
+        }
+      } else {
+        clinicContext = null;
+        step = "paciente";
+      }
     }
     render();
   })();
