@@ -15,4 +15,5 @@ data class ClinicDoctorInvitation(
     val doctorNombre: String,
     val status: String = "pending",
     val invitedAt: String = "",
+    val expiresAt: String = "",
 )

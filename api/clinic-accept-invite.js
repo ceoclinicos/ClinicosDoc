@@ -3,6 +3,7 @@ const { normalizeCedula } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
+const { isInviteExpired, deletePendingInvitePair } = require("./_lib/invite-expiry");
 
 async function requireMedicoAuth(req) {
   const header = String(req.headers.authorization || "");
@@ -55,11 +56,7 @@ module.exports = async function handler(req, res) {
       .doc(clinicId);
 
     if (action === "reject") {
-      const invSnap = await invRef.get();
-      if (invSnap.exists) {
-        await invRef.set({ status: "rejected" }, { merge: true });
-      }
-      await pendingRef.delete().catch(() => {});
+      await deletePendingInvitePair(db, clinicId, doctorCedula);
       return res.status(200).json({ ok: true, status: "rejected" });
     }
 
@@ -70,6 +67,12 @@ module.exports = async function handler(req, res) {
     const inv = invSnap.data() || {};
     if (inv.status && inv.status !== "pending") {
       return res.status(409).json({ error: "Esta invitación ya no está pendiente" });
+    }
+    if (isInviteExpired(inv)) {
+      await deletePendingInvitePair(db, clinicId, doctorCedula);
+      return res.status(410).json({
+        error: "La invitación venció. Pida al centro que lo invite de nuevo.",
+      });
     }
 
     const clinicSnap = await db.collection("clinicosdoc_clinics").doc(clinicId).get();

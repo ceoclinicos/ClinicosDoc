@@ -32,7 +32,7 @@ class ClinicosDocApplication : Application() {
             if (userId != null && DoctorAuthService.isConfigured(this@ClinicosDocApplication)) {
                 CloudSyncService.syncOnLogin(this@ClinicosDocApplication, userId)
                 runCatching {
-                    ClinicService.syncAffiliationsOnEnter(this@ClinicosDocApplication)
+                    ClinicService.syncAffiliationsOnEnter(this@ClinicosDocApplication, force = true)
                 }
             }
         }

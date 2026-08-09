@@ -1,4 +1,5 @@
-import { listClinicHeaders, listClinicTemplates, listMembershipsForDoctor } from "../clinic/store";
+import { listClinicHeaders, listClinicTemplates } from "../clinic/store";
+import { ensureMembershipsLoaded } from "../clinic/membership-cache";
 import { registerRoute, navigate } from "../app/router";
 import { generateDocument, generateOrdenesFromCase, generateReceta, appendFarmacoToReceta } from "../services/ai/document-ai-service";
 import { bindExamSystemsEditor, orderEnabledByCatalog, loadExamCatalog } from "../services/exam-catalog";
@@ -1190,7 +1191,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     try {
       const cedula = session?.cedula || doctor.cedula;
       if (cedula) {
-        doctorMemberships = await listMembershipsForDoctor(cedula, session?.cloudUserId);
+        doctorMemberships = await ensureMembershipsLoaded(cedula, session?.cloudUserId);
       }
     } catch {
       doctorMemberships = [];

@@ -85,7 +85,7 @@ service cloud.firestore {
       }
     }
 
-    // ── Clínicos Doc (requiere Firebase Auth + claims role) ──
+    // ── Clínicos Doc (Firebase Auth + custom claims role/cedula) ──
     function isSignedIn() {
       return request.auth != null;
     }
@@ -108,9 +108,30 @@ service cloud.firestore {
       return isMedico()
         && exists(/databases/$(database)/documents/clinicosdoc_user/$(request.auth.uid)/clinic_memberships/$(clinicId));
     }
+    function authCedula() {
+      return request.auth.token.cedula == null ? '' : string(request.auth.token.cedula);
+    }
+    /** Compara claim cedula con doc id (V######## / solo dígitos). */
+    function cedulaClaimMatches(cedula) {
+      return isMedico() && authCedula() != '' && (
+        authCedula() == cedula
+        || authCedula() == ('V' + cedula)
+        || authCedula() == ('E' + cedula)
+        || (('V' + authCedula()) == cedula)
+        || (('E' + authCedula()) == cedula)
+      );
+    }
+    function memberSelfCreate(clinicId) {
+      return isMedico()
+        && request.resource.data.cloudUserId == request.auth.uid
+        && (
+          request.resource.data.doctorCedula == authCedula()
+          || cedulaClaimMatches(request.resource.data.doctorCedula)
+        );
+    }
 
     match /clinicosdoc_user/{userId} {
-      // create sin auth: registro app (luego auth-login). Lectura solo dueño/médico propio.
+      // create abierto: registro app Android antes de Auth completo
       allow create: if true;
       allow read, update, delete: if isOwner(userId);
       match /{document=**} {
@@ -118,6 +139,7 @@ service cloud.firestore {
       }
     }
 
+    // Registro global compartido entre médicos (modelo actual del producto)
     match /clinicosdoc_patients/{patientKey} {
       allow read, write: if isMedico();
       match /documents/{docId} {
@@ -154,22 +176,56 @@ service cloud.firestore {
 
     // ── Modo empresa / centro de salud ──
     match /clinicosdoc_clinics/{clinicId} {
-      // create/get de registro van por API Admin; cliente solo con Auth
       allow create: if false;
-      allow get, list: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
-      allow update, delete: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
+      // get: admin, miembro, o médico con código (join usa invite; get opcional)
+      allow get: if isClinicAdmin(clinicId) || isClinicMember(clinicId) || isMedico();
+      allow list: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
+      allow update, delete: if isClinicAdmin(clinicId);
+
+      match /members/{memberId} {
+        allow read: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
+        allow create: if isClinicAdmin(clinicId) || memberSelfCreate(clinicId);
+        allow update, delete: if isClinicAdmin(clinicId);
+      }
+
+      match /invitations/{doctorCedula} {
+        allow read: if isClinicAdmin(clinicId) || cedulaClaimMatches(doctorCedula);
+        allow create, update: if isClinicAdmin(clinicId);
+        // médico puede borrar la suya (rechazo / caducidad)
+        allow delete: if isClinicAdmin(clinicId) || cedulaClaimMatches(doctorCedula);
+      }
+
+      match /templates/{docId} {
+        allow read: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
+        allow write: if isClinicAdmin(clinicId);
+      }
+      match /headers/{docId} {
+        allow read: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
+        allow write: if isClinicAdmin(clinicId);
+      }
+      match /documents/{docId} {
+        allow read: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
+        allow create, update: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
+        allow delete: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
+      }
+
+      // otras subcolecciones: solo admin
       match /{document=**} {
-        allow read, write: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
+        allow read, write: if isClinicAdmin(clinicId);
       }
     }
+
     match /clinicosdoc_clinic_invites/{code} {
       allow read: if isSignedIn();
-      allow write: if isClinica() || isMedico();
+      allow write: if isClinica();
     }
+
     match /clinicosdoc_doctor_invites/{cedula} {
-      allow read, write: if isSignedIn();
-      match /{document=**} {
-        allow read, write: if isSignedIn();
+      allow read: if cedulaClaimMatches(cedula) || isClinica();
+      allow write: if cedulaClaimMatches(cedula) || isClinica();
+      match /pending/{clinicId} {
+        allow read: if cedulaClaimMatches(cedula) || isClinicAdmin(clinicId);
+        allow write: if cedulaClaimMatches(cedula) || isClinicAdmin(clinicId) || isClinica();
       }
     }
   }

@@ -209,19 +209,23 @@ export async function joinClinicByInvite(input: {
   if (code.length < 4) throw new Error("Código de invitación inválido");
   const inviteSnap = await getDoc(inviteRef(code));
   if (!inviteSnap.exists()) throw new Error("Código no válido o vencido");
-  const clinicId = String(inviteSnap.data()?.clinicId ?? "");
-  const clinic = await getClinic(clinicId);
-  if (!clinic) throw new Error("Centro no encontrado");
+  const data = inviteSnap.data() || {};
+  const clinicId = String(data.clinicId ?? "");
+  if (!clinicId) throw new Error("Invitación inválida");
+  const clinicName =
+    String(data.nombre || "").trim() ||
+    (await getClinic(clinicId))?.nombre ||
+    "Centro";
 
   await writeClinicMembership({
     clinicId,
-    clinicName: clinic.nombre,
+    clinicName,
     doctorCedula: input.doctorCedula,
     doctorNombre: input.doctorNombre,
     cloudUserId: input.cloudUserId,
   });
 
-  return { clinicId, clinicName: clinic.nombre };
+  return { clinicId, clinicName };
 }
 
 /** Clínica invita a un médico por cédula (queda pendiente hasta que acepte). */
@@ -278,24 +282,58 @@ export async function inviteDoctorByCedula(input: {
   return data as ClinicDoctorInvitation;
 }
 
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function isInviteExpired(inv: { expiresAt?: string; invitedAt?: string }): boolean {
+  if (inv.expiresAt) {
+    const exp = Date.parse(inv.expiresAt);
+    if (!Number.isNaN(exp)) return Date.now() > exp;
+  }
+  const invited = Date.parse(inv.invitedAt || "");
+  if (!Number.isNaN(invited)) return Date.now() > invited + INVITE_TTL_MS;
+  return false;
+}
+
+async function purgeExpiredInvite(clinicId: string, doctorCedula: string): Promise<void> {
+  const ced = normalizeCedula(doctorCedula);
+  if (!clinicId || !ced) return;
+  await deleteDoc(doc(invitationsCol(clinicId), ced)).catch(() => undefined);
+  await deleteDoc(doc(doctorPendingInvitesCol(ced), clinicId)).catch(() => undefined);
+}
+
 export async function listPendingInvitationsForClinic(
   clinicId: string,
 ): Promise<ClinicDoctorInvitation[]> {
   const snap = await getDocs(invitationsCol(clinicId));
-  return snap.docs
-    .map((d) => d.data() as ClinicDoctorInvitation)
-    .filter((i) => i.status === "pending")
-    .sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
+  const out: ClinicDoctorInvitation[] = [];
+  for (const d of snap.docs) {
+    const inv = d.data() as ClinicDoctorInvitation;
+    if (inv.status !== "pending") continue;
+    if (isInviteExpired(inv)) {
+      await purgeExpiredInvite(clinicId, inv.doctorCedula || d.id);
+      continue;
+    }
+    out.push(inv);
+  }
+  return out.sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
 }
 
 export async function listPendingInvitationsForDoctor(
   doctorCedula: string,
 ): Promise<ClinicDoctorInvitation[]> {
   const snap = await getDocs(doctorPendingInvitesCol(doctorCedula));
-  return snap.docs
-    .map((d) => d.data() as ClinicDoctorInvitation)
-    .filter((i) => i.status === "pending")
-    .sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
+  const out: ClinicDoctorInvitation[] = [];
+  for (const d of snap.docs) {
+    const inv = d.data() as ClinicDoctorInvitation;
+    if (inv.status !== "pending") continue;
+    const clinicId = inv.clinicId || d.id;
+    if (isInviteExpired(inv)) {
+      await purgeExpiredInvite(clinicId, inv.doctorCedula || doctorCedula);
+      continue;
+    }
+    out.push(inv);
+  }
+  return out.sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
 }
 
 export async function cancelClinicInvitation(
@@ -405,7 +443,11 @@ export async function removeClinicMember(
   }
 }
 
-export async function listMembershipsForDoctor(doctorCedula: string, cloudUserId?: string): Promise<
+export async function listMembershipsForDoctor(
+  doctorCedula: string,
+  cloudUserId?: string,
+  opts?: { forceHeal?: boolean },
+): Promise<
   Array<{ clinicId: string; clinicName: string; role: ClinicMemberRole; inviteCode?: string }>
 > {
   try {
@@ -423,7 +465,10 @@ export async function listMembershipsForDoctor(doctorCedula: string, cloudUserId
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ doctorCedula: doctorCedula || undefined }),
+        body: JSON.stringify({
+          doctorCedula: doctorCedula || undefined,
+          forceHeal: opts?.forceHeal || undefined,
+        }),
       });
       if (res.ok) {
         const data = (await res.json()) as {

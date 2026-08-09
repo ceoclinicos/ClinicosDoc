@@ -3,6 +3,7 @@ const { cedulaLookupKeys, normalizeCedula } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
+const { expiresAtIso, INVITE_TTL_DAYS, isInviteExpired, deletePendingInvitePair } = require("./_lib/invite-expiry");
 
 async function findAppMedico(db, inputCedula) {
   const keys = cedulaLookupKeys(inputCedula);
@@ -93,9 +94,13 @@ module.exports = async function handler(req, res) {
       .doc(doctorCedula);
     const pendingSnap = await pendingRef.get();
     if (pendingSnap.exists && pendingSnap.data()?.status === "pending") {
-      throw Object.assign(new Error("Ya hay una invitación pendiente para esa cédula"), {
-        status: 409,
-      });
+      if (isInviteExpired(pendingSnap.data() || {})) {
+        await deletePendingInvitePair(db, clinicId, doctorCedula);
+      } else {
+        throw Object.assign(new Error("Ya hay una invitación pendiente para esa cédula"), {
+          status: 409,
+        });
+      }
     }
 
     const prof = await findProfesional(db, doctorCedula);
@@ -112,6 +117,7 @@ module.exports = async function handler(req, res) {
       );
     }
 
+    const invitedAt = new Date().toISOString();
     const invitation = {
       clinicId,
       clinicName: String(clinic.nombre || "Centro"),
@@ -119,7 +125,9 @@ module.exports = async function handler(req, res) {
       doctorNombre,
       cloudUserId: cloud?.id || null,
       status: "pending",
-      invitedAt: new Date().toISOString(),
+      invitedAt,
+      expiresAt: expiresAtIso(invitedAt),
+      ttlDays: INVITE_TTL_DAYS,
     };
 
     await pendingRef.set(invitation);

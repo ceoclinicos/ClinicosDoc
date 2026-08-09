@@ -62,7 +62,8 @@ fun MainShell(
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            runCatching { ClinicService.syncAffiliationsOnEnter(context) }
+            // force=true al entrar: precarga afiliaciones para Redactar sin espera
+            runCatching { ClinicService.syncAffiliationsOnEnter(context, force = true) }
         }
         affiliationNotice = ClinicMembershipStorage.loadPendingNotices(context).firstOrNull()
     }

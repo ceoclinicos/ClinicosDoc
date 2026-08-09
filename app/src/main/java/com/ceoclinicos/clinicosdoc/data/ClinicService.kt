@@ -94,8 +94,13 @@ object ClinicService {
         }
         // Esperar restauración de Auth (no pedir cerrar sesión)
         awaitAuthUser()
-        val memberships = runCatching { refreshMemberships(context) }
-            .getOrElse { ClinicMembershipStorage.load(context) }
+        val memberships = runCatching {
+            refreshMemberships(
+                context,
+                allowEmptyOverwrite = force,
+                forceHeal = force || ClinicMembershipStorage.load(context).isEmpty(),
+            )
+        }.getOrElse { ClinicMembershipStorage.load(context) }
         // refreshMemberships ya guarda; comparar con snapshot previo requiere detectar antes.
         // Re-aplicar detección: refreshMemberships llama save() sin detección.
         ClinicMembershipStorage.saveDetectingChanges(context, memberships)
@@ -187,10 +192,12 @@ object ClinicService {
         if (!inviteSnap.exists()) throw IllegalArgumentException("Código no válido o vencido")
         val clinicId = inviteSnap.getString("clinicId").orEmpty()
         if (clinicId.isBlank()) throw IllegalArgumentException("Invitación inválida")
-
-        val clinicSnap = clinicRef(clinicId).get().await()
-        if (!clinicSnap.exists()) throw IllegalArgumentException("Centro no encontrado")
-        val clinicName = clinicSnap.getString("nombre").orEmpty().ifBlank { "Centro" }
+        val clinicName = inviteSnap.getString("nombre").orEmpty().ifBlank {
+            // Fallback si el código es antiguo y no trae nombre
+            runCatching { clinicRef(clinicId).get().await().getString("nombre") }.getOrNull()
+                .orEmpty()
+                .ifBlank { "Centro" }
+        }
 
         return writeMembership(
             context = context,
@@ -205,19 +212,52 @@ object ClinicService {
     suspend fun listPendingInvitations(context: Context): List<ClinicDoctorInvitation> {
         if (!DoctorAuthService.isConfigured(context)) return emptyList()
         val profile = DoctorStorage.loadProfile(context) ?: return emptyList()
-        val snap = doctorPendingInvitesCol(profile.cedula).get().await()
-        return snap.documents.mapNotNull { doc ->
-            val data = doc.data ?: return@mapNotNull null
-            if ((data["status"]?.toString() ?: "pending") != "pending") return@mapNotNull null
-            ClinicDoctorInvitation(
-                clinicId = data["clinicId"]?.toString() ?: doc.id,
-                clinicName = data["clinicName"]?.toString() ?: "Centro",
-                doctorCedula = data["doctorCedula"]?.toString().orEmpty(),
-                doctorNombre = data["doctorNombre"]?.toString().orEmpty(),
-                status = "pending",
-                invitedAt = data["invitedAt"]?.toString().orEmpty(),
-            )
-        }.sortedByDescending { it.invitedAt }
+        // Las invitaciones se guardan bajo cédula normalizada (V########); probar variantes.
+        val keys = CedulaNormalizer.lookupKeys(profile.cedula)
+            .ifEmpty { listOf(CedulaNormalizer.normalize(profile.cedula)) }
+        val byClinic = linkedMapOf<String, ClinicDoctorInvitation>()
+        val ttlMs = 7L * 24 * 60 * 60 * 1000
+        fun isExpired(invitedAt: String, expiresAt: String): Boolean {
+            val expMs = runCatching { java.time.Instant.parse(expiresAt).toEpochMilli() }.getOrNull()
+            if (expMs != null) return System.currentTimeMillis() > expMs
+            val invitedMs = runCatching { java.time.Instant.parse(invitedAt).toEpochMilli() }.getOrNull()
+                ?: return false
+            return System.currentTimeMillis() > invitedMs + ttlMs
+        }
+        for (key in keys) {
+            if (key.isBlank()) continue
+            val snap = runCatching { doctorPendingInvitesCol(key).get().await() }.getOrNull()
+                ?: continue
+            for (docSnap in snap.documents) {
+                val data = docSnap.data ?: continue
+                if ((data["status"]?.toString() ?: "pending") != "pending") continue
+                val clinicId = data["clinicId"]?.toString() ?: docSnap.id
+                if (clinicId.isBlank()) continue
+                val invitedAt = data["invitedAt"]?.toString().orEmpty()
+                val expiresAt = data["expiresAt"]?.toString().orEmpty()
+                if (isExpired(invitedAt, expiresAt)) {
+                    runCatching {
+                        docSnap.reference.delete().await()
+                        val ced = CedulaNormalizer.normalize(
+                            data["doctorCedula"]?.toString() ?: key,
+                        )
+                        invitationsCol(clinicId).document(ced).delete().await()
+                    }
+                    continue
+                }
+                if (clinicId in byClinic) continue
+                byClinic[clinicId] = ClinicDoctorInvitation(
+                    clinicId = clinicId,
+                    clinicName = data["clinicName"]?.toString() ?: "Centro",
+                    doctorCedula = data["doctorCedula"]?.toString().orEmpty(),
+                    doctorNombre = data["doctorNombre"]?.toString().orEmpty(),
+                    status = "pending",
+                    invitedAt = invitedAt,
+                    expiresAt = expiresAt,
+                )
+            }
+        }
+        return byClinic.values.sortedByDescending { it.invitedAt }
     }
 
     suspend fun acceptInvitation(context: Context, clinicId: String): ClinicMembership {
@@ -298,7 +338,16 @@ object ClinicService {
         }
     }
 
-    suspend fun refreshMemberships(context: Context): List<ClinicMembership> {
+    /**
+     * @param allowEmptyOverwrite si false, no borra el caché local cuando la API viene vacía
+     *        (evita el falso “no afiliado” por heal lento / fallo parcial).
+     * @param forceHeal pide a la API re-escanear members aunque ya haya clinic_memberships.
+     */
+    suspend fun refreshMemberships(
+        context: Context,
+        allowEmptyOverwrite: Boolean = false,
+        forceHeal: Boolean = false,
+    ): List<ClinicMembership> {
         val local = ClinicMembershipStorage.load(context)
         if (!DoctorAuthService.isConfigured(context)) return local
         val profile = DoctorStorage.loadProfile(context)
@@ -308,6 +357,7 @@ object ClinicService {
             withContext(Dispatchers.IO) {
                 val body = JSONObject()
                 if (doctorCedula.isNotBlank()) body.put("doctorCedula", doctorCedula)
+                if (forceHeal) body.put("forceHeal", true)
                 val request = Request.Builder()
                     .url(MEMBERSHIPS_URL)
                     .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
@@ -340,6 +390,9 @@ object ClinicService {
                             }
                         }
                     }.sortedBy { it.clinicName }
+                    if (list.isEmpty() && local.isNotEmpty() && !allowEmptyOverwrite) {
+                        return@use local
+                    }
                     ClinicMembershipStorage.saveDetectingChanges(context, list)
                     list
                 }

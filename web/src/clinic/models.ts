@@ -41,6 +41,8 @@ export interface ClinicDoctorInvitation {
   cloudUserId?: string;
   status: ClinicInviteStatus;
   invitedAt: string;
+  /** Si no acepta antes, se elimina sola de la lista. */
+  expiresAt?: string;
 }
 
 /** Paciente agregado desde documentos de la clínica (sin duplicar ficha). */

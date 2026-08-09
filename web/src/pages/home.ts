@@ -1,9 +1,10 @@
 import { registerRoute, isMedicoLoggedIn, navigate } from "../app/router";
-import { listMembershipsForDoctor } from "../clinic/store";
 import {
-  applyMembershipSnapshot,
-  showPendingAffiliationNotices,
-} from "../clinic/affiliation-notices";
+  ensureMembershipsLoaded,
+  getCachedMemberships,
+} from "../clinic/membership-cache";
+import { showPendingAffiliationNotices } from "../clinic/affiliation-notices";
+import { listPendingInvitationsForDoctor } from "../clinic/store";
 import { getPatientSession, getProfessionalSession } from "../registro/session";
 import { loadDocuments, loadDrafts } from "../services/clinical-store";
 import { hasSeenRedactarTutorial, resetRedactarTutorial } from "../services/onboarding";
@@ -118,27 +119,11 @@ function medicoHome(): HTMLElement {
     typeSheet.showModal();
   }
 
-  async function openOriginSheet(): Promise<void> {
-    originOptions.innerHTML = `
-      <button type="button" class="tile tile-full" data-origen="personal">
-        <strong>Mis plantillas personales</strong>
-        <span class="muted">Consultorio propio</span>
-      </button>`;
-    originStatus.textContent = "Buscando centros afiliados…";
-    originSheet.showModal();
-
-    let memberships: Array<{ clinicId: string; clinicName: string }> = [];
-    try {
-      const cedula = prof?.cedula || "";
-      if (cedula) {
-        memberships = await listMembershipsForDoctor(cedula, prof?.cloudUserId);
-      }
-    } catch {
-      memberships = [];
-    }
-    originStatus.textContent = memberships.length
-      ? ""
-      : "No estás afiliado a ninguna clínica. Puedes usar tus plantillas personales.";
+  function renderOriginOptions(
+    memberships: Array<{ clinicId: string; clinicName: string }>,
+    statusMsg: string,
+  ): void {
+    originStatus.textContent = statusMsg;
     originOptions.innerHTML =
       `
       <button type="button" class="tile tile-full" data-origen="personal">
@@ -171,6 +156,46 @@ function medicoHome(): HTMLElement {
     });
   }
 
+  async function openOriginSheet(): Promise<void> {
+    const cached = getCachedMemberships();
+    originSheet.showModal();
+    renderOriginOptions(
+      cached,
+      cached.length ? "" : "Buscando centros afiliados…",
+    );
+
+    const cedula = prof?.cedula || "";
+    let memberships = cached;
+    try {
+      if (cedula) {
+        memberships = await ensureMembershipsLoaded(cedula, prof?.cloudUserId, {
+          force: !cached.length,
+          backgroundRefresh: Boolean(cached.length),
+        });
+      }
+    } catch {
+      memberships = getCachedMemberships();
+    }
+
+    let statusMsg = "";
+    if (!memberships.length) {
+      let pendingNames: string[] = [];
+      try {
+        if (cedula) {
+          pendingNames = (await listPendingInvitationsForDoctor(cedula)).map(
+            (i) => i.clinicName,
+          );
+        }
+      } catch {
+        /* ignore */
+      }
+      statusMsg = pendingNames.length
+        ? `Invitación pendiente de: ${pendingNames.join(", ")}. Acéptala en Configuración (aún no eres afiliado).`
+        : "No estás afiliado a ninguna clínica. Puedes usar tus plantillas personales.";
+    }
+    renderOriginOptions(memberships, statusMsg);
+  }
+
   const openTutorial = () => {
     openRedactarTutorial({
       onStartRedactar: () => void openOriginSheet(),
@@ -200,10 +225,8 @@ function medicoHome(): HTMLElement {
     try {
       const cedula = prof?.cedula || "";
       if (!cedula) return;
-      const list = await listMembershipsForDoctor(cedula, prof?.cloudUserId);
-      applyMembershipSnapshot(
-        list.map((m) => ({ clinicId: m.clinicId, clinicName: m.clinicName })),
-      );
+      // Precarga al abrir home: Redactar usa caché sin esperar
+      await ensureMembershipsLoaded(cedula, prof?.cloudUserId, { force: true });
       showPendingAffiliationNotices();
     } catch {
       /* silencioso */

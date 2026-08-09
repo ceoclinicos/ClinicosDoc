@@ -23,7 +23,7 @@ registerRoute({
       `
       <div class="card-panel">
         <h2 class="home-section-title" style="margin-top:0">Agregar médico</h2>
-        <p class="muted">Busque por cédula. El médico debe aceptar la invitación en la app o en Configuración web.</p>
+        <p class="muted">Busque por cédula. El médico debe aceptar en 7 días; si no, la invitación se elimina sola.</p>
         <form class="form" id="invite-doctor-form">
           <label>Cédula del médico<input name="cedula" required placeholder="Ej. V-12345678" /></label>
           <label>Nombre (si aún no está registrado)<input name="nombre" placeholder="Opcional si ya tiene cuenta" /></label>
@@ -71,7 +71,7 @@ registerRoute({
           <li class="list-item">
             <div>
               <strong>${escapeHtml(i.doctorNombre)}</strong>
-              <p class="muted">C.I. ${escapeHtml(i.doctorCedula)}</p>
+              <p class="muted">C.I. ${escapeHtml(i.doctorCedula)}${i.expiresAt ? ` · vence ${new Date(i.expiresAt).toLocaleDateString("es")}` : ""}</p>
             </div>
             <button type="button" class="btn btn-ghost btn-sm" data-cancel="${escapeHtml(i.doctorCedula)}">Cancelar</button>
           </li>`,

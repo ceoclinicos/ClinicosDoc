@@ -27,11 +27,13 @@ import com.ceoclinicos.clinicosdoc.data.ClinicService
 import com.ceoclinicos.clinicosdoc.model.ClinicMembership
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Primer paso al pulsar Redactar: ¿plantillas personales o de una clínica?
- * No bloquea la UI con carga infinita: muestra opciones al instante.
+ * Usa caché local (precargada al abrir la app) y refresca en segundo plano.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,16 +44,45 @@ fun MoldOriginSheet(
 ) {
     val context = LocalContext.current
     var memberships by remember { mutableStateOf(ClinicMembershipStorage.load(context)) }
-    var refreshing by remember { mutableStateOf(true) }
+    var pendingClinicNames by remember { mutableStateOf<List<String>>(emptyList()) }
+    var refreshing by remember { mutableStateOf(memberships.isEmpty()) }
 
     LaunchedEffect(Unit) {
         memberships = ClinicMembershipStorage.load(context)
-        // Refresco rápido; si falla o tarda, igual se ven las opciones locales
+        // Si ya hay caché (sync al abrir), no bloquear Redactar.
+        if (memberships.isNotEmpty()) {
+            refreshing = false
+            withContext(Dispatchers.IO) {
+                withTimeoutOrNull(8_000L) {
+                    runCatching { ClinicService.refreshMemberships(context) }.getOrNull()
+                }
+            }?.takeIf { it.isNotEmpty() }?.let { memberships = it }
+            pendingClinicNames = withContext(Dispatchers.IO) {
+                runCatching {
+                    ClinicService.listPendingInvitations(context).map { it.clinicName }
+                }.getOrDefault(emptyList())
+            }
+            return@LaunchedEffect
+        }
+        refreshing = true
         val remote = withTimeoutOrNull(10_000L) {
-            runCatching { ClinicService.refreshMemberships(context) }.getOrNull()
+            runCatching {
+                ClinicService.refreshMemberships(
+                    context,
+                    allowEmptyOverwrite = true,
+                    forceHeal = true,
+                )
+            }.getOrNull()
         }
         if (!remote.isNullOrEmpty()) {
             memberships = remote
+        } else {
+            memberships = ClinicMembershipStorage.load(context)
+        }
+        pendingClinicNames = withContext(Dispatchers.IO) {
+            runCatching {
+                ClinicService.listPendingInvitations(context).map { it.clinicName }
+            }.getOrDefault(emptyList())
         }
         refreshing = false
     }
@@ -108,11 +139,20 @@ fun MoldOriginSheet(
                 modifier = Modifier.padding(top = 8.dp),
             )
         } else if (!refreshing && memberships.isEmpty()) {
-            Text(
-                "No estás afiliado a ninguna clínica. Usa tus plantillas personales.",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary,
-            )
+            if (pendingClinicNames.isNotEmpty()) {
+                Text(
+                    "Tienes invitación pendiente de: ${pendingClinicNames.joinToString(", ")}. " +
+                        "Acéptala en Configuración → Unirse a un centro (aún no eres afiliado).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                )
+            } else {
+                Text(
+                    "No estás afiliado a ninguna clínica. Usa tus plantillas personales.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                )
+            }
         }
     }
 }
