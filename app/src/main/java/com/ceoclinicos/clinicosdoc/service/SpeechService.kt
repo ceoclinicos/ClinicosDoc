@@ -2,6 +2,7 @@ package com.ceoclinicos.clinicosdoc.service
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,10 +14,16 @@ import java.util.Locale
 /**
  * Dictado clínico continuo: el micrófono sigue activo hasta que el usuario
  * llame a [stopListening] (parar mic o procesar dictado).
+ *
+ * Tras cada pausa Android cierra la sesión de voz y la app la reinicia; ese
+ * reinicio dispara el “beep” del sistema. Aquí se silencia de forma breve
+ * al reiniciar y se alargan los tiempos de silencio para pensar.
  */
 class SpeechService(context: Context) {
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val audioManager =
+        appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
     private var speechRecognizer: SpeechRecognizer? = null
     private var available = false
@@ -27,6 +34,7 @@ class SpeechService(context: Context) {
     private var currentPartial = ""
     private var onResultCallback: ((String, Boolean) -> Unit)? = null
     private var restartScheduled = false
+    private var beepMuted = false
 
     var lastError: String? = null
         private set
@@ -62,7 +70,7 @@ class SpeechService(context: Context) {
         if (committedText.isNotEmpty()) {
             onResult(committedText, false)
         }
-        return beginSession()
+        return beginSession(recreate = true)
     }
 
     fun stopListening() {
@@ -71,6 +79,7 @@ class SpeechService(context: Context) {
         mainHandler.removeCallbacksAndMessages(null)
         currentPartial = ""
         onResultCallback = null
+        unmuteRecognitionBeep()
         try {
             speechRecognizer?.cancel()
         } catch (_: Exception) {
@@ -82,19 +91,21 @@ class SpeechService(context: Context) {
         speechRecognizer = null
     }
 
-    private fun beginSession(): Boolean {
+    private fun beginSession(recreate: Boolean = false): Boolean {
         if (!active) return false
         restartScheduled = false
 
         sessionBase = committedText
         currentPartial = ""
 
-        try {
-            speechRecognizer?.destroy()
-        } catch (_: Exception) {
-        }
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).apply {
-            setRecognitionListener(recognitionListener)
+        if (recreate || speechRecognizer == null) {
+            try {
+                speechRecognizer?.destroy()
+            } catch (_: Exception) {
+            }
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).apply {
+                setRecognitionListener(recognitionListener)
+            }
         }
 
         val langTag = spanishLocale?.toLanguageTag() ?: "es-ES"
@@ -102,9 +113,9 @@ class SpeechService(context: Context) {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            // Silencios largos: no cortar frases clínicas; igual reiniciamos al terminar
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 30_000L)
-            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 15_000L)
+            // Pausas para pensar: no cortar tan pronto (sigue reiniciando al final de frase)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 45_000L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 25_000L)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 2_000L)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, langTag)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, langTag)
@@ -112,24 +123,56 @@ class SpeechService(context: Context) {
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, appContext.packageName)
         }
 
+        muteRecognitionBeep()
         return try {
             speechRecognizer?.startListening(intent)
             true
         } catch (_: Exception) {
             lastError = "No se pudo iniciar el micrófono. Revisa permisos e idioma español."
-            if (active) scheduleRestart(400L)
+            // Reintentar creando de nuevo el reconocedor
+            try {
+                speechRecognizer?.destroy()
+            } catch (_: Exception) {
+            }
+            speechRecognizer = null
+            if (active) scheduleRestart(400L, recreate = true)
             true
         }
     }
 
-    private fun scheduleRestart(delayMs: Long = 200L) {
+    private fun scheduleRestart(delayMs: Long = 200L, recreate: Boolean = false) {
         if (!active || restartScheduled) return
         restartScheduled = true
         mainHandler.removeCallbacksAndMessages(null)
         mainHandler.postDelayed({
             restartScheduled = false
-            if (active) beginSession()
+            if (active) beginSession(recreate = recreate)
         }, delayMs)
+    }
+
+    /** Silencia el “ding” del sistema al arrancar cada sesión de voz. */
+    private fun muteRecognitionBeep() {
+        if (beepMuted) return
+        try {
+            @Suppress("DEPRECATION")
+            audioManager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_MUTE, 0)
+            @Suppress("DEPRECATION")
+            audioManager.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_MUTE, 0)
+            beepMuted = true
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun unmuteRecognitionBeep() {
+        if (!beepMuted) return
+        try {
+            @Suppress("DEPRECATION")
+            audioManager.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_UNMUTE, 0)
+            @Suppress("DEPRECATION")
+            audioManager.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_UNMUTE, 0)
+        } catch (_: Exception) {
+        }
+        beepMuted = false
     }
 
     private fun emitDisplay(isFinal: Boolean) {
@@ -138,7 +181,11 @@ class SpeechService(context: Context) {
     }
 
     private val recognitionListener = object : RecognitionListener {
-        override fun onReadyForSpeech(params: Bundle?) = Unit
+        override fun onReadyForSpeech(params: Bundle?) {
+            // Quitar mute cuando el servicio ya arrancó (el beep ya pasó o fue silenciado)
+            mainHandler.postDelayed({ unmuteRecognitionBeep() }, 350L)
+        }
+
         override fun onBeginningOfSpeech() = Unit
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
@@ -154,7 +201,7 @@ class SpeechService(context: Context) {
                 SpeechRecognizer.ERROR_CLIENT,
                 -> scheduleRestart(150L)
 
-                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> scheduleRestart(500L)
+                SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> scheduleRestart(500L, recreate = true)
 
                 else -> {
                     lastError = when (error) {
@@ -165,8 +212,8 @@ class SpeechService(context: Context) {
                         SpeechRecognizer.ERROR_SERVER -> "Error del servidor de voz"
                         else -> "Error de reconocimiento ($error)"
                     }
-                    // Errores recuperables: seguir escuchando; solo permisos no se recuperan solos
                     if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                        unmuteRecognitionBeep()
                         active = false
                     } else {
                         scheduleRestart(300L)

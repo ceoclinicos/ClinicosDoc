@@ -32,8 +32,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Primer paso al pulsar Redactar: ¿plantillas personales o de una clínica?
- * Usa caché local (precargada al abrir la app) y refresca en segundo plano.
+ * Origen del molde al Redactar: usa caché local (sync al abrir la app).
+ * Solo llama a red si no hay caché.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,44 +45,39 @@ fun MoldOriginSheet(
     val context = LocalContext.current
     var memberships by remember { mutableStateOf(ClinicMembershipStorage.load(context)) }
     var pendingClinicNames by remember { mutableStateOf<List<String>>(emptyList()) }
-    var refreshing by remember { mutableStateOf(memberships.isEmpty()) }
+    var refreshing by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        memberships = ClinicMembershipStorage.load(context)
-        // Si ya hay caché (sync al abrir), no bloquear Redactar.
-        if (memberships.isNotEmpty()) {
+        val local = ClinicMembershipStorage.load(context)
+        memberships = local
+        // Ya sincronizado al abrir / hay centros en caché → no pegar a la DB
+        if (local.isNotEmpty() || ClinicService.hasFreshAffiliationSync()) {
             refreshing = false
+            return@LaunchedEffect
+        }
+        refreshing = true
+        val remote = withTimeoutOrNull(10_000L) {
             withContext(Dispatchers.IO) {
-                withTimeoutOrNull(8_000L) {
-                    runCatching { ClinicService.refreshMemberships(context) }.getOrNull()
-                }
-            }?.takeIf { it.isNotEmpty() }?.let { memberships = it }
+                runCatching {
+                    ClinicService.refreshMemberships(
+                        context,
+                        allowEmptyOverwrite = true,
+                        forceHeal = true,
+                        forceNetwork = true,
+                    )
+                }.getOrNull()
+            }
+        }
+        memberships = when {
+            !remote.isNullOrEmpty() -> remote
+            else -> ClinicMembershipStorage.load(context)
+        }
+        if (memberships.isEmpty()) {
             pendingClinicNames = withContext(Dispatchers.IO) {
                 runCatching {
                     ClinicService.listPendingInvitations(context).map { it.clinicName }
                 }.getOrDefault(emptyList())
             }
-            return@LaunchedEffect
-        }
-        refreshing = true
-        val remote = withTimeoutOrNull(10_000L) {
-            runCatching {
-                ClinicService.refreshMemberships(
-                    context,
-                    allowEmptyOverwrite = true,
-                    forceHeal = true,
-                )
-            }.getOrNull()
-        }
-        if (!remote.isNullOrEmpty()) {
-            memberships = remote
-        } else {
-            memberships = ClinicMembershipStorage.load(context)
-        }
-        pendingClinicNames = withContext(Dispatchers.IO) {
-            runCatching {
-                ClinicService.listPendingInvitations(context).map { it.clinicName }
-            }.getOrDefault(emptyList())
         }
         refreshing = false
     }

@@ -8,8 +8,20 @@ import {
 } from "../../shared/receta";
 
 export const MOTIVO_CONSULTA_STYLE =
-  '- Motivo de consulta: SOLO síntomas principales (máximo 3), unidos con "y"/"e". ' +
-  'Ejemplo: "diarrea y vómito". PROHIBIDO frases largas, "consulta por…", evolución, antecedentes o diagnóstico.';
+  "- Motivo de consulta: escribe EXACTAMENTE el o los síntomas mencionados en el dictado " +
+  '(máximo 3), unidos con "y"/"e". SOLO el nombre del síntoma; NADA de detalles ' +
+  "(ni tipo, intensidad, duración, localización, características, restos alimenticios, etc.). " +
+  'Ejemplos: "dolor abdominal tipo cólico de moderada intensidad" → "dolor abdominal"; ' +
+  '"vómitos de restos alimenticios" → "vómito"; varios → "dolor abdominal y vómito". ' +
+  'PROHIBIDO: frases largas, "consulta por…", "refiere…", evolución, antecedentes o diagnóstico.';
+
+/** Diagnóstico clínico real según el dictado (no genérico). */
+export const DIAGNOSTICO_STYLE =
+  "- Diagnóstico / Impresión diagnóstica: fórmulas clínicas reales según síntomas, signos y " +
+  'datos del dictado (ej. "gastritis aguda", "cólico abdominal", "GEA", "faringoamigdalitis aguda"). ' +
+  "Lista numerada 1. 2. 3. si hay varios. " +
+  'PROHIBIDO dejar solo "Evaluación clínica" o frases vacías si el dictado permite un diagnóstico ' +
+  "sindromático o nosológico razonable. No inventes hallazgos no referidos.";
 
 export function defaultTextForSection(
   section: string,

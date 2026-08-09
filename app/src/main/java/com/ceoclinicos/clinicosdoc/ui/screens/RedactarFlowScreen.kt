@@ -433,12 +433,10 @@ fun RedactarFlowScreen(
             try {
                 clinicId = membership.clinicId
                 clinicName = membership.clinicName
-                val tpls = ClinicService.listTemplates(context, membership.clinicId, documentType).ifEmpty {
-                    ClinicCatalogStorage.loadTemplates(context, membership.clinicId, documentType)
-                }
-                val hdrs = ClinicService.listHeaders(context, membership.clinicId).ifEmpty {
-                    ClinicCatalogStorage.loadHeaders(context, membership.clinicId)
-                }
+                val tpls = ClinicCatalogStorage.loadTemplates(context, membership.clinicId, documentType)
+                    .ifEmpty { ClinicService.listTemplates(context, membership.clinicId, documentType) }
+                val hdrs = ClinicCatalogStorage.loadHeaders(context, membership.clinicId)
+                    .ifEmpty { ClinicService.listHeaders(context, membership.clinicId) }
                 pendingClinicHeaders = hdrs
                 if (tpls.isEmpty()) {
                     showMsg(
@@ -481,16 +479,18 @@ fun RedactarFlowScreen(
         clinicName = initialClinicName
         origenLoading = true
         try {
-            val tpls = withTimeoutOrNull(12_000L) {
-                ClinicService.listTemplates(context, cid, documentType)
-            }.orEmpty().ifEmpty {
-                ClinicCatalogStorage.loadTemplates(context, cid, documentType)
-            }
-            val hdrs = withTimeoutOrNull(12_000L) {
-                ClinicService.listHeaders(context, cid)
-            }.orEmpty().ifEmpty {
-                ClinicCatalogStorage.loadHeaders(context, cid)
-            }
+            val tpls = ClinicCatalogStorage.loadTemplates(context, cid, documentType)
+                .ifEmpty {
+                    withTimeoutOrNull(12_000L) {
+                        ClinicService.listTemplates(context, cid, documentType)
+                    }.orEmpty()
+                }
+            val hdrs = ClinicCatalogStorage.loadHeaders(context, cid)
+                .ifEmpty {
+                    withTimeoutOrNull(12_000L) {
+                        ClinicService.listHeaders(context, cid)
+                    }.orEmpty()
+                }
             pendingClinicHeaders = hdrs
             if (tpls.isEmpty()) {
                 showMsg(

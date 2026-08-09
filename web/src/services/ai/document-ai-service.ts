@@ -10,7 +10,7 @@ import { ensureTemplateSections } from "../ensure-sections";
 import { sendPrompt } from "./ai-service";
 import { sanitizeDocumentContent, ensurePhysicalExamSystems } from "./document-sanitizer";
 import { buildPhysicalExamBlock, resolveSystemsForReport } from "./physical-exam-prompt";
-import { MOTIVO_CONSULTA_STYLE, sectionDefaultsPromptBlock } from "./section-defaults";
+import { MOTIVO_CONSULTA_STYLE, DIAGNOSTICO_STYLE, sectionDefaultsPromptBlock } from "./section-defaults";
 import { ORDENES_SECTION, ordenesMedicasPromptBlock, type OrdenesModo } from "../../shared/ordenes-medicas";
 import {
   isRecipeSectionTitle,
@@ -149,6 +149,10 @@ function buildPrompt(
       "Formato: línea [[SECTION:Nombre exacto]] y contenido debajo. PROHIBIDO usar **.",
       "",
       ...sectionList,
+      "Guía de estilo:",
+      MOTIVO_CONSULTA_STYLE,
+      DIAGNOSTICO_STYLE,
+      "",
       enfermedadActualPromptBlock(ejemplo),
       "",
       sectionDefaultsPromptBlock(effective, template.sectionDefaultTexts ?? {}),
@@ -165,11 +169,11 @@ function buildPrompt(
       ...sectionList,
       "Guía de estilo:",
       MOTIVO_CONSULTA_STYLE,
+      DIAGNOSTICO_STYLE,
       `- Enfermedad actual: narrativa al estilo del ejemplo. Inicie con paciente ${sexoTexto} de ${patient.edad} años; natural/procedente, diagnóstico de base o sin patológicos, inicio con fecha, hechos del dictado y cierre en el centro. DEBE ir bajo [[SECTION:Enfermedad actual]].`,
       "- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto. PROHIBIDO omitir sistemas activos no mencionados en el dictado.",
       "- Signos vitales: solo si hay valores dictados; si no, omitir esa línea por completo.",
       "- PROHIBIDO escribir «signos vitales no tomados», «no aportados» o similares cuando no hay valores.",
-      "- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.",
       "- Plan (si está en la plantilla): lista numerada de conducta/tratamiento (ej. observación, fármacos EV, control de signos). Solo según dictado.",
       ...(template.documentType === "reposo"
         ? [
@@ -416,6 +420,12 @@ function normalizeSectionTitle(title: string): string {
 function sectionStyleHint(title: string): string {
   const t = title.trim();
   if (t.toLowerCase() === SectionCatalog.MOTIVO_CONSULTA.toLowerCase()) return MOTIVO_CONSULTA_STYLE;
+  if (
+    t.toLowerCase() === SectionCatalog.DIAGNOSTICO.toLowerCase() ||
+    t.toLowerCase() === SectionCatalog.IMPRESION_DIAGNOSTICA.toLowerCase()
+  ) {
+    return DIAGNOSTICO_STYLE;
+  }
   if (t.toLowerCase() === SectionCatalog.ENFERMEDAD_ACTUAL.toLowerCase()) {
     return "- Enfermedad actual: narrativa cronológica con tiempos, evolución y tratamientos del dictado.";
   }

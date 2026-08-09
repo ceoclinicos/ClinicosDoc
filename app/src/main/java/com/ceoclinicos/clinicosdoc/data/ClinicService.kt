@@ -42,6 +42,12 @@ object ClinicService {
     private var lastAffiliationSyncAtMs: Long = 0L
     private const val AFFILIATION_SYNC_MIN_INTERVAL_MS = 90_000L
 
+    /** true si ya hubo sync reciente (Redactar no debe pegarle a la red). */
+    fun hasFreshAffiliationSync(): Boolean {
+        val last = lastAffiliationSyncAtMs
+        return last > 0L && System.currentTimeMillis() - last < AFFILIATION_SYNC_MIN_INTERVAL_MS
+    }
+
     private suspend fun awaitAuthUser(timeoutMs: Long = 4_000L): FirebaseUser? {
         val auth = FirebaseAuth.getInstance()
         auth.currentUser?.let { return it }
@@ -99,6 +105,7 @@ object ClinicService {
                 context,
                 allowEmptyOverwrite = force,
                 forceHeal = force || ClinicMembershipStorage.load(context).isEmpty(),
+                forceNetwork = force,
             )
         }.getOrElse { ClinicMembershipStorage.load(context) }
         // refreshMemberships ya guarda; comparar con snapshot previo requiere detectar antes.
@@ -342,14 +349,19 @@ object ClinicService {
      * @param allowEmptyOverwrite si false, no borra el caché local cuando la API viene vacía
      *        (evita el falso “no afiliado” por heal lento / fallo parcial).
      * @param forceHeal pide a la API re-escanear members aunque ya haya clinic_memberships.
+     * @param forceNetwork si false y hay sync reciente, devuelve caché local sin llamar a la API.
      */
     suspend fun refreshMemberships(
         context: Context,
         allowEmptyOverwrite: Boolean = false,
         forceHeal: Boolean = false,
+        forceNetwork: Boolean = false,
     ): List<ClinicMembership> {
         val local = ClinicMembershipStorage.load(context)
         if (!DoctorAuthService.isConfigured(context)) return local
+        if (!forceNetwork && !forceHeal && hasFreshAffiliationSync() && local.isNotEmpty()) {
+            return local
+        }
         val profile = DoctorStorage.loadProfile(context)
         val doctorCedula = profile?.cedula?.let { CedulaNormalizer.normalize(it) }.orEmpty()
         return runCatching {
@@ -394,6 +406,7 @@ object ClinicService {
                         return@use local
                     }
                     ClinicMembershipStorage.saveDetectingChanges(context, list)
+                    lastAffiliationSyncAtMs = System.currentTimeMillis()
                     list
                 }
             }
@@ -413,6 +426,7 @@ object ClinicService {
                 }.sortedBy { it.clinicName }
                 if (list.isNotEmpty()) {
                     ClinicMembershipStorage.saveDetectingChanges(context, list)
+                    lastAffiliationSyncAtMs = System.currentTimeMillis()
                     list
                 } else {
                     throw apiError
@@ -430,6 +444,8 @@ object ClinicService {
         documentType: DocumentType? = null,
     ): List<DocumentTemplate> {
         val cached = ClinicCatalogStorage.loadTemplates(context, clinicId, documentType)
+        // Prefetch al abrir la app: no volver a pegarle a la API en cada Redactar
+        if (cached.isNotEmpty()) return cached
         return runCatching {
             val idToken = idTokenOrThrow()
             withContext(Dispatchers.IO) {
@@ -537,6 +553,7 @@ object ClinicService {
 
     suspend fun listHeaders(context: Context, clinicId: String): List<DocumentHeader> {
         val cached = ClinicCatalogStorage.loadHeaders(context, clinicId)
+        if (cached.isNotEmpty()) return cached
         return runCatching {
             val idToken = idTokenOrThrow()
             withContext(Dispatchers.IO) {

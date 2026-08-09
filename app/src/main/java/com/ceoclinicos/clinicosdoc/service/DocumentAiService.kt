@@ -114,7 +114,7 @@ object DocumentAiService {
                     appendLine("- Hábitos psicobiológicos: tóxicos, hábitos intestinales/urinarios, sexuales, sueño; psicobiografía solo si hay datos.")
                     appendLine("- Examen funcional: lo que REFIERE el paciente por sistemas; distinto del examen físico objetivo.")
                     appendLine("- Examen físico: lo que EXPLORA el médico. DEBE incluir TODOS los sistemas activos; solo modifica los dictados y conserva el texto base en el resto.")
-                    appendLine("- Diagnóstico: lista numerada al final; términos clínicos o CIE según el dictado.")
+                    appendLine(SectionDefaults.DIAGNOSTICO_STYLE)
                     appendLine()
                     appendLine(SectionDefaults.promptBlock(effectiveSections, effectiveTemplate.sectionDefaultTexts))
                     appendLine("Omite de la respuesta las secciones que la plantilla no liste.")
@@ -156,7 +156,8 @@ object DocumentAiService {
                             "natural/procedente, diagnóstico de base o sin patológicos, inicio con fecha, hechos del dictado y cierre en el centro.",
                     )
                     appendLine("- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto.")
-                    appendLine("- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.")
+                    appendLine("- Diagnóstico (si está en la plantilla):")
+                    appendLine(SectionDefaults.DIAGNOSTICO_STYLE)
                     appendLine("- Plan (si está en la plantilla): lista numerada de conducta/tratamiento (observación, fármacos, controles). Solo según dictado.")
                     appendLine()
                     appendLine(SectionDefaults.promptBlock(effectiveSections, effectiveTemplate.sectionDefaultTexts))
@@ -199,7 +200,8 @@ object DocumentAiService {
                             "natural/procedente, diagnóstico de base o sin patológicos, inicio con fecha, hechos del dictado y cierre en el centro.",
                     )
                     appendLine("- Examen físico: DEBE incluir TODOS los sistemas activos. Solo modifica los dictados; el resto va con texto base intacto.")
-                    appendLine("- Diagnóstico (si está en la plantilla): lista numerada 1. 2. 3.")
+                    appendLine("- Diagnóstico (si está en la plantilla):")
+                    appendLine(SectionDefaults.DIAGNOSTICO_STYLE)
                     appendLine(
                         "- Días de reposo indicados: conserva el texto predeterminado de la plantilla " +
                             "(días y redacción) salvo que el dictado indique otro número de días u otra fórmula.",
@@ -689,6 +691,9 @@ object DocumentAiService {
     private fun sectionStyleHint(title: String): String = when {
         title.equals(SectionCatalog.MOTIVO_CONSULTA, ignoreCase = true) ->
             SectionDefaults.MOTIVO_CONSULTA_STYLE
+        title.equals(SectionCatalog.DIAGNOSTICO, ignoreCase = true) ||
+            title.equals(SectionCatalog.IMPRESION_DIAGNOSTICA, ignoreCase = true) ->
+            SectionDefaults.DIAGNOSTICO_STYLE
         title.equals(SectionCatalog.ENFERMEDAD_ACTUAL, ignoreCase = true) ->
             "- Enfermedad actual: narrativa cronológica con tiempos, evolución y tratamientos del dictado."
         title.contains("Antecedentes personales", ignoreCase = true) ->
