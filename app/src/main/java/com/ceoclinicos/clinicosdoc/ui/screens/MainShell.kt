@@ -31,6 +31,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.ceoclinicos.clinicosdoc.data.ClinicMembershipStorage
 import com.ceoclinicos.clinicosdoc.data.ClinicService
 import com.ceoclinicos.clinicosdoc.model.ClinicDoctorInvitation
@@ -57,6 +61,7 @@ fun MainShell(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
     var currentIndex by rememberSaveable { mutableIntStateOf(0) }
     var affiliationNotice by remember { mutableStateOf<String?>(null) }
     var pendingInvite by remember { mutableStateOf<ClinicDoctorInvitation?>(null) }
@@ -67,16 +72,37 @@ fun MainShell(
         BottomNavItem("Informe", Icons.Outlined.Description, Icons.Default.Description),
     )
 
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            runCatching { ClinicService.syncAffiliationsOnEnter(context, force = true) }
-            // Asegura invitaciones vía API (no solo Firestore)
-            runCatching { ClinicService.listPendingInvitations(context) }
-        }
+    fun applyPendingUi() {
         pendingInvite = ClinicMembershipStorage.loadPendingInvites(context).firstOrNull()
         if (pendingInvite == null) {
             affiliationNotice = ClinicMembershipStorage.loadPendingNotices(context).firstOrNull()
         }
+    }
+
+    suspend fun refreshInvitesAndNotices() {
+        withContext(Dispatchers.IO) {
+            // Primero invitaciones (rápido); luego sync de afiliaciones
+            runCatching { ClinicService.listPendingInvitations(context) }
+            runCatching { ClinicService.syncAffiliationsOnEnter(context, force = true) }
+            runCatching { ClinicService.listPendingInvitations(context) }
+        }
+        applyPendingUi()
+    }
+
+    LaunchedEffect(Unit) {
+        // Mostrar caché al instante si ya había invitación
+        applyPendingUi()
+        refreshInvitesAndNotices()
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                scope.launch { refreshInvitesAndNotices() }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     pendingInvite?.let { inv ->

@@ -110,7 +110,7 @@ module.exports = async function handler(req, res) {
       });
 
     await invRef.set({ status: "accepted" }, { merge: true });
-    await pendingRef.delete().catch(() => {});
+    await deletePendingInvitePair(db, clinicId, doctorCedula);
 
     return res.status(200).json({
       ok: true,

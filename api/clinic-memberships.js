@@ -71,6 +71,27 @@ async function pendingInvitesForDoctor(db, cedula) {
   const keys = cedulaLookupKeys(cedula);
   const out = [];
   const seen = new Set();
+
+  function pushInvite(data, clinicIdFallback) {
+    if (String(data.status || "pending") !== "pending") return;
+    const clinicId = String(data.clinicId || clinicIdFallback || "");
+    if (!clinicId || seen.has(clinicId)) return;
+    if (isInviteExpired(data)) {
+      deletePendingInvitePair(db, clinicId, data.doctorCedula || cedula).catch(() => {});
+      return;
+    }
+    seen.add(clinicId);
+    out.push({
+      clinicId,
+      clinicName: String(data.clinicName || "Centro"),
+      doctorCedula: String(data.doctorCedula || cedula),
+      doctorNombre: String(data.doctorNombre || ""),
+      invitedAt: String(data.invitedAt || ""),
+      expiresAt: String(data.expiresAt || ""),
+      status: "pending",
+    });
+  }
+
   for (const key of keys) {
     const snap = await db
       .collection("clinicosdoc_doctor_invites")
@@ -78,24 +99,32 @@ async function pendingInvitesForDoctor(db, cedula) {
       .collection("pending")
       .get();
     for (const d of snap.docs) {
-      const data = d.data() || {};
-      if (String(data.status || "pending") !== "pending") continue;
-      const clinicId = String(data.clinicId || d.id);
-      if (!clinicId || seen.has(clinicId)) continue;
-      if (isInviteExpired(data)) {
-        await deletePendingInvitePair(db, clinicId, data.doctorCedula || key);
-        continue;
-      }
-      seen.add(clinicId);
-      out.push({
-        clinicId,
-        clinicName: String(data.clinicName || "Centro"),
-        doctorCedula: String(data.doctorCedula || cedula),
-        invitedAt: String(data.invitedAt || ""),
-        expiresAt: String(data.expiresAt || ""),
-      });
+      pushInvite(d.data() || {}, d.id);
     }
   }
+
+  // Respaldo: invitaciones guardadas en la clínica (por si falla la ruta del médico)
+  if (!out.length) {
+    for (const key of keys) {
+      try {
+        const snap = await db
+          .collectionGroup("invitations")
+          .where("doctorCedula", "==", key)
+          .limit(30)
+          .get();
+        for (const d of snap.docs) {
+          const parts = d.ref.path.split("/");
+          // clinicosdoc_clinics/{clinicId}/invitations/{cedula}
+          const clinicId =
+            parts.length >= 4 && parts[0] === "clinicosdoc_clinics" ? parts[1] : "";
+          pushInvite(d.data() || {}, clinicId);
+        }
+      } catch (err) {
+        console.warn("pendingInvites collectionGroup", err?.message || err);
+      }
+    }
+  }
+
   return out;
 }
 

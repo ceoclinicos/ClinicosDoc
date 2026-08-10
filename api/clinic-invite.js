@@ -131,12 +131,16 @@ module.exports = async function handler(req, res) {
     };
 
     await pendingRef.set(invitation);
-    await db
-      .collection("clinicosdoc_doctor_invites")
-      .doc(doctorCedula)
-      .collection("pending")
-      .doc(clinicId)
-      .set(invitation);
+    // Guardar bajo cédula normalizada y, si aplica, bajo dígitos (lectura más robusta)
+    const inviteKeys = [...new Set([doctorCedula, ...cedulaLookupKeys(doctorCedula)])];
+    for (const key of inviteKeys) {
+      await db
+        .collection("clinicosdoc_doctor_invites")
+        .doc(key)
+        .collection("pending")
+        .doc(clinicId)
+        .set(invitation);
+    }
 
     return res.status(200).json(invitation);
   } catch (err) {
