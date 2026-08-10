@@ -1,4 +1,4 @@
-const { normalizeCedula } = require("./pin");
+const { normalizeCedula, cedulaLookupKeys } = require("./pin");
 
 /** Días sin aceptar → se elimina de pendientes (lista de la clínica y del médico). */
 const INVITE_TTL_DAYS = 7;
@@ -30,13 +30,16 @@ async function deletePendingInvitePair(db, clinicId, doctorCedula) {
     .doc(ced)
     .delete()
     .catch(() => {});
-  await db
-    .collection("clinicosdoc_doctor_invites")
-    .doc(ced)
-    .collection("pending")
-    .doc(clinicId)
-    .delete()
-    .catch(() => {});
+  const keys = [...new Set([ced, ...cedulaLookupKeys(doctorCedula)])];
+  for (const key of keys) {
+    await db
+      .collection("clinicosdoc_doctor_invites")
+      .doc(key)
+      .collection("pending")
+      .doc(clinicId)
+      .delete()
+      .catch(() => {});
+  }
 }
 
 module.exports = {
