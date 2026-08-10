@@ -129,7 +129,7 @@ export function startDictation(
 
   rec.onend = () => {
     if (stopped) return;
-    // Seguir escuchando hasta que el usuario detenga o procese
+    // Reinicio inmediato: el navegador corta tras pausas; nosotros seguimos
     sessionPartial = "";
     restarting = true;
     window.setTimeout(() => {
@@ -144,10 +144,10 @@ export function startDictation(
           } catch {
             /* ya arrancado */
           }
-        }, 400);
+        }, 200);
       }
       restarting = false;
-    }, 120);
+    }, 40);
   };
 
   try {

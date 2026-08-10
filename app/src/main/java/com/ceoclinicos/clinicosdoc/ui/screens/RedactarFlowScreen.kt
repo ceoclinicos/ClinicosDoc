@@ -1216,7 +1216,11 @@ fun RedactarFlowScreen(
                         }
                     }
                     Text(
-                        if (listening) "Grabando... toca el botón para detener" else "Toca para dictar",
+                        if (listening) {
+                            "Escuchando… sigue hablando. Toca stop o Procesar con IA para terminar."
+                        } else {
+                            "Toca para dictar"
+                        },
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                         style = MaterialTheme.typography.bodyMedium,
                     )

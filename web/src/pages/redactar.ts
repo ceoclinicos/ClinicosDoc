@@ -833,7 +833,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         micBtn.classList.add("mic-active");
         micBtn.textContent = "⏹ Detener";
       }
-      if (status) status.textContent = "Escuchando…";
+  if (status) status.textContent = "Escuchando… sigue hablando. Detener o Procesar con IA para terminar.";
       const taNow = root.querySelector("#dictation") as HTMLTextAreaElement;
       stopSpeech = startDictation(
         taNow?.value ?? dictation,
