@@ -218,8 +218,16 @@ object ClinicService {
 
     suspend fun listPendingInvitations(context: Context): List<ClinicDoctorInvitation> {
         if (!DoctorAuthService.isConfigured(context)) return emptyList()
+        // Preferir API (Admin) — Firestore cliente a menudo falla por reglas/claim de cédula
+        if (!hasFreshAffiliationSync() || ClinicMembershipStorage.loadPendingInvites(context).isEmpty()) {
+            runCatching {
+                refreshMemberships(context, forceNetwork = true)
+            }
+        }
+        val fromApi = ClinicMembershipStorage.loadPendingInvites(context)
+        if (fromApi.isNotEmpty()) return fromApi
+
         val profile = DoctorStorage.loadProfile(context) ?: return emptyList()
-        // Las invitaciones se guardan bajo cédula normalizada (V########); probar variantes.
         val keys = CedulaNormalizer.lookupKeys(profile.cedula)
             .ifEmpty { listOf(CedulaNormalizer.normalize(profile.cedula)) }
         val byClinic = linkedMapOf<String, ClinicDoctorInvitation>()
@@ -264,7 +272,11 @@ object ClinicService {
                 )
             }
         }
-        return byClinic.values.sortedByDescending { it.invitedAt }
+        val list = byClinic.values.sortedByDescending { it.invitedAt }
+        if (list.isNotEmpty()) {
+            ClinicMembershipStorage.savePendingInvites(context, list)
+        }
+        return list
     }
 
     suspend fun acceptInvitation(context: Context, clinicId: String): ClinicMembership {
@@ -307,6 +319,7 @@ object ClinicService {
             }
         }
         ClinicMembershipStorage.upsert(context, result)
+        ClinicMembershipStorage.removePendingInvite(context, result.clinicId)
         runCatching { syncAffiliationsOnEnter(context, force = true) }
         return result
     }
@@ -343,6 +356,7 @@ object ClinicService {
                 }
             }
         }
+        ClinicMembershipStorage.removePendingInvite(context, clinicId)
     }
 
     /**
@@ -402,6 +416,29 @@ object ClinicService {
                             }
                         }
                     }.sortedBy { it.clinicName }
+                    val pendingArr = json.optJSONArray("pendingInvitations")
+                    val pending = buildList {
+                        if (pendingArr != null) {
+                            for (i in 0 until pendingArr.length()) {
+                                val o = pendingArr.optJSONObject(i) ?: continue
+                                val id = o.optString("clinicId")
+                                val name = o.optString("clinicName")
+                                if (id.isBlank()) continue
+                                add(
+                                    ClinicDoctorInvitation(
+                                        clinicId = id,
+                                        clinicName = name.ifBlank { "Centro" },
+                                        doctorCedula = o.optString("doctorCedula"),
+                                        doctorNombre = o.optString("doctorNombre"),
+                                        status = "pending",
+                                        invitedAt = o.optString("invitedAt"),
+                                        expiresAt = o.optString("expiresAt"),
+                                    ),
+                                )
+                            }
+                        }
+                    }.sortedByDescending { it.invitedAt }
+                    ClinicMembershipStorage.savePendingInvites(context, pending)
                     if (list.isEmpty() && local.isNotEmpty() && !allowEmptyOverwrite) {
                         return@use local
                     }

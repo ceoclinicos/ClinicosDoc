@@ -1,6 +1,7 @@
 package com.ceoclinicos.clinicosdoc.data
 
 import android.content.Context
+import com.ceoclinicos.clinicosdoc.model.ClinicDoctorInvitation
 import com.ceoclinicos.clinicosdoc.model.ClinicMembership
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -10,6 +11,7 @@ object ClinicMembershipStorage {
     private const val KEY = "clinic_memberships_json"
     private const val KEY_BASELINE = "clinic_memberships_baseline_v1"
     private const val KEY_PENDING_NOTICES = "clinic_affiliation_notices_json"
+    private const val KEY_PENDING_INVITES = "clinic_pending_invites_json"
     private val gson = Gson()
 
     private fun prefs(context: Context) =
@@ -23,6 +25,20 @@ object ClinicMembershipStorage {
 
     fun save(context: Context, list: List<ClinicMembership>) {
         prefs(context).edit().putString(KEY, gson.toJson(list)).apply()
+    }
+
+    fun loadPendingInvites(context: Context): List<ClinicDoctorInvitation> {
+        val raw = prefs(context).getString(KEY_PENDING_INVITES, null) ?: return emptyList()
+        val type = object : TypeToken<List<ClinicDoctorInvitation>>() {}.type
+        return gson.fromJson(raw, type) ?: emptyList()
+    }
+
+    fun savePendingInvites(context: Context, list: List<ClinicDoctorInvitation>) {
+        prefs(context).edit().putString(KEY_PENDING_INVITES, gson.toJson(list)).apply()
+    }
+
+    fun removePendingInvite(context: Context, clinicId: String) {
+        savePendingInvites(context, loadPendingInvites(context).filterNot { it.clinicId == clinicId })
     }
 
     /**
@@ -73,12 +89,14 @@ object ClinicMembershipStorage {
             .remove(KEY)
             .remove(KEY_BASELINE)
             .remove(KEY_PENDING_NOTICES)
+            .remove(KEY_PENDING_INVITES)
             .apply()
     }
 
     fun upsert(context: Context, membership: ClinicMembership) {
         val next = load(context).filterNot { it.clinicId == membership.clinicId } + membership
         saveDetectingChanges(context, next.sortedBy { it.clinicName })
+        removePendingInvite(context, membership.clinicId)
     }
 
     fun remove(context: Context, clinicId: String) {
