@@ -20,7 +20,7 @@ function isInviteExpired(data) {
   return false;
 }
 
-async function deletePendingInvitePair(db, clinicId, doctorCedula) {
+async function deletePendingInvitePair(db, clinicId, doctorCedula, cloudUserId) {
   const ced = normalizeCedula(doctorCedula);
   if (!clinicId || !ced) return;
   await db
@@ -30,7 +30,9 @@ async function deletePendingInvitePair(db, clinicId, doctorCedula) {
     .doc(ced)
     .delete()
     .catch(() => {});
-  const keys = [...new Set([ced, ...cedulaLookupKeys(doctorCedula)])];
+  const keys = [
+    ...new Set([ced, ...cedulaLookupKeys(doctorCedula), cloudUserId || ""].filter(Boolean)),
+  ];
   for (const key of keys) {
     await db
       .collection("clinicosdoc_doctor_invites")

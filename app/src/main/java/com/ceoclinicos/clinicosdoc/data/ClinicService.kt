@@ -220,8 +220,7 @@ object ClinicService {
         if (!DoctorAuthService.isConfigured(context)) {
             return ClinicMembershipStorage.loadPendingInvites(context)
         }
-        // Siempre refrescar por red: las invitaciones son urgentes y el caché vacío
-        // de un sync previo no debe ocultar una invitación nueva.
+        // API puede aportar invitaciones; un [] ya no borra el caché (ver refreshMemberships).
         runCatching {
             refreshMemberships(
                 context,
@@ -229,12 +228,18 @@ object ClinicService {
                 allowEmptyOverwrite = false,
             )
         }
-        val fromApi = ClinicMembershipStorage.loadPendingInvites(context)
-        if (fromApi.isNotEmpty()) return fromApi
+        val cached = ClinicMembershipStorage.loadPendingInvites(context)
 
-        val profile = DoctorStorage.loadProfile(context) ?: return emptyList()
-        val keys = CedulaNormalizer.lookupKeys(profile.cedula)
-            .ifEmpty { listOf(CedulaNormalizer.normalize(profile.cedula)) }
+        val profile = DoctorStorage.loadProfile(context)
+            ?: return cached
+        val userId = DoctorStorage.userId(context).orEmpty()
+        val keys = (
+            CedulaNormalizer.lookupKeys(profile.cedula) +
+                listOf(CedulaNormalizer.normalize(profile.cedula), userId)
+            )
+            .map { it.trim() }
+            .filter { it.length >= 6 }
+            .distinct()
         val byClinic = linkedMapOf<String, ClinicDoctorInvitation>()
         val ttlMs = 7L * 24 * 60 * 60 * 1000
         fun isExpired(invitedAt: String, expiresAt: String): Boolean {
@@ -244,10 +249,11 @@ object ClinicService {
                 ?: return false
             return System.currentTimeMillis() > invitedMs + ttlMs
         }
+        var firestoreOk = false
         for (key in keys) {
-            if (key.isBlank()) continue
             val snap = runCatching { doctorPendingInvitesCol(key).get().await() }.getOrNull()
                 ?: continue
+            firestoreOk = true
             for (docSnap in snap.documents) {
                 val data = docSnap.data ?: continue
                 if ((data["status"]?.toString() ?: "pending") != "pending") continue
@@ -277,10 +283,14 @@ object ClinicService {
                 )
             }
         }
-        val list = byClinic.values.sortedByDescending { it.invitedAt }
-        if (list.isNotEmpty()) {
-            ClinicMembershipStorage.savePendingInvites(context, list)
+        // Firestore OK → fuente de verdad (también limpia si ya no hay).
+        // Si falló la lectura, conservar caché/API.
+        val list = if (firestoreOk) {
+            byClinic.values.sortedByDescending { it.invitedAt }
+        } else {
+            cached
         }
+        ClinicMembershipStorage.savePendingInvites(context, list)
         return list
     }
 
@@ -422,31 +432,32 @@ object ClinicService {
                         }
                     }.sortedBy { it.clinicName }
                     val pendingArr = json.optJSONArray("pendingInvitations")
-                    // Solo actualizar caché de invitaciones si la API trae el campo
-                    // (evita borrar pendientes con deploys viejos o respuestas parciales)
-                    if (json.has("pendingInvitations")) {
+                    // Solo escribir caché si la API trae invitaciones reales.
+                    // Un [] no debe borrar pendientes locales: listPendingInvitations
+                    // confirma por Firestore y limpia cuando realmente no hay ninguna.
+                    if (json.has("pendingInvitations") && pendingArr != null && pendingArr.length() > 0) {
                         val pending = buildList {
-                            if (pendingArr != null) {
-                                for (i in 0 until pendingArr.length()) {
-                                    val o = pendingArr.optJSONObject(i) ?: continue
-                                    val id = o.optString("clinicId")
-                                    val name = o.optString("clinicName")
-                                    if (id.isBlank()) continue
-                                    add(
-                                        ClinicDoctorInvitation(
-                                            clinicId = id,
-                                            clinicName = name.ifBlank { "Centro" },
-                                            doctorCedula = o.optString("doctorCedula"),
-                                            doctorNombre = o.optString("doctorNombre"),
-                                            status = "pending",
-                                            invitedAt = o.optString("invitedAt"),
-                                            expiresAt = o.optString("expiresAt"),
-                                        ),
-                                    )
-                                }
+                            for (i in 0 until pendingArr.length()) {
+                                val o = pendingArr.optJSONObject(i) ?: continue
+                                val id = o.optString("clinicId")
+                                val name = o.optString("clinicName")
+                                if (id.isBlank()) continue
+                                add(
+                                    ClinicDoctorInvitation(
+                                        clinicId = id,
+                                        clinicName = name.ifBlank { "Centro" },
+                                        doctorCedula = o.optString("doctorCedula"),
+                                        doctorNombre = o.optString("doctorNombre"),
+                                        status = "pending",
+                                        invitedAt = o.optString("invitedAt"),
+                                        expiresAt = o.optString("expiresAt"),
+                                    ),
+                                )
                             }
                         }.sortedByDescending { it.invitedAt }
-                        ClinicMembershipStorage.savePendingInvites(context, pending)
+                        if (pending.isNotEmpty()) {
+                            ClinicMembershipStorage.savePendingInvites(context, pending)
+                        }
                     }
                     if (list.isEmpty() && local.isNotEmpty() && !allowEmptyOverwrite) {
                         return@use local

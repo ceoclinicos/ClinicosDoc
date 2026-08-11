@@ -86,6 +86,19 @@ module.exports = async function handler(req, res) {
     if (memberSnap.exists) {
       throw Object.assign(new Error("Ese médico ya está en el equipo"), { status: 409 });
     }
+    // También bajo otras claves de cédula
+    for (const key of cedulaLookupKeys(doctorCedula)) {
+      if (key === doctorCedula) continue;
+      const alt = await db
+        .collection("clinicosdoc_clinics")
+        .doc(clinicId)
+        .collection("members")
+        .doc(key)
+        .get();
+      if (alt.exists) {
+        throw Object.assign(new Error("Ese médico ya está en el equipo"), { status: 409 });
+      }
+    }
 
     const pendingRef = db
       .collection("clinicosdoc_clinics")
@@ -131,8 +144,14 @@ module.exports = async function handler(req, res) {
     };
 
     await pendingRef.set(invitation);
-    // Guardar bajo cédula normalizada y, si aplica, bajo dígitos (lectura más robusta)
-    const inviteKeys = [...new Set([doctorCedula, ...cedulaLookupKeys(doctorCedula)])];
+    // Guardar bajo cédula (todas las variantes) y bajo cloudUserId si existe
+    const inviteKeys = [
+      ...new Set([
+        doctorCedula,
+        ...cedulaLookupKeys(doctorCedula),
+        cloud?.id || "",
+      ].filter(Boolean)),
+    ];
     for (const key of inviteKeys) {
       await db
         .collection("clinicosdoc_doctor_invites")

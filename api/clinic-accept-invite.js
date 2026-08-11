@@ -1,5 +1,5 @@
 const { getAdmin } = require("./_lib/firebase");
-const { normalizeCedula } = require("./_lib/pin");
+const { normalizeCedula, cedulaLookupKeys } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
@@ -44,23 +44,42 @@ module.exports = async function handler(req, res) {
     }
     const doctorNombre = String(body.doctorNombre || "").trim() || `Médico C.I. ${doctorCedula}`;
 
-    const invRef = db
-      .collection("clinicosdoc_clinics")
-      .doc(clinicId)
-      .collection("invitations")
-      .doc(doctorCedula);
-    const pendingRef = db
-      .collection("clinicosdoc_doctor_invites")
-      .doc(doctorCedula)
-      .collection("pending")
-      .doc(clinicId);
+    const invKeys = [...new Set([doctorCedula, ...cedulaLookupKeys(doctorCedula)])];
+    let invRef = null;
+    let invSnap = null;
+    for (const key of invKeys) {
+      const ref = db
+        .collection("clinicosdoc_clinics")
+        .doc(clinicId)
+        .collection("invitations")
+        .doc(key);
+      const snap = await ref.get();
+      if (snap.exists) {
+        invRef = ref;
+        invSnap = snap;
+        break;
+      }
+    }
+    if (!invRef) {
+      invRef = db
+        .collection("clinicosdoc_clinics")
+        .doc(clinicId)
+        .collection("invitations")
+        .doc(doctorCedula);
+      invSnap = await invRef.get();
+    }
 
     if (action === "reject") {
-      await deletePendingInvitePair(db, clinicId, doctorCedula);
+      const invData = invSnap.exists ? invSnap.data() || {} : {};
+      await deletePendingInvitePair(
+        db,
+        clinicId,
+        invData.doctorCedula || doctorCedula,
+        invData.cloudUserId || uid,
+      );
       return res.status(200).json({ ok: true, status: "rejected" });
     }
 
-    const invSnap = await invRef.get();
     if (!invSnap.exists) {
       return res.status(404).json({ error: "Invitación no encontrada" });
     }
@@ -69,7 +88,7 @@ module.exports = async function handler(req, res) {
       return res.status(409).json({ error: "Esta invitación ya no está pendiente" });
     }
     if (isInviteExpired(inv)) {
-      await deletePendingInvitePair(db, clinicId, doctorCedula);
+      await deletePendingInvitePair(db, clinicId, inv.doctorCedula || doctorCedula, inv.cloudUserId || uid);
       return res.status(410).json({
         error: "La invitación venció. Pida al centro que lo invite de nuevo.",
       });
@@ -83,14 +102,15 @@ module.exports = async function handler(req, res) {
       clinicSnap.data()?.nombre || inv.clinicName || "Centro",
     );
     const joinedAt = new Date().toISOString();
+    const memberCedula = normalizeCedula(inv.doctorCedula || doctorCedula);
 
     await db
       .collection("clinicosdoc_clinics")
       .doc(clinicId)
       .collection("members")
-      .doc(doctorCedula)
+      .doc(memberCedula)
       .set({
-        doctorCedula,
+        doctorCedula: memberCedula,
         doctorNombre: doctorNombre || inv.doctorNombre || doctorNombre,
         cloudUserId: uid,
         role: "medico",
@@ -110,7 +130,7 @@ module.exports = async function handler(req, res) {
       });
 
     await invRef.set({ status: "accepted" }, { merge: true });
-    await deletePendingInvitePair(db, clinicId, doctorCedula);
+    await deletePendingInvitePair(db, clinicId, memberCedula, inv.cloudUserId || uid);
 
     return res.status(200).json({
       ok: true,

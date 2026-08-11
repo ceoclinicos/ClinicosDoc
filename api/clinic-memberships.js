@@ -65,10 +65,16 @@ async function upsertMembership(db, uid, clinicId, clinicName, role, joinedAt) {
     );
 }
 
-/** Invitaciones pendientes (aún no son afiliación). Prueba varias claves de cédula. */
-async function pendingInvitesForDoctor(db, cedula) {
-  if (!cedula || cedula.length < 7) return [];
-  const keys = cedulaLookupKeys(cedula);
+/** Invitaciones pendientes (aún no son afiliación). Prueba cédula + uid. */
+async function pendingInvitesForDoctor(db, cedula, uid) {
+  const keys = [
+    ...new Set(
+      [...cedulaLookupKeys(cedula || ""), normalizeCedula(cedula || ""), uid || ""].filter(
+        (k) => k && String(k).length >= 6,
+      ),
+    ),
+  ];
+  if (!keys.length) return [];
   const out = [];
   const seen = new Set();
 
@@ -77,7 +83,12 @@ async function pendingInvitesForDoctor(db, cedula) {
     const clinicId = String(data.clinicId || clinicIdFallback || "");
     if (!clinicId || seen.has(clinicId)) return;
     if (isInviteExpired(data)) {
-      deletePendingInvitePair(db, clinicId, data.doctorCedula || cedula).catch(() => {});
+      deletePendingInvitePair(
+        db,
+        clinicId,
+        data.doctorCedula || cedula,
+        data.cloudUserId || uid,
+      ).catch(() => {});
       return;
     }
     seen.add(clinicId);
@@ -103,9 +114,10 @@ async function pendingInvitesForDoctor(db, cedula) {
     }
   }
 
-  // Respaldo: invitaciones guardadas en la clínica (por si falla la ruta del médico)
+  // Respaldo: invitaciones en la clínica (por si falta la ruta del médico)
   if (!out.length) {
-    for (const key of keys) {
+    const cedKeys = cedulaLookupKeys(cedula || "").filter(Boolean);
+    for (const key of cedKeys) {
       try {
         const snap = await db
           .collectionGroup("invitations")
@@ -114,7 +126,6 @@ async function pendingInvitesForDoctor(db, cedula) {
           .get();
         for (const d of snap.docs) {
           const parts = d.ref.path.split("/");
-          // clinicosdoc_clinics/{clinicId}/invitations/{cedula}
           const clinicId =
             parts.length >= 4 && parts[0] === "clinicosdoc_clinics" ? parts[1] : "";
           pushInvite(d.data() || {}, clinicId);
@@ -243,7 +254,7 @@ module.exports = async function handler(req, res) {
       memberships = mergeMemberships(memberships, healed);
     }
 
-    const pendingInvitations = await pendingInvitesForDoctor(db, cedula);
+    const pendingInvitations = await pendingInvitesForDoctor(db, cedula, uid);
 
     memberships.sort((a, b) => a.clinicName.localeCompare(b.clinicName));
     return res.status(200).json({

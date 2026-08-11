@@ -75,7 +75,7 @@ registerRoute({
         return;
       }
       try {
-        const pending = await listPendingInvitationsForDoctor(cedula);
+        const pending = await listPendingInvitationsForDoctor(cedula, session?.cloudUserId);
         if (!pending.length) {
           invitesStatus.textContent = "No tiene invitaciones pendientes.";
           invitesList.innerHTML = "";

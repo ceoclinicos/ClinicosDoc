@@ -320,18 +320,34 @@ export async function listPendingInvitationsForClinic(
 
 export async function listPendingInvitationsForDoctor(
   doctorCedula: string,
+  cloudUserId?: string,
 ): Promise<ClinicDoctorInvitation[]> {
-  const snap = await getDocs(doctorPendingInvitesCol(doctorCedula));
+  const { cedulaLookupKeys } = await import("../services/cedula");
+  const keys = [
+    ...new Set(
+      [...cedulaLookupKeys(doctorCedula), normalizeCedula(doctorCedula), cloudUserId || ""].filter(
+        Boolean,
+      ),
+    ),
+  ];
   const out: ClinicDoctorInvitation[] = [];
-  for (const d of snap.docs) {
-    const inv = d.data() as ClinicDoctorInvitation;
-    if (inv.status !== "pending") continue;
-    const clinicId = inv.clinicId || d.id;
-    if (isInviteExpired(inv)) {
-      await purgeExpiredInvite(clinicId, inv.doctorCedula || doctorCedula);
-      continue;
+  const seen = new Set<string>();
+  for (const key of keys) {
+    const snap = await getDocs(
+      collection(getDb(), FirestorePaths.DOCTOR_INVITES, key, "pending"),
+    );
+    for (const d of snap.docs) {
+      const inv = d.data() as ClinicDoctorInvitation;
+      if (inv.status !== "pending") continue;
+      const clinicId = inv.clinicId || d.id;
+      if (!clinicId || seen.has(clinicId)) continue;
+      if (isInviteExpired(inv)) {
+        await purgeExpiredInvite(clinicId, inv.doctorCedula || doctorCedula);
+        continue;
+      }
+      seen.add(clinicId);
+      out.push(inv);
     }
-    out.push(inv);
   }
   return out.sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
 }

@@ -220,12 +220,12 @@ service cloud.firestore {
       allow write: if isClinica();
     }
 
-    match /clinicosdoc_doctor_invites/{cedula} {
-      allow read: if cedulaClaimMatches(cedula) || isClinica();
-      allow write: if cedulaClaimMatches(cedula) || isClinica();
+    match /clinicosdoc_doctor_invites/{cedulaOrUid} {
+      allow read: if request.auth.uid == cedulaOrUid || cedulaClaimMatches(cedulaOrUid) || isClinica();
+      allow write: if request.auth.uid == cedulaOrUid || cedulaClaimMatches(cedulaOrUid) || isClinica();
       match /pending/{clinicId} {
-        allow read: if cedulaClaimMatches(cedula) || isClinicAdmin(clinicId);
-        allow write: if cedulaClaimMatches(cedula) || isClinicAdmin(clinicId) || isClinica();
+        allow read: if request.auth.uid == cedulaOrUid || cedulaClaimMatches(cedulaOrUid) || isClinicAdmin(clinicId);
+        allow write: if request.auth.uid == cedulaOrUid || cedulaClaimMatches(cedulaOrUid) || isClinicAdmin(clinicId) || isClinica();
       }
     }
   }

@@ -9,6 +9,7 @@ const {
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
+const { mintAuthToken } = require("./_lib/mint-token");
 
 function normalizeRif(rif) {
   return String(rif || "")
@@ -68,8 +69,12 @@ async function findClinica(db, inputRif) {
   return { snap: s, docId: clinicId };
 }
 
+/**
+ * Persiste role/cedula/rif en el usuario Auth. Sin esto, getIdToken(true)
+ * en la app pierde las claims del custom token y el médico no lee invitaciones.
+ */
 async function mintToken(admin, uid, claims) {
-  return admin.auth().createCustomToken(uid, claims);
+  return mintAuthToken(admin, uid, claims);
 }
 
 async function loginPaciente(db, admin, cedula, pin) {

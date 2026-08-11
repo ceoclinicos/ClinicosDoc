@@ -182,7 +182,7 @@ function medicoHome(): HTMLElement {
       let pendingNames: string[] = [];
       try {
         if (cedula) {
-          pendingNames = (await listPendingInvitationsForDoctor(cedula)).map(
+          pendingNames = (await listPendingInvitationsForDoctor(cedula, prof?.cloudUserId)).map(
             (i) => i.clinicName,
           );
         }

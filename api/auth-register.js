@@ -9,6 +9,7 @@ const {
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
+const { mintAuthToken } = require("./_lib/mint-token");
 
 function normalizeRif(rif) {
   return String(rif || "")
@@ -80,7 +81,7 @@ async function registerPaciente(db, admin, body) {
     updatedAt: now,
   };
   await db.collection("pacientes").doc(cedula).set(data);
-  const token = await admin.auth().createCustomToken(cedula, { role: "paciente", cedula });
+  const token = await mintAuthToken(admin, cedula, { role: "paciente", cedula });
   return {
     token,
     uid: cedula,
@@ -158,7 +159,7 @@ async function registerMedico(db, admin, body) {
     updatedAt: now,
   });
 
-  const token = await admin.auth().createCustomToken(cloudRef.id, {
+  const token = await mintAuthToken(admin, cloudRef.id, {
     role: "medico",
     cedula,
   });
@@ -224,7 +225,7 @@ async function registerClinica(db, admin, body) {
     createdAt: now,
   });
 
-  const token = await admin.auth().createCustomToken(id, { role: "clinica", rif });
+  const token = await mintAuthToken(admin, id, { role: "clinica", rif });
   return {
     token,
     uid: id,

@@ -42,6 +42,7 @@ import com.ceoclinicos.clinicosdoc.ui.components.BottomNavItem
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumBottomBar
 import com.ceoclinicos.clinicosdoc.ui.theme.SurfaceBg
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -66,43 +67,50 @@ fun MainShell(
     var affiliationNotice by remember { mutableStateOf<String?>(null) }
     var pendingInvite by remember { mutableStateOf<ClinicDoctorInvitation?>(null) }
     var inviteBusy by remember { mutableStateOf(false) }
+    var inviteRefreshJob by remember { mutableStateOf<Job?>(null) }
     val items = listOf(
         BottomNavItem("Home", Icons.Outlined.Home, Icons.Default.Home),
         BottomNavItem("Paciente", Icons.Outlined.Person, Icons.Default.Person),
         BottomNavItem("Informe", Icons.Outlined.Description, Icons.Default.Description),
     )
 
-    fun applyPendingUi() {
-        pendingInvite = ClinicMembershipStorage.loadPendingInvites(context).firstOrNull()
+    fun applyPendingUi(invites: List<ClinicDoctorInvitation>? = null) {
+        pendingInvite = invites?.firstOrNull()
+            ?: ClinicMembershipStorage.loadPendingInvites(context).firstOrNull()
         if (pendingInvite == null) {
             affiliationNotice = ClinicMembershipStorage.loadPendingNotices(context).firstOrNull()
         }
     }
 
-    suspend fun refreshInvitesAndNotices() {
-        withContext(Dispatchers.IO) {
-            // Primero invitaciones (rápido); luego sync de afiliaciones
-            runCatching { ClinicService.listPendingInvitations(context) }
-            runCatching { ClinicService.syncAffiliationsOnEnter(context, force = true) }
-            runCatching { ClinicService.listPendingInvitations(context) }
+    fun scheduleInviteRefresh() {
+        inviteRefreshJob?.cancel()
+        inviteRefreshJob = scope.launch {
+            // Caché al instante (diálogo sin esperar red)
+            applyPendingUi()
+            val invites = withContext(Dispatchers.IO) {
+                runCatching { ClinicService.syncAffiliationsOnEnter(context, force = true) }
+                runCatching { ClinicService.listPendingInvitations(context) }
+                    .getOrElse { ClinicMembershipStorage.loadPendingInvites(context) }
+            }
+            applyPendingUi(invites)
         }
-        applyPendingUi()
     }
 
     LaunchedEffect(Unit) {
-        // Mostrar caché al instante si ya había invitación
-        applyPendingUi()
-        refreshInvitesAndNotices()
+        scheduleInviteRefresh()
     }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                scope.launch { refreshInvitesAndNotices() }
+                scheduleInviteRefresh()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            inviteRefreshJob?.cancel()
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     pendingInvite?.let { inv ->

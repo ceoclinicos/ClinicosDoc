@@ -184,14 +184,18 @@ object DoctorAuthService {
         return snapshot.documents.firstOrNull()
     }
 
-    private fun DocumentSnapshot.toDoctorProfile(): DoctorProfile = DoctorProfile(
-        nombre = getString("nombre").orEmpty(),
-        cedula = getString("cedula").orEmpty(),
-        mpps = getString("mpps").orEmpty(),
-        sexo = getString("sexo").orEmpty(),
-        especialidad = getString("especialidad").orEmpty(),
-        whatsapp = getString("whatsapp").orEmpty(),
-        correo = getString("correo").orEmpty().ifBlank { getString("email").orEmpty() },
-        nacionalidad = getString("nacionalidad").orEmpty().ifBlank { "Venezuela" },
-    )
+    private fun DocumentSnapshot.toDoctorProfile(): DoctorProfile {
+        val cedRaw = getString("cedulaNormalizada").orEmpty()
+            .ifBlank { getString("cedula").orEmpty() }
+        return DoctorProfile(
+            nombre = getString("nombre").orEmpty(),
+            cedula = CedulaNormalizer.normalize(cedRaw).ifBlank { cedRaw },
+            mpps = getString("mpps").orEmpty(),
+            sexo = getString("sexo").orEmpty(),
+            especialidad = getString("especialidad").orEmpty(),
+            whatsapp = getString("whatsapp").orEmpty(),
+            correo = getString("correo").orEmpty().ifBlank { getString("email").orEmpty() },
+            nacionalidad = getString("nacionalidad").orEmpty().ifBlank { "Venezuela" },
+        )
+    }
 }

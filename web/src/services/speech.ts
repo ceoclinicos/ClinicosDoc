@@ -44,7 +44,6 @@ function joinText(base: string, addition: string): string {
   if (lastWords && rightL.startsWith(lastWords)) {
     return left + right.slice(lastWords.length);
   }
-  // Evitar "palabra palabra" al final
   const leftWords = leftL.split(/\s+/);
   const rightWords = rightL.split(/\s+/);
   for (let n = Math.min(leftWords.length, rightWords.length, 6); n >= 1; n--) {
@@ -59,8 +58,8 @@ function joinText(base: string, addition: string): string {
 }
 
 /**
- * Dictado continuo sin repetir frases.
- * Usa resultIndex + join anti-duplicado; al reiniciar tras silencio no re-anexa texto viejo.
+ * Dictado continuo hasta que el caller invoque el stop.
+ * Solo se detiene con Detener o Procesar con IA (el caller llama al dispose).
  */
 export function startDictation(
   existingText: string,
@@ -82,17 +81,52 @@ export function startDictation(
   let committed = existingText.trim();
   let sessionPartial = "";
   let stopped = false;
-  let restarting = false;
+  let restartTimer: number | null = null;
+
+  const clearRestart = () => {
+    if (restartTimer != null) {
+      window.clearTimeout(restartTimer);
+      restartTimer = null;
+    }
+  };
 
   const emit = () => {
     onUpdate(joinText(committed, sessionPartial));
+  };
+
+  const kickStart = () => {
+    if (stopped) return;
+    try {
+      rec.start();
+    } catch {
+      // Ya activo o aún cerrando: reintentar
+      clearRestart();
+      restartTimer = window.setTimeout(() => {
+        restartTimer = null;
+        if (stopped) return;
+        try {
+          rec.start();
+        } catch {
+          /* noop */
+        }
+      }, 180);
+    }
+  };
+
+  const scheduleRestart = (ms = 50) => {
+    if (stopped) return;
+    clearRestart();
+    sessionPartial = "";
+    restartTimer = window.setTimeout(() => {
+      restartTimer = null;
+      kickStart();
+    }, ms);
   };
 
   if (committed) onUpdate(committed);
 
   rec.onresult = (ev: SpeechRecognitionEvent) => {
     let interim = "";
-    // Solo resultados nuevos desde resultIndex (evita re-procesar finales viejos)
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
       const result = ev.results[i];
       const piece = (result[0]?.transcript ?? "").trim();
@@ -109,63 +143,44 @@ export function startDictation(
   };
 
   rec.onerror = (ev: SpeechRecognitionErrorEvent) => {
-    // Silencio / abort: no marcar error; onend reinicia si sigue activo
+    if (stopped) return;
+    // Errores recuperables: no parar UI; onend o este schedule reinician
     if (
       ev.error === "aborted" ||
       ev.error === "no-speech" ||
-      ev.error === "network"
+      ev.error === "network" ||
+      ev.error === "audio-capture"
     ) {
+      scheduleRestart(80);
       return;
     }
     if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
       onError?.("Permiso de micrófono denegado");
       stopped = true;
+      clearRestart();
       return;
-    }
-    if (ev.error === "audio-capture") {
-      onError?.("Error de captura de audio");
     }
   };
 
   rec.onend = () => {
     if (stopped) return;
-    // Reinicio inmediato: el navegador corta tras pausas; nosotros seguimos
-    sessionPartial = "";
-    restarting = true;
-    window.setTimeout(() => {
-      if (stopped) return;
-      try {
-        rec.start();
-      } catch {
-        window.setTimeout(() => {
-          if (stopped) return;
-          try {
-            rec.start();
-          } catch {
-            /* ya arrancado */
-          }
-        }, 200);
-      }
-      restarting = false;
-    }, 40);
+    // El navegador corta tras pausas; reiniciar siempre
+    scheduleRestart(40);
   };
 
-  try {
-    rec.start();
-  } catch {
-    onError?.("No se pudo iniciar el micrófono");
-  }
+  kickStart();
 
   return () => {
     stopped = true;
+    clearRestart();
     try {
       rec.onend = null;
       rec.onresult = null;
+      rec.onerror = null;
       if (typeof rec.abort === "function") rec.abort();
       else rec.stop();
     } catch {
       /* noop */
     }
-    void restarting;
   };
 }
