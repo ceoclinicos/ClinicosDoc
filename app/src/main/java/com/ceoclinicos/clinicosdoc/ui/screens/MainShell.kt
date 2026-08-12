@@ -116,11 +116,11 @@ fun MainShell(
     pendingInvite?.let { inv ->
         AlertDialog(
             onDismissRequest = { /* debe aceptar o rechazar */ },
-            title = { Text("Invitación a un centro") },
+            title = { Text("Nueva afiliación a un centro") },
             text = {
                 Text(
-                    "La clínica «${inv.clinicName}» te invitó a su equipo. " +
-                        "¿Aceptas para usar sus moldes institucionales?",
+                    "La clínica «${inv.clinicName}» te agregó a su equipo. " +
+                        "Si aceptas, formarás parte de ese centro y se descargarán sus plantillas en tu app.",
                 )
             },
             confirmButton = {
@@ -133,12 +133,10 @@ fun MainShell(
                                 withContext(Dispatchers.IO) {
                                     ClinicService.acceptInvitation(context, inv.clinicId)
                                 }
-                                pendingInvite =
-                                    ClinicMembershipStorage.loadPendingInvites(context).firstOrNull()
-                                if (pendingInvite == null) {
-                                    affiliationNotice =
-                                        ClinicMembershipStorage.loadPendingNotices(context).firstOrNull()
+                                val rest = withContext(Dispatchers.IO) {
+                                    ClinicService.listPendingInvitations(context)
                                 }
+                                applyPendingUi(rest)
                             } catch (_: Exception) {
                                 // se queda el diálogo; reintentar
                             } finally {
@@ -148,7 +146,7 @@ fun MainShell(
                     },
                     enabled = !inviteBusy,
                 ) {
-                    Text(if (inviteBusy) "…" else "Aceptar")
+                    Text(if (inviteBusy) "Descargando…" else "Aceptar")
                 }
             },
             dismissButton = {

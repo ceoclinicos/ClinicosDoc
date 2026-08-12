@@ -4,22 +4,7 @@ const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
 const { isInviteExpired, deletePendingInvitePair } = require("./_lib/invite-expiry");
-
-async function requireMedicoAuth(req) {
-  const header = String(req.headers.authorization || "");
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
-    throw Object.assign(new Error("Sesión de médico requerida. Vuelva a iniciar sesión."), {
-      status: 401,
-    });
-  }
-  const admin = getAdmin();
-  const decoded = await admin.auth().verifyIdToken(match[1]);
-  if (decoded.role !== "medico") {
-    throw Object.assign(new Error("Solo un médico puede consultar centros"), { status: 403 });
-  }
-  return { admin, uid: decoded.uid, decoded };
-}
+const { requireMedicoAuth } = require("./_lib/require-medico");
 
 async function resolveDoctorCedula(db, uid, decoded, body) {
   const fromBody = normalizeCedula(body.doctorCedula || "");
@@ -242,7 +227,7 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const { admin, uid, decoded } = await requireMedicoAuth(req);
+    const { admin, uid, decoded } = await requireMedicoAuth(req, getAdmin());
     const db = admin.firestore();
     const body = req.method === "POST" ? parseBody(req) : {};
     const forceHeal = Boolean(body.forceHeal);

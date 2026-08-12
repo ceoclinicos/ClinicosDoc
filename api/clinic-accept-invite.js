@@ -4,22 +4,7 @@ const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
 const { isInviteExpired, deletePendingInvitePair } = require("./_lib/invite-expiry");
-
-async function requireMedicoAuth(req) {
-  const header = String(req.headers.authorization || "");
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match) {
-    throw Object.assign(new Error("Sesión de médico requerida. Vuelva a iniciar sesión."), {
-      status: 401,
-    });
-  }
-  const admin = getAdmin();
-  const decoded = await admin.auth().verifyIdToken(match[1]);
-  if (decoded.role !== "medico") {
-    throw Object.assign(new Error("Solo un médico puede aceptar invitaciones"), { status: 403 });
-  }
-  return { admin, uid: decoded.uid, decoded };
-}
+const { requireMedicoAuth } = require("./_lib/require-medico");
 
 module.exports = async function handler(req, res) {
   applyCors(res);
@@ -27,7 +12,7 @@ module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Solo POST" });
 
   try {
-    const { admin, uid, decoded } = await requireMedicoAuth(req);
+    const { admin, uid, decoded } = await requireMedicoAuth(req, getAdmin());
     const db = admin.firestore();
     const body = parseBody(req);
     const action = String(body.action || "accept").toLowerCase();
@@ -77,6 +62,13 @@ module.exports = async function handler(req, res) {
         invData.doctorCedula || doctorCedula,
         invData.cloudUserId || uid,
       );
+      await db
+        .collection("clinicosdoc_user")
+        .doc(uid)
+        .collection("clinic_notices")
+        .doc(clinicId)
+        .delete()
+        .catch(() => {});
       return res.status(200).json({ ok: true, status: "rejected" });
     }
 
@@ -131,6 +123,13 @@ module.exports = async function handler(req, res) {
 
     await invRef.set({ status: "accepted" }, { merge: true });
     await deletePendingInvitePair(db, clinicId, memberCedula, inv.cloudUserId || uid);
+    await db
+      .collection("clinicosdoc_user")
+      .doc(uid)
+      .collection("clinic_notices")
+      .doc(clinicId)
+      .delete()
+      .catch(() => {});
 
     return res.status(200).json({
       ok: true,

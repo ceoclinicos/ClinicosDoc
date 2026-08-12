@@ -146,11 +146,9 @@ module.exports = async function handler(req, res) {
     await pendingRef.set(invitation);
     // Guardar bajo cédula (todas las variantes) y bajo cloudUserId si existe
     const inviteKeys = [
-      ...new Set([
-        doctorCedula,
-        ...cedulaLookupKeys(doctorCedula),
-        cloud?.id || "",
-      ].filter(Boolean)),
+      ...new Set(
+        [doctorCedula, ...cedulaLookupKeys(doctorCedula), cloud?.id || ""].filter(Boolean),
+      ),
     ];
     for (const key of inviteKeys) {
       await db
@@ -159,6 +157,26 @@ module.exports = async function handler(req, res) {
         .collection("pending")
         .doc(clinicId)
         .set(invitation);
+    }
+    // Aviso en la cuenta cloud del médico (lo ve al sync al abrir la app)
+    if (cloud?.id) {
+      await db
+        .collection("clinicosdoc_user")
+        .doc(cloud.id)
+        .collection("clinic_notices")
+        .doc(clinicId)
+        .set(
+          {
+            type: "invite",
+            clinicId,
+            clinicName: invitation.clinicName,
+            invitedAt: invitation.invitedAt,
+            expiresAt: invitation.expiresAt,
+            status: "pending",
+            message: `La clínica «${invitation.clinicName}» te invitó a su equipo.`,
+          },
+          { merge: true },
+        );
     }
 
     return res.status(200).json(invitation);

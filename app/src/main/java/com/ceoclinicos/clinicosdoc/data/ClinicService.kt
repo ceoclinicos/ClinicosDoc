@@ -114,8 +114,8 @@ object ClinicService {
         ClinicCatalogStorage.retainClinics(context, memberships.map { it.clinicId }.toSet())
         for (m in memberships) {
             runCatching {
-                val tpls = listTemplates(context, m.clinicId, documentType = null)
-                val hdrs = listHeaders(context, m.clinicId)
+                val tpls = listTemplates(context, m.clinicId, documentType = null, forceRefresh = true)
+                val hdrs = listHeaders(context, m.clinicId, forceRefresh = true)
                 ClinicCatalogStorage.saveTemplates(context, m.clinicId, tpls)
                 ClinicCatalogStorage.saveHeaders(context, m.clinicId, hdrs)
             }
@@ -499,10 +499,11 @@ object ClinicService {
         context: Context,
         clinicId: String,
         documentType: DocumentType? = null,
+        forceRefresh: Boolean = false,
     ): List<DocumentTemplate> {
         val cached = ClinicCatalogStorage.loadTemplates(context, clinicId, documentType)
-        // Prefetch al abrir la app: no volver a pegarle a la API en cada Redactar
-        if (cached.isNotEmpty()) return cached
+        // En Redactar usa caché; al abrir la app (forceRefresh) pide actualizaciones
+        if (!forceRefresh && cached.isNotEmpty()) return cached
         return runCatching {
             val idToken = idTokenOrThrow()
             withContext(Dispatchers.IO) {
@@ -608,9 +609,13 @@ object ClinicService {
         }
     }
 
-    suspend fun listHeaders(context: Context, clinicId: String): List<DocumentHeader> {
+    suspend fun listHeaders(
+        context: Context,
+        clinicId: String,
+        forceRefresh: Boolean = false,
+    ): List<DocumentHeader> {
         val cached = ClinicCatalogStorage.loadHeaders(context, clinicId)
-        if (cached.isNotEmpty()) return cached
+        if (!forceRefresh && cached.isNotEmpty()) return cached
         return runCatching {
             val idToken = idTokenOrThrow()
             withContext(Dispatchers.IO) {
