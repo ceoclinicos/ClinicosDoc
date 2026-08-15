@@ -1688,3 +1688,64 @@ textarea[name="enfermedadEjemplo"] {
 .contact-row {
   margin-bottom: 0.75rem;
 }
+
+/* Tabla horizontal — panel clínica */
+.clinic-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin: 0.75rem 0 1.25rem;
+  border: 1px solid var(--border, #c5ced8);
+  border-radius: 12px;
+  background: var(--card, #fff);
+}
+
+.clinic-table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.clinic-table th,
+.clinic-table td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.clinic-table th {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted, #64748b);
+  background: color-mix(in srgb, var(--teal) 6%, #fff);
+  border-bottom: 1px solid var(--border, #c5ced8);
+}
+
+.clinic-table td {
+  border-bottom: 1px solid color-mix(in srgb, var(--border, #c5ced8) 70%, transparent);
+}
+
+.clinic-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.clinic-table-row {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.clinic-table-row:hover,
+.clinic-table-row:focus {
+  background: color-mix(in srgb, var(--teal) 8%, #fff);
+  outline: none;
+}
+
+.clinic-table-action {
+  color: var(--teal);
+  font-weight: 600;
+  text-align: right;
+}
+

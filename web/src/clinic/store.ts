@@ -11,6 +11,11 @@ import { getDb } from "../registro/firebase";
 import { authLogin } from "../services/auth-login";
 import { normalizeCedula } from "../services/cedula";
 import { FirestorePaths, type ClinicalDocument, type DocumentHeader, type DocumentTemplate } from "../shared/models";
+import {
+  clinicTemplateTypes,
+  makeDefaultClinicHeader,
+  makeDefaultClinicTemplates,
+} from "./default-catalog";
 import type {
   ClinicDoctorInvitation,
   ClinicMember,
@@ -153,16 +158,89 @@ export async function registerClinic(input: {
   };
 }
 
+/** Siembra plantillas/encabezado del médico si el centro aún no los tiene. */
+export async function ensureClinicDefaultCatalog(
+  clinicId: string,
+  clinicName = "Centro de salud",
+): Promise<{ templates: DocumentTemplate[]; headers: DocumentHeader[] }> {
+  const [tplSnap, hdrSnap, clinic] = await Promise.all([
+    getDocs(templatesCol(clinicId)),
+    getDocs(headersCol(clinicId)),
+    getClinic(clinicId),
+  ]);
+  const name = clinic?.nombre || clinicName;
+  const existingTypes = new Set(
+    tplSnap.docs.map((d) => String(d.data().documentType || "")).filter(Boolean),
+  );
+  const needed = clinicTemplateTypes().filter((t) => !existingTypes.has(t));
+  if (needed.length) {
+    const defaults = makeDefaultClinicTemplates().filter((t) => needed.includes(t.documentType));
+    await Promise.all(defaults.map((t) => upsertClinicTemplate(clinicId, t)));
+  }
+  if (hdrSnap.empty) {
+    await upsertClinicHeader(clinicId, makeDefaultClinicHeader(name));
+  }
+  return {
+    templates: await listClinicTemplatesRaw(clinicId),
+    headers: await listClinicHeadersRaw(clinicId),
+  };
+}
+
+function mapTemplateDoc(d: { id: string; data: () => DocumentData }): DocumentTemplate {
+  const data = d.data();
+  return {
+    id: String(data.id ?? d.id),
+    name: String(data.name ?? "Plantilla"),
+    documentType: data.documentType,
+    sections: Array.isArray(data.sections) ? data.sections.map(String) : [],
+    isDefault: Boolean(data.isDefault),
+    enabledPhysicalExamSystemIds: Array.isArray(data.enabledPhysicalExamSystemIds)
+      ? data.enabledPhysicalExamSystemIds.map(String)
+      : [],
+    enfermedadActualEjemplo: data.enfermedadActualEjemplo
+      ? String(data.enfermedadActualEjemplo)
+      : undefined,
+    sectionDefaultTexts:
+      data.sectionDefaultTexts && typeof data.sectionDefaultTexts === "object"
+        ? (data.sectionDefaultTexts as Record<string, string>)
+        : undefined,
+  } as DocumentTemplate;
+}
+
+async function listClinicTemplatesRaw(clinicId: string): Promise<DocumentTemplate[]> {
+  const snap = await getDocs(templatesCol(clinicId));
+  return snap.docs.map((d) => mapTemplateDoc(d));
+}
+
+async function listClinicHeadersRaw(clinicId: string): Promise<DocumentHeader[]> {
+  const snap = await getDocs(headersCol(clinicId));
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: String(data.id ?? d.id),
+      name: String(data.name ?? "Encabezado"),
+      logoBase64: data.logoBase64 ? String(data.logoBase64) : undefined,
+      doctorName: data.doctorName ? String(data.doctorName) : undefined,
+      subtitle: data.subtitle ? String(data.subtitle) : undefined,
+      description: data.description ? String(data.description) : undefined,
+      isDefault: Boolean(data.isDefault),
+    } as DocumentHeader;
+  });
+}
+
 export async function loginClinic(rif: string, pin: string): Promise<ClinicSession> {
   assertPin4(pin);
   const auth = await authLogin({ tipo: "clinica", cedula: rif, pin });
-  return {
+  const session: ClinicSession = {
     clinicId: auth.clinicId || auth.uid,
     nombre: auth.nombre || "",
     rif: auth.rif || normalizeRif(rif),
     correo: auth.correo || "",
     inviteCode: auth.inviteCode || "",
   };
+  // Clínicas ya creadas sin moldes: completar catálogo al entrar
+  await ensureClinicDefaultCatalog(session.clinicId, session.nombre).catch(() => undefined);
+  return session;
 }
 
 export async function regenerateInviteCode(clinicId: string): Promise<string> {
@@ -545,6 +623,7 @@ export async function listMembershipsForDoctor(
 }
 
 export async function listClinicTemplates(clinicId: string): Promise<DocumentTemplate[]> {
+  await ensureClinicDefaultCatalog(clinicId).catch(() => undefined);
   try {
     const { getIdToken } = await import("../services/firebase-auth");
     const token = await getIdToken(true);
@@ -563,33 +642,14 @@ export async function listClinicTemplates(clinicId: string): Promise<DocumentTem
       });
       if (res.ok) {
         const data = (await res.json()) as { templates?: DocumentTemplate[] };
-        return (data.templates || []) as DocumentTemplate[];
+        const list = (data.templates || []) as DocumentTemplate[];
+        if (list.length) return list;
       }
     }
   } catch {
     /* fallback */
   }
-  const snap = await getDocs(templatesCol(clinicId));
-  return snap.docs.map((d) => {
-    const data = d.data();
-    return {
-      id: String(data.id ?? d.id),
-      name: String(data.name ?? "Plantilla"),
-      documentType: data.documentType,
-      sections: Array.isArray(data.sections) ? data.sections.map(String) : [],
-      isDefault: Boolean(data.isDefault),
-      enabledPhysicalExamSystemIds: Array.isArray(data.enabledPhysicalExamSystemIds)
-        ? data.enabledPhysicalExamSystemIds.map(String)
-        : [],
-      enfermedadActualEjemplo: data.enfermedadActualEjemplo
-        ? String(data.enfermedadActualEjemplo)
-        : undefined,
-      sectionDefaultTexts:
-        data.sectionDefaultTexts && typeof data.sectionDefaultTexts === "object"
-          ? (data.sectionDefaultTexts as Record<string, string>)
-          : undefined,
-    } as DocumentTemplate;
-  });
+  return listClinicTemplatesRaw(clinicId);
 }
 
 export async function upsertClinicTemplate(
@@ -608,6 +668,7 @@ export async function deleteClinicTemplate(clinicId: string, templateId: string)
 }
 
 export async function listClinicHeaders(clinicId: string): Promise<DocumentHeader[]> {
+  await ensureClinicDefaultCatalog(clinicId).catch(() => undefined);
   try {
     const { getIdToken } = await import("../services/firebase-auth");
     const token = await getIdToken(true);
@@ -626,31 +687,19 @@ export async function listClinicHeaders(clinicId: string): Promise<DocumentHeade
       });
       if (res.ok) {
         const data = (await res.json()) as { headers?: DocumentHeader[] };
-        return (data.headers || []) as DocumentHeader[];
+        const list = (data.headers || []) as DocumentHeader[];
+        if (list.length) return list;
       }
     }
   } catch {
     /* fallback */
   }
-  const snap = await getDocs(headersCol(clinicId));
-  return snap.docs.map((d) => {
-    const data = d.data();
-    return {
-      id: String(data.id ?? d.id),
-      name: String(data.name ?? "Encabezado"),
-      logoPath: data.logoPath ? String(data.logoPath) : undefined,
-      logoBase64: data.logoBase64 ? String(data.logoBase64) : undefined,
-      doctorName: data.doctorName ? String(data.doctorName) : "",
-      subtitle: data.subtitle ? String(data.subtitle) : "",
-      description: data.description ? String(data.description) : "",
-      isDefault: Boolean(data.isDefault),
-    } as DocumentHeader;
-  });
+  return listClinicHeadersRaw(clinicId);
 }
 
 export async function upsertClinicHeader(clinicId: string, header: DocumentHeader): Promise<DocumentHeader> {
   if (header.isDefault) {
-    const all = await listClinicHeaders(clinicId);
+    const all = await listClinicHeadersRaw(clinicId);
     await Promise.all(
       all
         .filter((h) => h.id !== header.id && h.isDefault)

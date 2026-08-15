@@ -225,6 +225,10 @@ async function registerClinica(db, admin, body) {
     createdAt: now,
   });
 
+  // Plantillas + encabezado iguales a los del médico (el centro luego edita)
+  const { ensureClinicDefaultCatalog } = require("./_lib/clinic-defaults");
+  await ensureClinicDefaultCatalog(db, id, nombre);
+
   const token = await mintAuthToken(admin, id, { role: "clinica", rif });
   return {
     token,

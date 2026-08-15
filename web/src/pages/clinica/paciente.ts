@@ -24,7 +24,20 @@ registerRoute({
       <p class="muted"><a href="#/clinica/panel">← Pacientes</a></p>
       <p class="lead">C.I. ${escapeHtml(cedula)} · solo informes de <strong>${escapeHtml(session?.nombre ?? "este centro")}</strong></p>
       <div id="status" class="muted">Cargando…</div>
-      <ul class="list" id="docs-list"></ul>
+      <div class="clinic-table-wrap" id="docs-wrap" hidden>
+        <table class="clinic-table" id="docs-table">
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Fecha</th>
+              <th>Médico</th>
+              <th>Plantilla</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="docs-body"></tbody>
+        </table>
+      </div>
       <dialog id="doc-dialog" class="clinic-doc-dialog">
         <form method="dialog" class="form" style="max-width:min(96vw,48rem)">
           <h2 id="doc-title">Informe</h2>
@@ -42,7 +55,8 @@ registerRoute({
     );
 
     const status = el.querySelector("#status") as HTMLElement;
-    const list = el.querySelector("#docs-list") as HTMLElement;
+    const wrap = el.querySelector("#docs-wrap") as HTMLElement;
+    const body = el.querySelector("#docs-body") as HTMLElement;
     const dialog = el.querySelector("#doc-dialog") as HTMLDialogElement;
     const preview = el.querySelector("#doc-preview") as HTMLElement;
     let currentDoc: ClinicalDocument | null = null;
@@ -100,25 +114,33 @@ registerRoute({
         const h1 = el.querySelector(".page-header h1");
         if (h1) h1.textContent = nombre;
 
-        list.innerHTML = docs
+        wrap.hidden = false;
+        body.innerHTML = docs
           .map(
             (d) => `
-          <li class="list-item list-item-action" data-id="${d.id}">
-            <div>
-              <strong>${DocumentTypeLabels[d.type] ?? d.type}</strong>
-              <p class="muted">${new Date(d.createdAt).toLocaleString("es")}${d.doctorNombre ? ` · ${escapeHtml(d.doctorNombre)}` : ""}</p>
-              <p class="muted">${escapeHtml(d.templateName || "Sin plantilla")}</p>
-            </div>
-            <span class="muted">Ver →</span>
-          </li>`,
+          <tr class="clinic-table-row" data-id="${d.id}" tabindex="0" role="link">
+            <td><strong>${DocumentTypeLabels[d.type] ?? d.type}</strong></td>
+            <td>${new Date(d.createdAt).toLocaleString("es")}</td>
+            <td>${escapeHtml(d.doctorNombre || "—")}</td>
+            <td>${escapeHtml(d.templateName || "Sin plantilla")}</td>
+            <td class="clinic-table-action">Ver →</td>
+          </tr>`,
           )
           .join("");
 
-        list.querySelectorAll("[data-id]").forEach((node) => {
-          node.addEventListener("click", () => {
+        body.querySelectorAll("[data-id]").forEach((node) => {
+          const open = () => {
             const id = node.getAttribute("data-id");
             const doc = docs.find((x) => x.id === id);
             if (doc) showDoc(doc);
+          };
+          node.addEventListener("click", open);
+          node.addEventListener("keydown", (ev) => {
+            const e = ev as KeyboardEvent;
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              open();
+            }
           });
         });
       } catch (err) {

@@ -4,6 +4,7 @@ const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
 const { requireMedicoAuth } = require("./_lib/require-medico");
+const { ensureClinicDefaultCatalog } = require("./_lib/clinic-defaults");
 
 async function assertClinicAccess(db, uid, clinicId, cedula) {
   const memberSnap = await db
@@ -64,50 +65,14 @@ module.exports = async function handler(req, res) {
     }
 
     const typeFilter = body.documentType ? String(body.documentType) : "";
-    const tplSnap = await db
-      .collection("clinicosdoc_clinics")
-      .doc(clinicId)
-      .collection("templates")
-      .get();
-    let templates = tplSnap.docs.map((d) => {
-      const data = d.data() || {};
-      return {
-        id: String(data.id || d.id),
-        name: String(data.name || "Plantilla"),
-        documentType: data.documentType,
-        sections: Array.isArray(data.sections) ? data.sections.map(String) : [],
-        isDefault: Boolean(data.isDefault),
-        enabledPhysicalExamSystemIds: Array.isArray(data.enabledPhysicalExamSystemIds)
-          ? data.enabledPhysicalExamSystemIds.map(String)
-          : [],
-        sectionDefaultTexts:
-          data.sectionDefaultTexts && typeof data.sectionDefaultTexts === "object"
-            ? data.sectionDefaultTexts
-            : {},
-        enfermedadActualEjemplo: String(data.enfermedadActualEjemplo || ""),
-      };
-    });
+    const clinicSnap = await db.collection("clinicosdoc_clinics").doc(clinicId).get();
+    const clinicName = String(clinicSnap.data()?.nombre || "Centro");
+    const ensured = await ensureClinicDefaultCatalog(db, clinicId, clinicName);
+    let templates = ensured.templates;
     if (typeFilter) {
       templates = templates.filter((t) => String(t.documentType) === typeFilter);
     }
-
-    const hdrSnap = await db
-      .collection("clinicosdoc_clinics")
-      .doc(clinicId)
-      .collection("headers")
-      .get();
-    const headers = hdrSnap.docs.map((d) => {
-      const data = d.data() || {};
-      return {
-        id: String(data.id || d.id),
-        name: String(data.name || "Encabezado"),
-        logoBase64: data.logoBase64 || null,
-        doctorName: String(data.doctorName || ""),
-        subtitle: String(data.subtitle || ""),
-        description: String(data.description || ""),
-        isDefault: Boolean(data.isDefault),
-      };
-    });
+    const headers = ensured.headers;
 
     return res.status(200).json({ templates, headers });
   } catch (err) {

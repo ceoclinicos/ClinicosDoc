@@ -22,37 +22,62 @@ registerRoute({
         <input type="search" id="clinic-patient-q" placeholder="Nombre o cédula" autocomplete="off" />
       </label>
       <div id="clinic-patients-status" class="muted">Cargando…</div>
-      <ul class="list" id="clinic-patients-list"></ul>
+      <div class="clinic-table-wrap" id="clinic-patients-wrap" hidden>
+        <table class="clinic-table" id="clinic-patients-table">
+          <thead>
+            <tr>
+              <th>Paciente</th>
+              <th>Cédula</th>
+              <th>Informes</th>
+              <th>Último informe</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="clinic-patients-body"></tbody>
+        </table>
+      </div>
       `,
     );
 
     const status = el.querySelector("#clinic-patients-status") as HTMLElement;
-    const list = el.querySelector("#clinic-patients-list") as HTMLElement;
+    const wrap = el.querySelector("#clinic-patients-wrap") as HTMLElement;
+    const body = el.querySelector("#clinic-patients-body") as HTMLElement;
     const search = el.querySelector("#clinic-patient-q") as HTMLInputElement;
     let allRows: ClinicPatientRow[] = [];
 
     function renderRows(rows: ClinicPatientRow[]): void {
+      wrap.hidden = false;
       if (!rows.length) {
-        list.innerHTML = `<li class="list-item muted">Sin coincidencias</li>`;
+        body.innerHTML = `
+          <tr>
+            <td colspan="5" class="muted">Sin coincidencias</td>
+          </tr>`;
         return;
       }
-      list.innerHTML = rows
+      body.innerHTML = rows
         .map(
           (r) => `
-          <li class="list-item list-item-action" data-cedula="${encodeURIComponent(r.patientCedula)}">
-            <div>
-              <strong>${escapeHtml(r.patientNombre)}</strong>
-              <p class="muted">C.I. ${escapeHtml(r.patientCedula)} · ${r.documentCount} informe(s)</p>
-              <p class="muted">Último: ${new Date(r.lastDocumentAt).toLocaleString("es")}</p>
-            </div>
-            <span class="muted">Ver →</span>
-          </li>`,
+          <tr class="clinic-table-row" data-cedula="${encodeURIComponent(r.patientCedula)}" tabindex="0" role="link">
+            <td><strong>${escapeHtml(r.patientNombre)}</strong></td>
+            <td>${escapeHtml(r.patientCedula)}</td>
+            <td>${r.documentCount}</td>
+            <td>${formatDate(r.lastDocumentAt)}</td>
+            <td class="clinic-table-action">Ver →</td>
+          </tr>`,
         )
         .join("");
-      list.querySelectorAll("[data-cedula]").forEach((node) => {
-        node.addEventListener("click", () => {
+      body.querySelectorAll("[data-cedula]").forEach((node) => {
+        const open = () => {
           const ced = decodeURIComponent(node.getAttribute("data-cedula") || "");
           if (ced) navigate(`/clinica/paciente/${encodeURIComponent(ced)}`);
+        };
+        node.addEventListener("click", open);
+        node.addEventListener("keydown", (ev) => {
+          const e = ev as KeyboardEvent;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            open();
+          }
         });
       });
     }
@@ -80,6 +105,7 @@ registerRoute({
         allRows = await listClinicPatientRows(session!.clinicId);
         if (!allRows.length) {
           search.hidden = true;
+          wrap.hidden = true;
           status.innerHTML = emptyState(
             "Aún no hay pacientes. Cuando un médico vinculado cree un informe con el molde de este centro, aparecerá aquí.",
             "Invitar médicos",
@@ -98,6 +124,18 @@ registerRoute({
     return el;
   },
 });
+
+function formatDate(iso: string): string {
+  const d = Date.parse(iso);
+  if (Number.isNaN(d)) return "—";
+  return new Date(d).toLocaleString("es", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
