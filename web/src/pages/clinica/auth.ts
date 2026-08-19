@@ -61,11 +61,35 @@ registerRoute({
 
     const body = el.querySelector("#clinic-auth-body") as HTMLElement;
 
+    function sanitizeAccountName(value: string): string {
+      return value.replace(/\s+/g, "");
+    }
+
+    function sanitizeDigits(value: string): string {
+      return value.replace(/\D+/g, "");
+    }
+
+    function bindAccountNameInputs(): void {
+      body.querySelectorAll<HTMLInputElement>('input[name="accountName"]').forEach((input) => {
+        input.addEventListener("input", () => {
+          const next = sanitizeAccountName(input.value);
+          if (next !== input.value) input.value = next;
+        });
+      });
+      body.querySelectorAll<HTMLInputElement>('input[name="rif"]').forEach((input) => {
+        input.addEventListener("input", () => {
+          const next = sanitizeDigits(input.value);
+          if (next !== input.value) input.value = next;
+        });
+      });
+    }
+
     function bindTabs(): void {
       body.querySelectorAll("[data-tab]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const tab = btn.getAttribute("data-tab");
           body.innerHTML = tab === "registro" ? registerForm() : loginForm();
+          bindAccountNameInputs();
           bindForms();
           bindTabs();
         });
@@ -75,7 +99,12 @@ registerRoute({
     function bindForms(): void {
       body.querySelector("#clinic-login")?.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const fd = new FormData(e.target as HTMLFormElement);
+        const form = e.target as HTMLFormElement;
+        const accountNameInput = form.elements.namedItem("accountName") as HTMLInputElement | null;
+        if (accountNameInput) accountNameInput.value = sanitizeAccountName(accountNameInput.value);
+        const rifInput = form.elements.namedItem("rif") as HTMLInputElement | null;
+        if (rifInput) rifInput.value = sanitizeDigits(rifInput.value);
+        const fd = new FormData(form);
         const btn = (e.target as HTMLFormElement).querySelector("button[type=submit]") as HTMLButtonElement;
         btn.disabled = true;
         try {
@@ -92,7 +121,12 @@ registerRoute({
 
       body.querySelector("#clinic-registro")?.addEventListener("submit", async (e) => {
         e.preventDefault();
-        const fd = new FormData(e.target as HTMLFormElement);
+        const form = e.target as HTMLFormElement;
+        const accountNameInput = form.elements.namedItem("accountName") as HTMLInputElement | null;
+        if (accountNameInput) accountNameInput.value = sanitizeAccountName(accountNameInput.value);
+        const rifInput = form.elements.namedItem("rif") as HTMLInputElement | null;
+        if (rifInput) rifInput.value = sanitizeDigits(rifInput.value);
+        const fd = new FormData(form);
         const btn = (e.target as HTMLFormElement).querySelector("button[type=submit]") as HTMLButtonElement;
         btn.disabled = true;
         try {
@@ -115,6 +149,7 @@ registerRoute({
       });
     }
 
+    bindAccountNameInputs();
     bindForms();
     bindTabs();
     bindNavButtons(el);

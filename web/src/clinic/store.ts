@@ -139,17 +139,19 @@ export async function registerClinic(input: {
   pin: string;
 }): Promise<ClinicSession> {
   assertPin4(input.pin);
+  const accountName = input.accountName.trim().replace(/\s+/g, "");
   const rif = normalizeRif(input.rif);
   if (rif.length < 5) throw new Error("Indique un RIF o código de centro válido");
   const correo = input.correo.trim();
   if (!correo.includes("@")) throw new Error("Correo electrónico requerido");
   if (!input.nombre.trim()) throw new Error("Nombre del centro requerido");
+  if (accountName.length < 4) throw new Error("Nombre de la cuenta inválido");
 
   const { authRegister } = await import("../services/auth-register");
   const data = await authRegister({
     tipo: "clinica",
     nombre: input.nombre.trim(),
-    accountName: input.accountName.trim(),
+    accountName,
     rif,
     correo,
     direccion: (input.direccion ?? "").trim(),
@@ -159,7 +161,7 @@ export async function registerClinic(input: {
   return {
     clinicId: data.clinicId || data.uid,
     nombre: data.nombre || input.nombre.trim(),
-    accountName: data.accountName || input.accountName.trim(),
+    accountName: data.accountName || accountName,
     rif: data.rif || rif,
     correo: data.correo || correo,
     inviteCode: data.inviteCode || "",
@@ -238,11 +240,13 @@ async function listClinicHeadersRaw(clinicId: string): Promise<DocumentHeader[]>
 
 export async function loginClinic(accountName: string, pin: string): Promise<ClinicSession> {
   assertPin4(pin);
-  const auth = await authLogin({ tipo: "clinica", cedula: accountName.trim(), pin });
+  const loginName = accountName.trim().replace(/\s+/g, "");
+  if (loginName.length < 4) throw new Error("Nombre de la cuenta inválido");
+  const auth = await authLogin({ tipo: "clinica", cedula: loginName, pin });
   const session: ClinicSession = {
     clinicId: auth.clinicId || auth.uid,
     nombre: auth.nombre || "",
-    accountName: auth.accountName || accountName.trim().replace(/\s+/g, ""),
+    accountName: auth.accountName || loginName,
     rif: auth.rif || "",
     correo: auth.correo || "",
     inviteCode: auth.inviteCode || "",

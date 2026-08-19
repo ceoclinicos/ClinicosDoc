@@ -40,6 +40,10 @@ registerRoute({
     const idWrap = el.querySelector("#id-field-wrap") as HTMLElement;
     const lead = el.querySelector("#olvide-lead") as HTMLElement;
 
+    function sanitizeDigits(value: string): string {
+      return value.replace(/\D+/g, "");
+    }
+
     function syncTipoUi(): void {
       const isClinic = tipoSelect.value === "clinica";
       if (isClinic) {
@@ -61,6 +65,13 @@ registerRoute({
             </span>
           </label>`;
       }
+      if (isClinic) {
+        const input = idWrap.querySelector("#id-input") as HTMLInputElement | null;
+        input?.addEventListener("input", () => {
+          const next = sanitizeDigits(input.value);
+          if (next !== input.value) input.value = next;
+        });
+      }
     }
 
     tipoSelect.addEventListener("change", syncTipoUi);
@@ -75,9 +86,13 @@ registerRoute({
       msg.innerHTML = `<p class="muted">Enviando…</p>`;
       try {
         const tipo = String(fd.get("tipo") || "paciente");
+        const clinicIdInput = el.querySelector("#id-input") as HTMLInputElement | null;
+        if (tipo === "clinica" && clinicIdInput) {
+          clinicIdInput.value = sanitizeDigits(clinicIdInput.value);
+        }
         const id =
           tipo === "clinica"
-            ? String(fd.get("cedula") || "")
+            ? String(clinicIdInput?.value || fd.get("cedula") || "")
             : composeCedula(String(fd.get("cedulaLetter") || "V"), String(fd.get("cedula") || ""));
         const text = await requestPinReset(id, tipo);
         msg.innerHTML = `<p class="status-badge status-ok">${text}</p>`;
