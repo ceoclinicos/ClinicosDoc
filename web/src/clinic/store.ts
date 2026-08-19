@@ -393,21 +393,84 @@ async function purgeExpiredInvite(
   }
 }
 
+async function clinicTeamApi<T>(
+  clinicId: string,
+  action: string,
+  extra: Record<string, unknown> = {},
+): Promise<T> {
+  const { getIdToken } = await import("../services/firebase-auth");
+  const token = await getIdToken(true);
+  if (!token) {
+    throw new Error("Sesión de centro vencida. Cierre sesión e ingrese de nuevo.");
+  }
+  const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(
+    /\/$/,
+    "",
+  );
+  const res = await fetch(`${API_BASE}/api/clinic-team`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ clinicId, action, ...extra }),
+  });
+  const raw = await res.text();
+  let data: T & { error?: string } = {} as T & { error?: string };
+  try {
+    data = raw ? JSON.parse(raw) : data;
+  } catch {
+    /* ignore */
+  }
+  if (!res.ok) {
+    throw new Error(data.error || "No se pudo cargar el equipo");
+  }
+  return data;
+}
+
 export async function listPendingInvitationsForClinic(
   clinicId: string,
 ): Promise<ClinicDoctorInvitation[]> {
-  const snap = await getDocs(invitationsCol(clinicId));
-  const out: ClinicDoctorInvitation[] = [];
-  for (const d of snap.docs) {
-    const inv = d.data() as ClinicDoctorInvitation;
-    if (inv.status !== "pending") continue;
-    if (isInviteExpired(inv)) {
-      await purgeExpiredInvite(clinicId, inv.doctorCedula || d.id, inv.cloudUserId);
-      continue;
+  try {
+    const data = await clinicTeamApi<{ pending?: ClinicDoctorInvitation[] }>(
+      clinicId,
+      "list-pending",
+    );
+    return (data.pending || []).sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
+  } catch {
+    // Fallback Firestore (clínica autenticada)
+    const snap = await getDocs(invitationsCol(clinicId));
+    const out: ClinicDoctorInvitation[] = [];
+    for (const d of snap.docs) {
+      const inv = d.data() as ClinicDoctorInvitation;
+      if ((inv.status || "pending") !== "pending") continue;
+      if (isInviteExpired(inv)) {
+        await purgeExpiredInvite(clinicId, inv.doctorCedula || d.id, inv.cloudUserId);
+        continue;
+      }
+      out.push(inv);
     }
-    out.push(inv);
+    return out.sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
   }
-  return out.sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
+}
+
+export async function listClinicMembers(clinicId: string): Promise<ClinicMember[]> {
+  try {
+    const data = await clinicTeamApi<{ members?: ClinicMember[] }>(clinicId, "list-members");
+    return data.members || [];
+  } catch {
+    const snap = await getDocs(membersCol(clinicId));
+    return snap.docs
+      .map((d) => d.data() as ClinicMember)
+      .sort((a, b) => a.doctorNombre.localeCompare(b.doctorNombre));
+  }
+}
+
+export async function cancelClinicInvitation(
+  clinicId: string,
+  doctorCedula: string,
+): Promise<void> {
+  await clinicTeamApi(clinicId, "cancel", { doctorCedula });
 }
 
 export async function listPendingInvitationsForDoctor(
@@ -426,7 +489,7 @@ export async function listPendingInvitationsForDoctor(
   const out: ClinicDoctorInvitation[] = [];
   for (const d of snap.docs) {
     const inv = d.data() as ClinicDoctorInvitation;
-    if (inv.status !== "pending") continue;
+    if ((inv.status || "pending") !== "pending") continue;
     const clinicId = inv.clinicId || d.id;
     if (isInviteExpired(inv)) {
       await purgeExpiredInvite(clinicId, inv.doctorCedula || doctorCedula, cloudUserId);
@@ -435,21 +498,6 @@ export async function listPendingInvitationsForDoctor(
     out.push({ ...inv, clinicId });
   }
   return out.sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
-}
-
-export async function cancelClinicInvitation(
-  clinicId: string,
-  doctorCedula: string,
-): Promise<void> {
-  const ced = normalizeCedula(doctorCedula);
-  const invSnap = await getDoc(doc(invitationsCol(clinicId), ced));
-  const cloudUserId = invSnap.exists()
-    ? String((invSnap.data() as ClinicDoctorInvitation)?.cloudUserId || "")
-    : "";
-  await deleteDoc(doc(invitationsCol(clinicId), ced));
-  if (cloudUserId) {
-    await deleteDoc(doc(doctorMailboxCol(cloudUserId), clinicId)).catch(() => undefined);
-  }
 }
 
 export async function acceptDoctorInvitation(input: {
@@ -527,13 +575,6 @@ export async function rejectDoctorInvitation(input: {
     data = {};
   }
   if (!res.ok) throw new Error(data.error || "No se pudo rechazar");
-}
-
-export async function listClinicMembers(clinicId: string): Promise<ClinicMember[]> {
-  const snap = await getDocs(membersCol(clinicId));
-  return snap.docs
-    .map((d) => d.data() as ClinicMember)
-    .sort((a, b) => a.doctorNombre.localeCompare(b.doctorNombre));
 }
 
 export async function removeClinicMember(

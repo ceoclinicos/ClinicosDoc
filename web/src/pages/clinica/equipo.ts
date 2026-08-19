@@ -1,5 +1,6 @@
 import { registerRoute } from "../../app/router";
 import { getClinicSession, setClinicSession } from "../../clinic/session";
+import type { ClinicDoctorInvitation, ClinicMember } from "../../clinic/models";
 import {
   cancelClinicInvitation,
   inviteDoctorByCedula,
@@ -23,7 +24,7 @@ registerRoute({
       `
       <div class="card-panel">
         <h2 class="home-section-title" style="margin-top:0">Agregar médico</h2>
-        <p class="muted">Busque por cédula. El médico debe aceptar en 7 días; si no, la invitación se elimina sola.</p>
+        <p class="muted">Busque por cédula. El médico verá la invitación al abrir la app y debe aceptar en 7 días.</p>
         <form class="form" id="invite-doctor-form">
           <label>Cédula del médico<input name="cedula" required placeholder="Ej. V-12345678" /></label>
           <label>Nombre (si aún no está registrado)<input name="nombre" placeholder="Opcional si ya tiene cuenta" /></label>
@@ -32,13 +33,41 @@ registerRoute({
         <div id="invite-status" class="muted" style="margin-top:0.5rem"></div>
       </div>
 
-      <h2 class="home-section-title">Invitaciones pendientes</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
+        <h2 class="home-section-title" style="margin:0">Invitaciones pendientes</h2>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-refresh-pending">Actualizar</button>
+      </div>
       <div id="pending-status" class="muted">Cargando…</div>
-      <ul class="list" id="pending-list"></ul>
+      <div class="clinic-table-wrap" id="pending-wrap" hidden>
+        <table class="clinic-table">
+          <thead>
+            <tr>
+              <th>Médico</th>
+              <th>Cédula</th>
+              <th>Enviada</th>
+              <th>Vence</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="pending-body"></tbody>
+        </table>
+      </div>
 
-      <h2 class="home-section-title">Médicos vinculados</h2>
+      <h2 class="home-section-title" style="margin-top:2rem">Médicos vinculados</h2>
       <div id="members-status" class="muted">Cargando…</div>
-      <ul class="list" id="members-list"></ul>
+      <div class="clinic-table-wrap" id="members-wrap" hidden>
+        <table class="clinic-table">
+          <thead>
+            <tr>
+              <th>Médico</th>
+              <th>Cédula</th>
+              <th>Rol</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="members-body"></tbody>
+        </table>
+      </div>
 
       <details class="card-panel" style="margin-top:1.5rem">
         <summary>Opción secundaria: código de invitación</summary>
@@ -49,88 +78,115 @@ registerRoute({
       `,
     );
 
-    const status = el.querySelector("#members-status") as HTMLElement;
-    const list = el.querySelector("#members-list") as HTMLElement;
+    const membersStatus = el.querySelector("#members-status") as HTMLElement;
+    const membersWrap = el.querySelector("#members-wrap") as HTMLElement;
+    const membersBody = el.querySelector("#members-body") as HTMLElement;
     const pendingStatus = el.querySelector("#pending-status") as HTMLElement;
-    const pendingList = el.querySelector("#pending-list") as HTMLElement;
+    const pendingWrap = el.querySelector("#pending-wrap") as HTMLElement;
+    const pendingBody = el.querySelector("#pending-body") as HTMLElement;
     const inviteStatus = el.querySelector("#invite-status") as HTMLElement;
     const codeEl = el.querySelector("#invite-code") as HTMLElement;
 
+    function renderPendingRows(pending: ClinicDoctorInvitation[]): void {
+      if (!pending.length) {
+        pendingWrap.hidden = true;
+        pendingStatus.textContent = "Ninguna invitación pendiente.";
+        pendingBody.innerHTML = "";
+        return;
+      }
+      pendingWrap.hidden = false;
+      pendingStatus.textContent = `${pending.length} invitación(es) pendiente(s)`;
+      pendingBody.innerHTML = pending
+        .map(
+          (i) => `
+        <tr>
+          <td><strong>${escapeHtml(i.doctorNombre)}</strong></td>
+          <td>${escapeHtml(i.doctorCedula)}</td>
+          <td>${formatDate(i.invitedAt)}</td>
+          <td>${i.expiresAt ? formatDate(i.expiresAt) : "—"}</td>
+          <td class="clinic-table-action">
+            <button type="button" class="btn btn-ghost btn-sm" data-cancel="${escapeHtml(i.doctorCedula)}">Cancelar</button>
+          </td>
+        </tr>`,
+        )
+        .join("");
+      pendingBody.querySelectorAll("[data-cancel]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const ced = btn.getAttribute("data-cancel") || "";
+          if (!ced || !confirm(`¿Cancelar invitación a C.I. ${ced}?`)) return;
+          (btn as HTMLButtonElement).disabled = true;
+          try {
+            await cancelClinicInvitation(session.clinicId, ced);
+            await refreshPending();
+          } catch (err) {
+            alert(err instanceof Error ? err.message : "No se pudo cancelar");
+          } finally {
+            (btn as HTMLButtonElement).disabled = false;
+          }
+        });
+      });
+    }
+
+    function renderMemberRows(members: ClinicMember[]): void {
+      if (!members.length) {
+        membersWrap.hidden = true;
+        membersStatus.textContent = "Nadie en el equipo aún. Agregue médicos por cédula.";
+        membersBody.innerHTML = "";
+        return;
+      }
+      membersWrap.hidden = false;
+      membersStatus.textContent = `${members.length} médico(s) vinculado(s)`;
+      membersBody.innerHTML = members
+        .map(
+          (m) => `
+        <tr>
+          <td><strong>${escapeHtml(m.doctorNombre)}</strong></td>
+          <td>${escapeHtml(m.doctorCedula)}</td>
+          <td>${escapeHtml(m.role)}</td>
+          <td class="clinic-table-action">
+            <button type="button" class="btn btn-ghost btn-sm" data-remove="${escapeHtml(m.doctorCedula)}" data-cloud="${escapeHtml(m.cloudUserId || "")}">Quitar</button>
+          </td>
+        </tr>`,
+        )
+        .join("");
+      membersBody.querySelectorAll("[data-remove]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const ced = btn.getAttribute("data-remove") || "";
+          const cloud = btn.getAttribute("data-cloud") || undefined;
+          if (!ced || !confirm(`¿Desvincular a C.I. ${ced} de este centro?`)) return;
+          (btn as HTMLButtonElement).disabled = true;
+          try {
+            await removeClinicMember(session.clinicId, ced, cloud || undefined);
+            await refreshMembers();
+          } catch (err) {
+            alert(err instanceof Error ? err.message : "No se pudo quitar");
+          } finally {
+            (btn as HTMLButtonElement).disabled = false;
+          }
+        });
+      });
+    }
+
     async function refreshPending(): Promise<void> {
+      pendingStatus.textContent = "Cargando invitaciones…";
       try {
         const pending = await listPendingInvitationsForClinic(session.clinicId);
-        if (!pending.length) {
-          pendingStatus.textContent = "Ninguna invitación pendiente.";
-          pendingList.innerHTML = "";
-          return;
-        }
-        pendingStatus.textContent = `${pending.length} pendiente(s)`;
-        pendingList.innerHTML = pending
-          .map(
-            (i) => `
-          <li class="list-item">
-            <div>
-              <strong>${escapeHtml(i.doctorNombre)}</strong>
-              <p class="muted">C.I. ${escapeHtml(i.doctorCedula)}${i.expiresAt ? ` · vence ${new Date(i.expiresAt).toLocaleDateString("es")}` : ""}</p>
-            </div>
-            <button type="button" class="btn btn-ghost btn-sm" data-cancel="${escapeHtml(i.doctorCedula)}">Cancelar</button>
-          </li>`,
-          )
-          .join("");
-        pendingList.querySelectorAll("[data-cancel]").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const ced = btn.getAttribute("data-cancel") || "";
-            if (!ced || !confirm(`¿Cancelar invitación a C.I. ${ced}?`)) return;
-            try {
-              await cancelClinicInvitation(session.clinicId, ced);
-              await refreshPending();
-            } catch (err) {
-              alert(err instanceof Error ? err.message : "No se pudo cancelar");
-            }
-          });
-        });
+        renderPendingRows(pending);
       } catch (err) {
+        pendingWrap.hidden = true;
         pendingStatus.textContent =
           err instanceof Error ? err.message : "Error al cargar invitaciones";
       }
     }
 
     async function refreshMembers(): Promise<void> {
+      membersStatus.textContent = "Cargando equipo…";
       try {
         const members = await listClinicMembers(session.clinicId);
-        if (!members.length) {
-          status.textContent = "Nadie en el equipo aún. Agregue médicos por cédula.";
-          list.innerHTML = "";
-          return;
-        }
-        status.textContent = `${members.length} médico(s)`;
-        list.innerHTML = members
-          .map(
-            (m) => `
-          <li class="list-item">
-            <div>
-              <strong>${escapeHtml(m.doctorNombre)}</strong>
-              <p class="muted">C.I. ${escapeHtml(m.doctorCedula)} · ${m.role}</p>
-            </div>
-            <button type="button" class="btn btn-ghost btn-sm" data-remove="${escapeHtml(m.doctorCedula)}" data-cloud="${escapeHtml(m.cloudUserId || "")}">Quitar</button>
-          </li>`,
-          )
-          .join("");
-        list.querySelectorAll("[data-remove]").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const ced = btn.getAttribute("data-remove") || "";
-            const cloud = btn.getAttribute("data-cloud") || undefined;
-            if (!ced || !confirm(`¿Desvincular a C.I. ${ced} de este centro?`)) return;
-            try {
-              await removeClinicMember(session.clinicId, ced, cloud || undefined);
-              await refreshMembers();
-            } catch (err) {
-              alert(err instanceof Error ? err.message : "No se pudo quitar");
-            }
-          });
-        });
+        renderMemberRows(members);
       } catch (err) {
-        status.textContent = err instanceof Error ? err.message : "Error al cargar equipo";
+        membersWrap.hidden = true;
+        membersStatus.textContent = err instanceof Error ? err.message : "Error al cargar equipo";
       }
     }
 
@@ -158,6 +214,10 @@ registerRoute({
       }
     });
 
+    el.querySelector("#btn-refresh-pending")?.addEventListener("click", () => {
+      void refreshPending();
+    });
+
     el.querySelector("#btn-regen")?.addEventListener("click", async () => {
       if (!confirm("¿Generar un código nuevo? El anterior dejará de funcionar.")) return;
       try {
@@ -179,4 +239,11 @@ registerRoute({
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function formatDate(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" });
 }
