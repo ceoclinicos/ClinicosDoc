@@ -56,7 +56,7 @@ fun SettingsScreen(
             SettingsTile(
                 Icons.Outlined.LocalHospital,
                 "Centros de salud",
-                "Unirme con código · moldes institucionales",
+                "Invitaciones pendientes · moldes institucionales",
                 onClick = onJoinClinic,
             )
             Spacer(modifier = Modifier.height(10.dp))

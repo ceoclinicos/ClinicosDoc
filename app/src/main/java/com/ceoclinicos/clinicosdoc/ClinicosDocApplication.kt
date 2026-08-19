@@ -33,6 +33,7 @@ class ClinicosDocApplication : Application() {
                 CloudSyncService.syncOnLogin(this@ClinicosDocApplication, userId)
                 runCatching {
                     ClinicService.syncAffiliationsOnEnter(this@ClinicosDocApplication, force = true)
+                    ClinicService.listPendingInvitations(this@ClinicosDocApplication)
                 }
             }
         }

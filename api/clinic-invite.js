@@ -158,25 +158,42 @@ module.exports = async function handler(req, res) {
         .doc(clinicId)
         .set(invitation);
     }
-    // Aviso en la cuenta cloud del médico (lo ve al sync al abrir la app)
+    // Buzón del médico: lo lee la app al abrir (solo dueño de la cuenta)
+    const noticePayload = {
+      type: "invite",
+      clinicId,
+      clinicName: invitation.clinicName,
+      invitedAt: invitation.invitedAt,
+      expiresAt: invitation.expiresAt,
+      status: "pending",
+      message: `La clínica «${invitation.clinicName}» te invitó a su equipo.`,
+    };
     if (cloud?.id) {
       await db
         .collection("clinicosdoc_user")
         .doc(cloud.id)
         .collection("clinic_notices")
         .doc(clinicId)
-        .set(
-          {
-            type: "invite",
-            clinicId,
-            clinicName: invitation.clinicName,
-            invitedAt: invitation.invitedAt,
-            expiresAt: invitation.expiresAt,
-            status: "pending",
-            message: `La clínica «${invitation.clinicName}» te invitó a su equipo.`,
-          },
-          { merge: true },
-        );
+        .set(noticePayload, { merge: true });
+    } else {
+      // Reintento: médico pudo registrarse justo antes de la invitación
+      const cloudLate = await findAppMedico(db, doctorCedula);
+      if (cloudLate?.id) {
+        invitation.cloudUserId = cloudLate.id;
+        await pendingRef.set({ cloudUserId: cloudLate.id }, { merge: true });
+        await db
+          .collection("clinicosdoc_doctor_invites")
+          .doc(cloudLate.id)
+          .collection("pending")
+          .doc(clinicId)
+          .set({ ...invitation, cloudUserId: cloudLate.id });
+        await db
+          .collection("clinicosdoc_user")
+          .doc(cloudLate.id)
+          .collection("clinic_notices")
+          .doc(clinicId)
+          .set(noticePayload, { merge: true });
+      }
     }
 
     return res.status(200).json(invitation);

@@ -33,6 +33,8 @@ object FirestorePaths {
     const val SUB_MEMBERS = "members"
     const val SUB_INVITATIONS = "invitations"
     const val SUB_CLINIC_MEMBERSHIPS = "clinic_memberships"
+    /** Buzón de invitaciones del médico (clínica escribe, médico lee al abrir la app). */
+    const val SUB_CLINIC_NOTICES = "clinic_notices"
     const val SUB_PENDING = "pending"
     /** Registro portal pacientes (modo paciente / ficha emergencia). */
     const val PORTAL_PACIENTES = "pacientes"

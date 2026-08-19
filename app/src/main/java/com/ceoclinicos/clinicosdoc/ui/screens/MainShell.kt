@@ -41,6 +41,7 @@ import com.ceoclinicos.clinicosdoc.model.ClinicDoctorInvitation
 import com.ceoclinicos.clinicosdoc.ui.components.BottomNavItem
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumBottomBar
 import com.ceoclinicos.clinicosdoc.ui.theme.SurfaceBg
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -85,14 +86,20 @@ fun MainShell(
     fun scheduleInviteRefresh() {
         inviteRefreshJob?.cancel()
         inviteRefreshJob = scope.launch {
-            // Caché al instante (diálogo sin esperar red)
             applyPendingUi()
-            val invites = withContext(Dispatchers.IO) {
-                runCatching { ClinicService.syncAffiliationsOnEnter(context, force = true) }
-                runCatching { ClinicService.listPendingInvitations(context) }
-                    .getOrElse { ClinicMembershipStorage.loadPendingInvites(context) }
-            }
+            suspend fun loadInvites(): List<ClinicDoctorInvitation> =
+                withContext(Dispatchers.IO) {
+                    runCatching { ClinicService.syncAffiliationsOnEnter(context, force = true) }
+                    runCatching { ClinicService.listPendingInvitations(context) }
+                        .getOrElse { ClinicMembershipStorage.loadPendingInvites(context) }
+                }
+            var invites = loadInvites()
             applyPendingUi(invites)
+            if (invites.isEmpty()) {
+                delay(2_500)
+                invites = loadInvites()
+                applyPendingUi(invites)
+            }
         }
     }
 

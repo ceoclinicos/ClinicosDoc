@@ -3,6 +3,7 @@ package com.ceoclinicos.clinicosdoc.service
 import android.content.Context
 import android.util.Log
 import com.ceoclinicos.clinicosdoc.data.CloudSyncService
+import com.ceoclinicos.clinicosdoc.data.ClinicService
 import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.data.FirestorePaths
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
@@ -53,6 +54,7 @@ object DoctorAuthService {
             )
             DoctorStorage.saveSession(context, profile, auth.uid)
             CloudSyncService.syncOnLogin(context, auth.uid)
+            runCatching { ClinicService.listPendingInvitations(context) }
             profile
         }
     }
@@ -126,6 +128,7 @@ object DoctorAuthService {
             )
             DoctorStorage.saveSession(context, saved, auth.uid)
             CloudSyncService.syncOnLogin(context, auth.uid)
+            runCatching { ClinicService.listPendingInvitations(context) }
             saved
         }
     }

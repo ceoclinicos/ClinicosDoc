@@ -15,10 +15,12 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -48,7 +50,7 @@ object ClinicService {
         return last > 0L && System.currentTimeMillis() - last < AFFILIATION_SYNC_MIN_INTERVAL_MS
     }
 
-    private suspend fun awaitAuthUser(timeoutMs: Long = 4_000L): FirebaseUser? {
+    private suspend fun awaitAuthUser(timeoutMs: Long = 8_000L): FirebaseUser? {
         val auth = FirebaseAuth.getInstance()
         auth.currentUser?.let { return it }
         return withTimeoutOrNull(timeoutMs) {
@@ -156,6 +158,74 @@ object ClinicService {
             .document(inviteKey.trim())
             .collection(FirestorePaths.SUB_PENDING)
 
+    private fun clinicNoticesCol(userId: String) =
+        db().collection(FirestorePaths.USERS).document(userId)
+            .collection(FirestorePaths.SUB_CLINIC_NOTICES)
+
+    private fun parsePendingInvitationsJson(arr: JSONArray?): List<ClinicDoctorInvitation> {
+        if (arr == null || arr.length() == 0) return emptyList()
+        return buildList {
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val id = o.optString("clinicId")
+                if (id.isBlank()) continue
+                add(
+                    ClinicDoctorInvitation(
+                        clinicId = id,
+                        clinicName = o.optString("clinicName", "Centro").ifBlank { "Centro" },
+                        doctorCedula = o.optString("doctorCedula"),
+                        doctorNombre = o.optString("doctorNombre"),
+                        status = "pending",
+                        invitedAt = o.optString("invitedAt"),
+                        expiresAt = o.optString("expiresAt"),
+                    ),
+                )
+            }
+        }
+    }
+
+    private suspend fun fetchPendingFromNotices(
+        userId: String,
+        doctorCedula: String,
+    ): List<ClinicDoctorInvitation> {
+        val snap = clinicNoticesCol(userId).get().await()
+        val ttlMs = 7L * 24 * 60 * 60 * 1000
+        return snap.documents.mapNotNull { doc ->
+            val data = doc.data ?: return@mapNotNull null
+            if ((data["status"]?.toString() ?: "pending") != "pending") return@mapNotNull null
+            if ((data["type"]?.toString() ?: "invite") != "invite") return@mapNotNull null
+            val clinicId = data["clinicId"]?.toString()?.ifBlank { doc.id } ?: doc.id
+            val invitedAt = data["invitedAt"]?.toString().orEmpty()
+            val expiresAt = data["expiresAt"]?.toString().orEmpty()
+            val expMs = runCatching { java.time.Instant.parse(expiresAt).toEpochMilli() }.getOrNull()
+            if (expMs != null && System.currentTimeMillis() > expMs) return@mapNotNull null
+            val invitedMs = runCatching { java.time.Instant.parse(invitedAt).toEpochMilli() }.getOrNull()
+            if (invitedMs != null && System.currentTimeMillis() > invitedMs + ttlMs) return@mapNotNull null
+            ClinicDoctorInvitation(
+                clinicId = clinicId,
+                clinicName = data["clinicName"]?.toString() ?: "Centro",
+                doctorCedula = doctorCedula,
+                doctorNombre = "",
+                status = "pending",
+                invitedAt = invitedAt,
+                expiresAt = expiresAt,
+            )
+        }
+    }
+
+    private fun mergeInvitations(
+        vararg lists: List<ClinicDoctorInvitation>,
+    ): List<ClinicDoctorInvitation> {
+        val byClinic = linkedMapOf<String, ClinicDoctorInvitation>()
+        for (list in lists) {
+            for (inv in list) {
+                if (inv.clinicId.isBlank()) continue
+                byClinic.putIfAbsent(inv.clinicId, inv)
+            }
+        }
+        return byClinic.values.sortedByDescending { it.invitedAt }
+    }
+
     private suspend fun writeMembership(
         context: Context,
         clinicId: String,
@@ -220,79 +290,32 @@ object ClinicService {
     }
 
     suspend fun listPendingInvitations(context: Context): List<ClinicDoctorInvitation> {
-        if (!DoctorAuthService.isConfigured(context)) {
-            return ClinicMembershipStorage.loadPendingInvites(context)
-        }
-        // API puede aportar invitaciones; un [] ya no borra el caché (ver refreshMemberships).
-        runCatching {
-            refreshMemberships(
-                context,
-                forceNetwork = true,
-                allowEmptyOverwrite = false,
-            )
-        }
         val cached = ClinicMembershipStorage.loadPendingInvites(context)
+        if (!DoctorAuthService.isConfigured(context)) return cached
 
-        val profile = DoctorStorage.loadProfile(context)
-            ?: return cached
+        val profile = DoctorStorage.loadProfile(context) ?: return cached
         val userId = DoctorStorage.userId(context).orEmpty()
-        val keys = (
-            CedulaNormalizer.lookupKeys(profile.cedula) +
-                listOf(CedulaNormalizer.normalize(profile.cedula), userId)
-            )
-            .map { it.trim() }
-            .filter { it.length >= 6 }
-            .distinct()
-        val byClinic = linkedMapOf<String, ClinicDoctorInvitation>()
-        val ttlMs = 7L * 24 * 60 * 60 * 1000
-        fun isExpired(invitedAt: String, expiresAt: String): Boolean {
-            val expMs = runCatching { java.time.Instant.parse(expiresAt).toEpochMilli() }.getOrNull()
-            if (expMs != null) return System.currentTimeMillis() > expMs
-            val invitedMs = runCatching { java.time.Instant.parse(invitedAt).toEpochMilli() }.getOrNull()
-                ?: return false
-            return System.currentTimeMillis() > invitedMs + ttlMs
-        }
-        var firestoreOk = false
-        for (key in keys) {
-            val snap = runCatching { doctorPendingInvitesCol(key).get().await() }.getOrNull()
-                ?: continue
-            firestoreOk = true
-            for (docSnap in snap.documents) {
-                val data = docSnap.data ?: continue
-                if ((data["status"]?.toString() ?: "pending") != "pending") continue
-                val clinicId = data["clinicId"]?.toString() ?: docSnap.id
-                if (clinicId.isBlank()) continue
-                val invitedAt = data["invitedAt"]?.toString().orEmpty()
-                val expiresAt = data["expiresAt"]?.toString().orEmpty()
-                if (isExpired(invitedAt, expiresAt)) {
-                    runCatching {
-                        docSnap.reference.delete().await()
-                        val ced = CedulaNormalizer.normalize(
-                            data["doctorCedula"]?.toString() ?: key,
-                        )
-                        invitationsCol(clinicId).document(ced).delete().await()
-                    }
-                    continue
-                }
-                if (clinicId in byClinic) continue
-                byClinic[clinicId] = ClinicDoctorInvitation(
-                    clinicId = clinicId,
-                    clinicName = data["clinicName"]?.toString() ?: "Centro",
-                    doctorCedula = data["doctorCedula"]?.toString().orEmpty(),
-                    doctorNombre = data["doctorNombre"]?.toString().orEmpty(),
-                    status = "pending",
-                    invitedAt = invitedAt,
-                    expiresAt = expiresAt,
-                )
+        val doctorCedula = CedulaNormalizer.normalize(profile.cedula)
+
+        var list = cached
+
+        // Reintentos: al abrir la app Auth a veces tarda en restaurarse
+        repeat(3) { attempt ->
+            if (attempt > 0) delay(900L * attempt)
+            awaitAuthUser(timeoutMs = if (attempt == 0) 8_000L else 12_000L)
+            runCatching {
+                refreshMemberships(context, forceNetwork = true, allowEmptyOverwrite = false)
             }
+            val fromApi = ClinicMembershipStorage.loadPendingInvites(context)
+            val fromNotices = if (userId.isNotBlank()) {
+                runCatching { fetchPendingFromNotices(userId, doctorCedula) }.getOrDefault(emptyList())
+            } else {
+                emptyList()
+            }
+            list = mergeInvitations(fromApi, fromNotices)
+            if (list.isNotEmpty()) return@repeat
         }
-        // Firestore OK → fuente de verdad (también limpia si ya no hay).
-        // Si falló la lectura, conservar caché/API.
-        val list = if (firestoreOk) {
-            byClinic.values.sortedByDescending { it.invitedAt }
-        } else {
-            cached
-        }
+
         ClinicMembershipStorage.savePendingInvites(context, list)
         return list
     }
@@ -435,32 +458,13 @@ object ClinicService {
                         }
                     }.sortedBy { it.clinicName }
                     val pendingArr = json.optJSONArray("pendingInvitations")
-                    // Solo escribir caché si la API trae invitaciones reales.
-                    // Un [] no debe borrar pendientes locales: listPendingInvitations
-                    // confirma por Firestore y limpia cuando realmente no hay ninguna.
-                    if (json.has("pendingInvitations") && pendingArr != null && pendingArr.length() > 0) {
-                        val pending = buildList {
-                            for (i in 0 until pendingArr.length()) {
-                                val o = pendingArr.optJSONObject(i) ?: continue
-                                val id = o.optString("clinicId")
-                                val name = o.optString("clinicName")
-                                if (id.isBlank()) continue
-                                add(
-                                    ClinicDoctorInvitation(
-                                        clinicId = id,
-                                        clinicName = name.ifBlank { "Centro" },
-                                        doctorCedula = o.optString("doctorCedula"),
-                                        doctorNombre = o.optString("doctorNombre"),
-                                        status = "pending",
-                                        invitedAt = o.optString("invitedAt"),
-                                        expiresAt = o.optString("expiresAt"),
-                                    ),
-                                )
-                            }
-                        }.sortedByDescending { it.invitedAt }
-                        if (pending.isNotEmpty()) {
-                            ClinicMembershipStorage.savePendingInvites(context, pending)
-                        }
+                    val pending = parsePendingInvitationsJson(pendingArr)
+                    if (pending.isNotEmpty()) {
+                        val merged = mergeInvitations(
+                            ClinicMembershipStorage.loadPendingInvites(context),
+                            pending,
+                        )
+                        ClinicMembershipStorage.savePendingInvites(context, merged)
                     }
                     if (list.isEmpty() && local.isNotEmpty() && !allowEmptyOverwrite) {
                         return@use local

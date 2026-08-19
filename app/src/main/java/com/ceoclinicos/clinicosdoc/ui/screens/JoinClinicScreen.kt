@@ -16,7 +16,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +57,15 @@ fun JoinClinicScreen(onBack: () -> Unit) {
 
     LaunchedEffect(Unit) { reload() }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) reload()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     AppScaffold(title = "Centros de salud", onBack = onBack) { padding ->
         Column(
             modifier = Modifier
@@ -68,7 +80,8 @@ fun JoinClinicScreen(onBack: () -> Unit) {
             Spacer(modifier = Modifier.height(8.dp))
             if (invitations.isEmpty()) {
                 Text(
-                    "No tiene invitaciones. El centro puede agregarlo por su cédula desde Equipo (web).",
+                    "No tiene invitaciones. Pida al centro que lo agregue por cédula (Equipo en la web). " +
+                        "Si acaba de invitarlo, espere unos segundos y entre de nuevo aquí.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                 )
