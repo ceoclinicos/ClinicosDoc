@@ -148,9 +148,12 @@ object ClinicService {
     private fun invitationsCol(clinicId: String) =
         clinicRef(clinicId).collection(FirestorePaths.SUB_INVITATIONS)
 
-    private fun doctorPendingInvitesCol(doctorCedula: String) =
+    // `clinicosdoc_doctor_invites/{inviteKey}/pending/{clinicId}`
+    // `inviteKey` puede ser cédula normalizada o también un `cloudUserId` (UID Firebase).
+    // Por eso NO debemos normalizar aquí (normalizar rompe el UID al quitar/transformar caracteres).
+    private fun doctorPendingInvitesCol(inviteKey: String) =
         db().collection(FirestorePaths.DOCTOR_INVITES)
-            .document(CedulaNormalizer.normalize(doctorCedula))
+            .document(inviteKey.trim())
             .collection(FirestorePaths.SUB_PENDING)
 
     private suspend fun writeMembership(
