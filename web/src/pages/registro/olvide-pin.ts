@@ -44,9 +44,9 @@ registerRoute({
       const isClinic = tipoSelect.value === "clinica";
       if (isClinic) {
         lead.textContent =
-          "Ingrese el RIF del centro. Si tiene correo administrativo, le enviaremos un enlace para restablecer el PIN.";
+          "Ingrese el código jurídico del centro. Si tiene correo administrativo, le enviaremos un enlace para restablecer el PIN.";
         idWrap.innerHTML =
-          '<label>RIF o código del centro<input name="cedula" id="id-input" required placeholder="Ej. J123456789" /></label>';
+          '<label>Código jurídico del centro<input name="cedula" id="id-input" required inputmode="numeric" pattern="[0-9]{5,12}" maxlength="12" placeholder="Ej. 123456789" /></label>';
       } else {
         lead.textContent =
           "Ingrese su cédula. Si tiene correo registrado, le enviaremos un enlace para restablecer su PIN.";

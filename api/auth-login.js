@@ -12,10 +12,15 @@ const { apiError } = require("./_lib/errors");
 const { mintAuthToken } = require("./_lib/mint-token");
 
 function normalizeRif(rif) {
-  return String(rif || "")
+  const raw = String(rif || "")
     .trim()
     .toUpperCase()
     .replace(/[\s.-]/g, "");
+  const digits = raw.replace(/\D/g, "");
+  if (/^\d{5,12}$/.test(raw)) return `J${raw}`;
+  if (/^J\d{5,12}$/.test(raw)) return raw;
+  if (digits.length >= 5 && digits.length <= 12) return `J${digits}`;
+  return raw;
 }
 
 async function findPaciente(db, inputCedula) {
@@ -61,6 +66,21 @@ async function findAppMedico(db, inputCedula) {
 }
 
 async function findClinica(db, inputRif) {
+  const accountName = String(inputRif || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  if (accountName.length >= 4) {
+    const byAccount = await db
+      .collection("clinicosdoc_clinics")
+      .where("accountNameNormalized", "==", accountName)
+      .limit(1)
+      .get();
+    if (!byAccount.empty) {
+      const doc = byAccount.docs[0];
+      return { snap: doc, docId: doc.id };
+    }
+  }
   const raw = normalizeRif(inputRif);
   if (!raw || raw.length < 5) return null;
   const clinicId = `clinic_${raw.toLowerCase()}`;
@@ -233,14 +253,14 @@ async function loginMedico(db, admin, cedula, pin, prefer) {
   throw Object.assign(new Error("Cédula o PIN incorrectos"), { status: 401 });
 }
 
-async function loginClinica(db, admin, rif, pin) {
+async function loginClinica(db, admin, accountOrRif, pin) {
   assertPin4(pin);
-  const found = await findClinica(db, rif);
-  if (!found) throw Object.assign(new Error("RIF o PIN incorrectos"), { status: 401 });
+  const found = await findClinica(db, accountOrRif);
+  if (!found) throw Object.assign(new Error("Nombre de cuenta o PIN incorrectos"), { status: 401 });
   const c = found.snap.data() || {};
   const expected = hashPin(c.rif || found.docId, pin);
   if (!c.pinHash || c.pinHash !== expected) {
-    throw Object.assign(new Error("RIF o PIN incorrectos"), { status: 401 });
+    throw Object.assign(new Error("Nombre de cuenta o PIN incorrectos"), { status: 401 });
   }
   const token = await mintToken(admin, found.docId, {
     role: "clinica",
@@ -252,6 +272,7 @@ async function loginClinica(db, admin, rif, pin) {
     role: "clinica",
     clinicId: found.docId,
     nombre: String(c.nombre || ""),
+    accountName: String(c.accountName || ""),
     rif: String(c.rif || ""),
     correo: String(c.correo || ""),
     inviteCode: String(c.inviteCode || ""),
@@ -270,7 +291,7 @@ module.exports = async function handler(req, res) {
 
   if (!cedula) {
     return res.status(400).json({
-      error: tipo === "clinica" || tipo === "centro" ? "RIF requerido" : "Cédula requerida",
+      error: tipo === "clinica" || tipo === "centro" ? "Nombre de cuenta requerido" : "Cédula requerida",
     });
   }
 

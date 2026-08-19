@@ -3,6 +3,7 @@ import type { DocumentHeader, DocumentTemplate } from "../shared/models";
 export interface ClinicRegistro {
   id: string;
   nombre: string;
+  accountName?: string;
   /** RIF o código fiscal — también es la clave de login */
   rif: string;
   correo: string;
@@ -16,6 +17,7 @@ export interface ClinicRegistro {
 export interface ClinicSession {
   clinicId: string;
   nombre: string;
+  accountName?: string;
   rif: string;
   correo: string;
   inviteCode: string;

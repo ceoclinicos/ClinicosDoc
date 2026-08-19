@@ -88,10 +88,19 @@ async function findAppMedico(db, inputCedula) {
 }
 
 async function findClinica(db, inputRif) {
-  const raw = String(inputRif || "")
+  const original = String(inputRif || "")
     .trim()
     .toUpperCase()
     .replace(/[\s.-]/g, "");
+  const digits = original.replace(/\D/g, "");
+  const raw =
+    /^\d{5,12}$/.test(original)
+      ? `J${original}`
+      : /^J\d{5,12}$/.test(original)
+        ? original
+        : digits.length >= 5 && digits.length <= 12
+          ? `J${digits}`
+          : original;
   if (!raw || raw.length < 5) return null;
   const clinicId = `clinic_${raw.toLowerCase()}`;
   const s = await db.collection("clinicosdoc_clinics").doc(clinicId).get();
@@ -137,7 +146,7 @@ module.exports = async function handler(req, res) {
   const tipo = String(body.tipo || "auto").trim();
   if (!inputCedula) {
     return res.status(400).json({
-      error: tipo === "clinica" || tipo === "centro" ? "RIF requerido" : "Cédula requerida",
+      error: tipo === "clinica" || tipo === "centro" ? "Código jurídico requerido" : "Cédula requerida",
     });
   }
 

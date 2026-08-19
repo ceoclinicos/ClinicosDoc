@@ -17,9 +17,9 @@ function loginForm(): string {
   return `
     ${tabs("login")}
     <form class="form" id="clinic-login">
-      <label>RIF o código del centro<input name="rif" required autocomplete="username" placeholder="Ej. J123456789" /></label>
+      <label>Nombre de la cuenta<input name="accountName" required autocomplete="username" pattern="[A-Za-z0-9._-]{4,32}" maxlength="32" placeholder="Ej. ceosalud" /></label>
       <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required autocomplete="current-password" /></label>
-      <p class="muted"><a href="#/olvide-pin?tipo=clinica">Olvidé mi PIN</a></p>
+      <p class="muted">El nombre de la cuenta va pegado, sin espacios. <a href="#/olvide-pin?tipo=clinica">Olvidé mi PIN</a></p>
       <button type="submit" class="btn btn-primary">Ingresar al centro</button>
     </form>
   `;
@@ -30,7 +30,8 @@ function registerForm(): string {
     ${tabs("registro")}
     <form class="form" id="clinic-registro">
       <label>Nombre del centro / clínica<input name="nombre" required placeholder="Ej. Day Hospital" /></label>
-      <label>RIF o código único<input name="rif" required placeholder="Ej. J123456789" /></label>
+      <label>Nombre de la cuenta<input name="accountName" required autocomplete="username" pattern="[A-Za-z0-9._-]{4,32}" maxlength="32" placeholder="Ej. ceosalud" /></label>
+      <label>Código jurídico (solo números)<input name="rif" required inputmode="numeric" pattern="[0-9]{5,12}" maxlength="12" placeholder="Ej. 123456789" /></label>
       <label>Correo administrativo<input name="correo" type="email" required /></label>
       <label>Dirección (opcional)<input name="direccion" placeholder="Ciudad, sede…" /></label>
       <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
@@ -80,7 +81,7 @@ registerRoute({
         try {
           clearProfessionalSession();
           clearPatientSession();
-          const s = await loginClinic(String(fd.get("rif")), String(fd.get("pin")));
+          const s = await loginClinic(String(fd.get("accountName")), String(fd.get("pin")));
           setClinicSession(s);
           navigate("/clinica/panel");
         } catch (err) {
@@ -99,6 +100,7 @@ registerRoute({
           clearPatientSession();
           const s = await registerClinic({
             nombre: String(fd.get("nombre")),
+            accountName: String(fd.get("accountName")),
             rif: String(fd.get("rif")),
             correo: String(fd.get("correo")),
             direccion: String(fd.get("direccion") || ""),

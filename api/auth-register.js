@@ -12,14 +12,26 @@ const { apiError } = require("./_lib/errors");
 const { mintAuthToken } = require("./_lib/mint-token");
 
 function normalizeRif(rif) {
-  return String(rif || "")
+  const raw = String(rif || "")
     .trim()
     .toUpperCase()
     .replace(/[\s.-]/g, "");
+  const digits = raw.replace(/\D/g, "");
+  if (/^\d{5,12}$/.test(raw)) return `J${raw}`;
+  if (/^J\d{5,12}$/.test(raw)) return raw;
+  if (digits.length >= 5 && digits.length <= 12) return `J${digits}`;
+  return raw;
 }
 
 function makeClinicId(rif) {
   return `clinic_${normalizeRif(rif).toLowerCase()}`;
+}
+
+function normalizeClinicAccountName(input) {
+  return String(input || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
 }
 
 function makeInviteCode() {
@@ -191,11 +203,27 @@ async function registerClinica(db, admin, body) {
   }
   const nombre = String(body.nombre || "").trim();
   if (!nombre) throw Object.assign(new Error("Nombre del centro requerido"), { status: 400 });
+  const accountName = String(body.accountName || body.nombreCuenta || "").trim();
+  const accountNameNormalized = normalizeClinicAccountName(accountName);
+  if (!accountNameNormalized || accountNameNormalized.length < 4) {
+    throw Object.assign(new Error("Nombre de la cuenta requerido (mínimo 4 caracteres, sin espacios)"), { status: 400 });
+  }
+  if (/\s/.test(accountName)) {
+    throw Object.assign(new Error("El nombre de la cuenta no debe llevar espacios"), { status: 400 });
+  }
 
   const id = makeClinicId(rif);
   const existing = await db.collection("clinicosdoc_clinics").doc(id).get();
   if (existing.exists) {
     throw Object.assign(new Error("Ya existe un centro registrado con ese RIF"), { status: 409 });
+  }
+  const existingAccount = await db
+    .collection("clinicosdoc_clinics")
+    .where("accountNameNormalized", "==", accountNameNormalized)
+    .limit(1)
+    .get();
+  if (!existingAccount.empty) {
+    throw Object.assign(new Error("Ese nombre de cuenta ya está en uso"), { status: 409 });
   }
 
   let inviteCode = makeInviteCode();
@@ -210,6 +238,8 @@ async function registerClinica(db, admin, body) {
   const data = {
     id,
     nombre,
+    accountName,
+    accountNameNormalized,
     rif,
     correo,
     direccion: String(body.direccion || "").trim(),
@@ -236,6 +266,7 @@ async function registerClinica(db, admin, body) {
     role: "clinica",
     clinicId: id,
     nombre,
+    accountName,
     rif,
     correo,
     inviteCode,

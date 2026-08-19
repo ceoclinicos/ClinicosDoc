@@ -10,6 +10,7 @@ export type AuthLoginResult = {
   uid: string;
   role: AuthLoginRole | string;
   cedula?: string;
+  accountName?: string;
   nombre?: string;
   correo?: string;
   especialidad?: string;

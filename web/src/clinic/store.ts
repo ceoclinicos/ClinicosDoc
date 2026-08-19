@@ -30,7 +30,12 @@ function assertPin4(pin: string): void {
 }
 
 function normalizeRif(rif: string): string {
-  return rif.trim().toUpperCase().replace(/[\s.-]/g, "");
+  const raw = rif.trim().toUpperCase().replace(/[\s.-]/g, "");
+  const digits = raw.replace(/\D/g, "");
+  if (/^\d{5,12}$/.test(raw)) return `J${raw}`;
+  if (/^J\d{5,12}$/.test(raw)) return raw;
+  if (digits.length >= 5 && digits.length <= 12) return `J${digits}`;
+  return raw;
 }
 
 function clinicRef(id: string) {
@@ -127,6 +132,7 @@ export async function getClinic(clinicId: string): Promise<ClinicRegistro | null
 
 export async function registerClinic(input: {
   nombre: string;
+  accountName: string;
   rif: string;
   correo: string;
   direccion?: string;
@@ -143,6 +149,7 @@ export async function registerClinic(input: {
   const data = await authRegister({
     tipo: "clinica",
     nombre: input.nombre.trim(),
+    accountName: input.accountName.trim(),
     rif,
     correo,
     direccion: (input.direccion ?? "").trim(),
@@ -152,6 +159,7 @@ export async function registerClinic(input: {
   return {
     clinicId: data.clinicId || data.uid,
     nombre: data.nombre || input.nombre.trim(),
+    accountName: data.accountName || input.accountName.trim(),
     rif: data.rif || rif,
     correo: data.correo || correo,
     inviteCode: data.inviteCode || "",
@@ -228,13 +236,14 @@ async function listClinicHeadersRaw(clinicId: string): Promise<DocumentHeader[]>
   });
 }
 
-export async function loginClinic(rif: string, pin: string): Promise<ClinicSession> {
+export async function loginClinic(accountName: string, pin: string): Promise<ClinicSession> {
   assertPin4(pin);
-  const auth = await authLogin({ tipo: "clinica", cedula: rif, pin });
+  const auth = await authLogin({ tipo: "clinica", cedula: accountName.trim(), pin });
   const session: ClinicSession = {
     clinicId: auth.clinicId || auth.uid,
     nombre: auth.nombre || "",
-    rif: auth.rif || normalizeRif(rif),
+    accountName: auth.accountName || accountName.trim().replace(/\s+/g, ""),
+    rif: auth.rif || "",
     correo: auth.correo || "",
     inviteCode: auth.inviteCode || "",
   };
