@@ -413,6 +413,16 @@ export async function listPendingInvitationsForDoctor(
   doctorCedula: string,
   cloudUserId?: string,
 ): Promise<ClinicDoctorInvitation[]> {
+  // Si la sesión del médico fue creada antes de que se corrigieran claims/role,
+  // las reglas pueden bloquear lecturas hasta que el ID token se refresque.
+  // Forzamos refresh para que `request.auth.token` tenga las claims correctas.
+  try {
+    const { getIdToken } = await import("../services/firebase-auth");
+    await getIdToken(true);
+  } catch {
+    // si no se puede refrescar igual intentamos (fallback)
+  }
+
   const { cedulaLookupKeys } = await import("../services/cedula");
   const keys = [
     ...new Set(
