@@ -112,22 +112,17 @@ module.exports = async function handler(req, res) {
     }
 
     const prof = await findProfesional(db, doctorCedula);
-    let cloud = await findAppMedico(db, doctorCedula);
-    const hint = String(body.doctorNombreHint || "").trim();
-    const doctorNombre =
-      (prof?.nombre || cloud?.data?.nombre || hint || "").trim() || `Médico C.I. ${doctorCedula}`;
-    if (!prof && !cloud && !hint) {
+    const cloud = await findAppMedico(db, doctorCedula);
+    if (!prof && !cloud) {
       throw Object.assign(
         new Error(
-          "No encontramos esa cédula. Indique el nombre del médico o pídale que se registre en la app primero.",
+          "No encontramos esa cédula en ClinicosDoc. El médico debe registrarse en la app antes de invitarlo.",
         ),
         { status: 404 },
       );
     }
-
-    if (!cloud) {
-      cloud = await findAppMedico(db, doctorCedula);
-    }
+    const doctorNombre =
+      (prof?.nombre || cloud?.data?.nombre || "").trim() || `Médico C.I. ${doctorCedula}`;
 
     const invitedAt = new Date().toISOString();
     const invitation = {

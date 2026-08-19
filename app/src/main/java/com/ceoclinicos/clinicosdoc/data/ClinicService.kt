@@ -1,6 +1,7 @@
 package com.ceoclinicos.clinicosdoc.data
 
 import android.content.Context
+import android.util.Log
 import com.ceoclinicos.clinicosdoc.model.ClinicDoctorInvitation
 import com.ceoclinicos.clinicosdoc.model.ClinicMembership
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
@@ -14,7 +15,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
@@ -28,6 +31,8 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 object ClinicService {
+    private const val TAG = "ClinicService"
+
     private fun db() = FirebaseFirestore.getInstance()
 
     private val httpClient = OkHttpClient.Builder()
@@ -173,11 +178,57 @@ object ClinicService {
         }
     }
 
+    /** UID de Firebase Auth (requerido por reglas Firestore). */
+    private fun resolveUserId(context: Context): String? {
+        val authUid = FirebaseAuth.getInstance().currentUser?.uid
+        val stored = DoctorStorage.userId(context)
+        if (authUid != null) {
+            if (!stored.isNullOrBlank() && stored != authUid) {
+                Log.w(TAG, "userId local ($stored) != auth.uid ($authUid); usando auth")
+            }
+            return authUid
+        }
+        return stored
+    }
+
+    private suspend fun fetchPendingInvitationsFromApi(
+        context: Context,
+        doctorCedula: String,
+    ): List<ClinicDoctorInvitation>? {
+        return runCatching {
+            val idToken = idTokenOrThrow()
+            withContext(Dispatchers.IO) {
+                val body = JSONObject()
+                    .put("doctorCedula", doctorCedula)
+                    .put("forceHeal", true)
+                val request = Request.Builder()
+                    .url(MEMBERSHIPS_URL)
+                    .post(body.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .header("Accept", "application/json")
+                    .header("Authorization", "Bearer $idToken")
+                    .build()
+                httpClient.newCall(request).execute().use { response ->
+                    val raw = response.body?.string().orEmpty()
+                    val json = runCatching { JSONObject(raw) }.getOrElse {
+                        error("Respuesta inválida del servidor")
+                    }
+                    if (!response.isSuccessful) {
+                        error(json.optString("error").ifBlank { "No se pudieron cargar invitaciones" })
+                    }
+                    parsePendingInvitationsJson(json.optJSONArray("pendingInvitations"))
+                }
+            }
+        }.onFailure { err ->
+            Log.w(TAG, "fetchPendingInvitationsFromApi: ${err.message}")
+        }.getOrNull()
+    }
+
     private suspend fun readDoctorMailbox(
         userId: String,
         doctorCedula: String,
+        source: Source = Source.DEFAULT,
     ): List<ClinicDoctorInvitation> {
-        val snap = doctorMailboxCol(userId).get().await()
+        val snap = doctorMailboxCol(userId).get(source).await()
         val ttlMs = 7L * 24 * 60 * 60 * 1000
         return snap.documents.mapNotNull { doc ->
             val data = doc.data ?: return@mapNotNull null
@@ -271,25 +322,44 @@ object ClinicService {
      */
     suspend fun listPendingInvitations(context: Context): List<ClinicDoctorInvitation> {
         val cached = ClinicMembershipStorage.loadPendingInvites(context)
-        val userId = DoctorStorage.userId(context).orEmpty()
-        if (userId.isBlank() || !DoctorAuthService.isConfigured(context)) return cached
+        if (!DoctorAuthService.isConfigured(context)) return cached
         val profile = DoctorStorage.loadProfile(context) ?: return cached
         val doctorCedula = CedulaNormalizer.normalize(profile.cedula)
 
-        awaitAuthUser(timeoutMs = 10_000L)
-
-        var list = runCatching { readDoctorMailbox(userId, doctorCedula) }.getOrDefault(cached)
-
-        if (list.isEmpty()) {
-            runCatching {
-                refreshMemberships(context, forceNetwork = true, allowEmptyOverwrite = false)
-            }
-            list = runCatching { readDoctorMailbox(userId, doctorCedula) }
-                .getOrElse { ClinicMembershipStorage.loadPendingInvites(context) }
+        awaitAuthUser(timeoutMs = 15_000L)
+        val userId = resolveUserId(context).orEmpty()
+        if (userId.isBlank()) {
+            Log.w(TAG, "listPendingInvitations: sin uid (Firebase Auth no listo)")
+            return cached
         }
 
-        ClinicMembershipStorage.savePendingInvites(context, list)
-        return list
+        // 1) API: repara buzón en servidor y devuelve pendingInvitations
+        fetchPendingInvitationsFromApi(context, doctorCedula)?.let { fromApi ->
+            if (fromApi.isNotEmpty()) {
+                ClinicMembershipStorage.savePendingInvites(context, fromApi)
+                return fromApi
+            }
+        }
+
+        // 2) Firestore directo (clinicosdoc_user/{uid}/invitations)
+        var list = runCatching {
+            readDoctorMailbox(userId, doctorCedula, Source.SERVER)
+        }.onFailure { err ->
+            Log.w(TAG, "readDoctorMailbox: ${err.message}")
+        }.getOrDefault(cached)
+
+        if (list.isEmpty()) {
+            delay(2_000)
+            list = runCatching {
+                readDoctorMailbox(userId, doctorCedula, Source.SERVER)
+            }.getOrElse { cached }
+        }
+
+        if (list.isNotEmpty()) {
+            ClinicMembershipStorage.savePendingInvites(context, list)
+            return list
+        }
+        return cached
     }
 
     suspend fun acceptInvitation(context: Context, clinicId: String): ClinicMembership {

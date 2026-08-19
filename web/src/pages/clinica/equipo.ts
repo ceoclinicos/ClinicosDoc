@@ -24,10 +24,9 @@ registerRoute({
       `
       <div class="card-panel">
         <h2 class="home-section-title" style="margin-top:0">Agregar médico</h2>
-        <p class="muted">Busque por cédula. El médico verá la invitación al abrir la app y debe aceptar en 7 días.</p>
+        <p class="muted">Solo la cédula. El nombre se toma de la cuenta del médico si ya está registrado.</p>
         <form class="form" id="invite-doctor-form">
           <label>Cédula del médico<input name="cedula" required placeholder="Ej. V-12345678" /></label>
-          <label>Nombre (si aún no está registrado)<input name="nombre" placeholder="Opcional si ya tiene cuenta" /></label>
           <button type="submit" class="btn btn-primary">Enviar invitación</button>
         </form>
         <div id="invite-status" class="muted" style="margin-top:0.5rem"></div>
@@ -202,7 +201,6 @@ registerRoute({
         const inv = await inviteDoctorByCedula({
           clinicId: session.clinicId,
           doctorCedula: String(fd.get("cedula")),
-          doctorNombreHint: String(fd.get("nombre") || "").trim() || undefined,
         });
         inviteStatus.textContent = `Invitación enviada a ${inv.doctorNombre}`;
         (e.target as HTMLFormElement).reset();

@@ -26,6 +26,10 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ceoclinicos.clinicosdoc.data.DoctorStorage
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 import com.ceoclinicos.clinicosdoc.data.HeaderStorage
 import com.ceoclinicos.clinicosdoc.data.TemplateStorage
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
@@ -74,7 +78,31 @@ fun ClinicosDocNavHost() {
     }
 
     LaunchedEffect(Unit) {
-        isRegistered = DoctorStorage.isRegistered(context)
+        val locallyRegistered = DoctorStorage.isRegistered(context)
+        if (locallyRegistered) {
+            val authReady = withTimeoutOrNull(20_000L) {
+                suspendCancellableCoroutine { cont ->
+                    val auth = FirebaseAuth.getInstance()
+                    auth.currentUser?.let {
+                        if (cont.isActive) cont.resume(true)
+                        return@suspendCancellableCoroutine
+                    }
+                    val listener = object : FirebaseAuth.AuthStateListener {
+                        override fun onAuthStateChanged(firebaseAuth: FirebaseAuth) {
+                            if (firebaseAuth.currentUser != null && cont.isActive) {
+                                firebaseAuth.removeAuthStateListener(this)
+                                cont.resume(true)
+                            }
+                        }
+                    }
+                    auth.addAuthStateListener(listener)
+                    cont.invokeOnCancellation { auth.removeAuthStateListener(listener) }
+                }
+            } ?: false
+            isRegistered = authReady
+        } else {
+            isRegistered = false
+        }
         checkingAuth = false
     }
 
