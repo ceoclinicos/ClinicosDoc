@@ -1,9 +1,14 @@
 const { getAdmin } = require("./_lib/firebase");
-const { normalizeCedula, cedulaLookupKeys } = require("./_lib/pin");
+const { normalizeCedula } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
-const { isInviteExpired, deletePendingInvitePair } = require("./_lib/invite-expiry");
+const {
+  isInviteExpired,
+  deleteDoctorInvitation,
+  clinicInviteRef,
+  doctorMailboxRef,
+} = require("./_lib/invite-expiry");
 const { requireMedicoAuth } = require("./_lib/require-medico");
 
 module.exports = async function handler(req, res) {
@@ -12,8 +17,8 @@ module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Solo POST" });
 
   try {
-    const { admin, uid, decoded } = await requireMedicoAuth(req, getAdmin());
-    const db = admin.firestore();
+    const { uid, decoded } = await requireMedicoAuth(req, getAdmin());
+    const db = getAdmin().firestore();
     const body = parseBody(req);
     const action = String(body.action || "accept").toLowerCase();
     const clinicId = String(body.clinicId || "").trim();
@@ -21,78 +26,45 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: "clinicId requerido" });
     }
 
-    const doctorCedula = normalizeCedula(
-      body.doctorCedula || decoded.cedula || "",
-    );
+    const doctorCedula = normalizeCedula(body.doctorCedula || decoded.cedula || "");
     if (doctorCedula.length < 7) {
       return res.status(400).json({ error: "Cédula del médico inválida" });
     }
     const doctorNombre = String(body.doctorNombre || "").trim() || `Médico C.I. ${doctorCedula}`;
 
-    const invKeys = [...new Set([doctorCedula, ...cedulaLookupKeys(doctorCedula)])];
-    let invRef = null;
-    let invSnap = null;
-    for (const key of invKeys) {
-      const ref = db
-        .collection("clinicosdoc_clinics")
-        .doc(clinicId)
-        .collection("invitations")
-        .doc(key);
-      const snap = await ref.get();
-      if (snap.exists) {
-        invRef = ref;
-        invSnap = snap;
-        break;
-      }
-    }
-    if (!invRef) {
-      invRef = db
-        .collection("clinicosdoc_clinics")
-        .doc(clinicId)
-        .collection("invitations")
-        .doc(doctorCedula);
-      invSnap = await invRef.get();
-    }
+    const mailboxSnap = await doctorMailboxRef(db, uid, clinicId).get();
+    const clinicSnap = await clinicInviteRef(db, clinicId, doctorCedula).get();
+    const invSnap = mailboxSnap.exists ? mailboxSnap : clinicSnap;
+    const inv = invSnap.exists ? invSnap.data() || {} : {};
 
     if (action === "reject") {
-      const invData = invSnap.exists ? invSnap.data() || {} : {};
-      await deletePendingInvitePair(
+      await deleteDoctorInvitation(
         db,
         clinicId,
-        invData.doctorCedula || doctorCedula,
-        invData.cloudUserId || uid,
+        inv.doctorCedula || doctorCedula,
+        inv.cloudUserId || uid,
       );
-      await db
-        .collection("clinicosdoc_user")
-        .doc(uid)
-        .collection("clinic_notices")
-        .doc(clinicId)
-        .delete()
-        .catch(() => {});
       return res.status(200).json({ ok: true, status: "rejected" });
     }
 
     if (!invSnap.exists) {
       return res.status(404).json({ error: "Invitación no encontrada" });
     }
-    const inv = invSnap.data() || {};
     if (inv.status && inv.status !== "pending") {
       return res.status(409).json({ error: "Esta invitación ya no está pendiente" });
     }
     if (isInviteExpired(inv)) {
-      await deletePendingInvitePair(db, clinicId, inv.doctorCedula || doctorCedula, inv.cloudUserId || uid);
+      await deleteDoctorInvitation(db, clinicId, inv.doctorCedula || doctorCedula, uid);
       return res.status(410).json({
         error: "La invitación venció. Pida al centro que lo invite de nuevo.",
       });
     }
 
-    const clinicSnap = await db.collection("clinicosdoc_clinics").doc(clinicId).get();
-    if (!clinicSnap.exists) {
+    const clinicDoc = await db.collection("clinicosdoc_clinics").doc(clinicId).get();
+    if (!clinicDoc.exists) {
       return res.status(404).json({ error: "Centro no encontrado" });
     }
-    const clinicName = String(
-      clinicSnap.data()?.nombre || inv.clinicName || "Centro",
-    );
+    const clinicName = String(clinicDoc.data()?.nombre || inv.clinicName || "Centro");
     const joinedAt = new Date().toISOString();
     const memberCedula = normalizeCedula(inv.doctorCedula || doctorCedula);
 
@@ -121,15 +93,7 @@ module.exports = async function handler(req, res) {
         joinedAt,
       });
 
-    await invRef.set({ status: "accepted" }, { merge: true });
-    await deletePendingInvitePair(db, clinicId, memberCedula, inv.cloudUserId || uid);
-    await db
-      .collection("clinicosdoc_user")
-      .doc(uid)
-      .collection("clinic_notices")
-      .doc(clinicId)
-      .delete()
-      .catch(() => {});
+    await deleteDoctorInvitation(db, clinicId, memberCedula, uid);
 
     return res.status(200).json({
       ok: true,

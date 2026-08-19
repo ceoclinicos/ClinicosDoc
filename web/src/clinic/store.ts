@@ -62,13 +62,8 @@ function invitationsCol(clinicId: string) {
   return collection(getDb(), FirestorePaths.CLINICS, clinicId, FirestorePaths.SUB_INVITATIONS);
 }
 
-function doctorPendingInvitesCol(doctorCedula: string) {
-  return collection(
-    getDb(),
-    FirestorePaths.DOCTOR_INVITES,
-    normalizeCedula(doctorCedula),
-    "pending",
-  );
+function doctorMailboxCol(cloudUserId: string) {
+  return collection(getDb(), FirestorePaths.USERS, cloudUserId, FirestorePaths.SUB_INVITATIONS);
 }
 
 async function writeClinicMembership(input: {
@@ -385,11 +380,17 @@ function isInviteExpired(inv: { expiresAt?: string; invitedAt?: string }): boole
   return false;
 }
 
-async function purgeExpiredInvite(clinicId: string, doctorCedula: string): Promise<void> {
+async function purgeExpiredInvite(
+  clinicId: string,
+  doctorCedula: string,
+  cloudUserId?: string,
+): Promise<void> {
   const ced = normalizeCedula(doctorCedula);
   if (!clinicId || !ced) return;
   await deleteDoc(doc(invitationsCol(clinicId), ced)).catch(() => undefined);
-  await deleteDoc(doc(doctorPendingInvitesCol(ced), clinicId)).catch(() => undefined);
+  if (cloudUserId) {
+    await deleteDoc(doc(doctorMailboxCol(cloudUserId), clinicId)).catch(() => undefined);
+  }
 }
 
 export async function listPendingInvitationsForClinic(
@@ -401,7 +402,7 @@ export async function listPendingInvitationsForClinic(
     const inv = d.data() as ClinicDoctorInvitation;
     if (inv.status !== "pending") continue;
     if (isInviteExpired(inv)) {
-      await purgeExpiredInvite(clinicId, inv.doctorCedula || d.id);
+      await purgeExpiredInvite(clinicId, inv.doctorCedula || d.id, inv.cloudUserId);
       continue;
     }
     out.push(inv);
@@ -413,42 +414,25 @@ export async function listPendingInvitationsForDoctor(
   doctorCedula: string,
   cloudUserId?: string,
 ): Promise<ClinicDoctorInvitation[]> {
-  // Si la sesión del médico fue creada antes de que se corrigieran claims/role,
-  // las reglas pueden bloquear lecturas hasta que el ID token se refresque.
-  // Forzamos refresh para que `request.auth.token` tenga las claims correctas.
+  if (!cloudUserId) return [];
   try {
     const { getIdToken } = await import("../services/firebase-auth");
     await getIdToken(true);
   } catch {
-    // si no se puede refrescar igual intentamos (fallback)
+    /* intentar lectura directa */
   }
 
-  const { cedulaLookupKeys } = await import("../services/cedula");
-  const keys = [
-    ...new Set(
-      [...cedulaLookupKeys(doctorCedula), normalizeCedula(doctorCedula), cloudUserId || ""].filter(
-        Boolean,
-      ),
-    ),
-  ];
+  const snap = await getDocs(doctorMailboxCol(cloudUserId));
   const out: ClinicDoctorInvitation[] = [];
-  const seen = new Set<string>();
-  for (const key of keys) {
-    const snap = await getDocs(
-      collection(getDb(), FirestorePaths.DOCTOR_INVITES, key, "pending"),
-    );
-    for (const d of snap.docs) {
-      const inv = d.data() as ClinicDoctorInvitation;
-      if (inv.status !== "pending") continue;
-      const clinicId = inv.clinicId || d.id;
-      if (!clinicId || seen.has(clinicId)) continue;
-      if (isInviteExpired(inv)) {
-        await purgeExpiredInvite(clinicId, inv.doctorCedula || doctorCedula);
-        continue;
-      }
-      seen.add(clinicId);
-      out.push(inv);
+  for (const d of snap.docs) {
+    const inv = d.data() as ClinicDoctorInvitation;
+    if (inv.status !== "pending") continue;
+    const clinicId = inv.clinicId || d.id;
+    if (isInviteExpired(inv)) {
+      await purgeExpiredInvite(clinicId, inv.doctorCedula || doctorCedula, cloudUserId);
+      continue;
     }
+    out.push({ ...inv, clinicId });
   }
   return out.sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
 }
@@ -458,8 +442,14 @@ export async function cancelClinicInvitation(
   doctorCedula: string,
 ): Promise<void> {
   const ced = normalizeCedula(doctorCedula);
+  const invSnap = await getDoc(doc(invitationsCol(clinicId), ced));
+  const cloudUserId = invSnap.exists()
+    ? String((invSnap.data() as ClinicDoctorInvitation)?.cloudUserId || "")
+    : "";
   await deleteDoc(doc(invitationsCol(clinicId), ced));
-  await deleteDoc(doc(doctorPendingInvitesCol(ced), clinicId));
+  if (cloudUserId) {
+    await deleteDoc(doc(doctorMailboxCol(cloudUserId), clinicId)).catch(() => undefined);
+  }
 }
 
 export async function acceptDoctorInvitation(input: {

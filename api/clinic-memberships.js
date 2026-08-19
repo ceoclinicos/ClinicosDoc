@@ -3,7 +3,7 @@ const { normalizeCedula, cedulaLookupKeys } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
-const { isInviteExpired, deletePendingInvitePair } = require("./_lib/invite-expiry");
+const { isInviteExpired, deleteDoctorInvitation, listDoctorInvitations } = require("./_lib/invite-expiry");
 const { requireMedicoAuth } = require("./_lib/require-medico");
 
 async function resolveDoctorCedula(db, uid, decoded, body) {
@@ -50,78 +50,9 @@ async function upsertMembership(db, uid, clinicId, clinicName, role, joinedAt) {
     );
 }
 
-/** Invitaciones pendientes (aún no son afiliación). Prueba cédula + uid. */
+/** Invitaciones pendientes: buzón del médico clinicosdoc_user/{uid}/invitations */
 async function pendingInvitesForDoctor(db, cedula, uid) {
-  const keys = [
-    ...new Set(
-      [...cedulaLookupKeys(cedula || ""), normalizeCedula(cedula || ""), uid || ""].filter(
-        (k) => k && String(k).length >= 6,
-      ),
-    ),
-  ];
-  if (!keys.length) return [];
-  const out = [];
-  const seen = new Set();
-
-  function pushInvite(data, clinicIdFallback) {
-    if (String(data.status || "pending") !== "pending") return;
-    const clinicId = String(data.clinicId || clinicIdFallback || "");
-    if (!clinicId || seen.has(clinicId)) return;
-    if (isInviteExpired(data)) {
-      deletePendingInvitePair(
-        db,
-        clinicId,
-        data.doctorCedula || cedula,
-        data.cloudUserId || uid,
-      ).catch(() => {});
-      return;
-    }
-    seen.add(clinicId);
-    out.push({
-      clinicId,
-      clinicName: String(data.clinicName || "Centro"),
-      doctorCedula: String(data.doctorCedula || cedula),
-      doctorNombre: String(data.doctorNombre || ""),
-      invitedAt: String(data.invitedAt || ""),
-      expiresAt: String(data.expiresAt || ""),
-      status: "pending",
-    });
-  }
-
-  for (const key of keys) {
-    const snap = await db
-      .collection("clinicosdoc_doctor_invites")
-      .doc(key)
-      .collection("pending")
-      .get();
-    for (const d of snap.docs) {
-      pushInvite(d.data() || {}, d.id);
-    }
-  }
-
-  // Respaldo: invitaciones en la clínica (por si falta la ruta del médico)
-  if (!out.length) {
-    const cedKeys = cedulaLookupKeys(cedula || "").filter(Boolean);
-    for (const key of cedKeys) {
-      try {
-        const snap = await db
-          .collectionGroup("invitations")
-          .where("doctorCedula", "==", key)
-          .limit(30)
-          .get();
-        for (const d of snap.docs) {
-          const parts = d.ref.path.split("/");
-          const clinicId =
-            parts.length >= 4 && parts[0] === "clinicosdoc_clinics" ? parts[1] : "";
-          pushInvite(d.data() || {}, clinicId);
-        }
-      } catch (err) {
-        console.warn("pendingInvites collectionGroup", err?.message || err);
-      }
-    }
-  }
-
-  return out;
+  return listDoctorInvitations(db, uid, cedula);
 }
 
 /**

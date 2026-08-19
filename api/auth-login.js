@@ -10,6 +10,7 @@ const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
 const { mintAuthToken } = require("./_lib/mint-token");
+const { healDoctorInviteMailbox } = require("./_lib/invite-expiry");
 
 function normalizeRif(rif) {
   const raw = String(rif || "")
@@ -148,6 +149,11 @@ async function ensureCloudUserFromProfesional(db, profSnap, profDocId, pin) {
   return { snap, docId: ref.id };
 }
 
+async function finishMedicoLogin(db, uid, cedula, result) {
+  await healDoctorInviteMailbox(db, uid, cedula).catch(() => {});
+  return result;
+}
+
 async function loginMedico(db, admin, cedula, pin, prefer) {
   assertPin4(pin);
   const cedNorm = normalizeCedula(cedula);
@@ -170,7 +176,7 @@ async function loginMedico(db, admin, cedula, pin, prefer) {
       role: "medico",
       cedula: cedNorm,
     });
-    return {
+    return finishMedicoLogin(db, cloud.docId, cedNorm, {
       token,
       uid: cloud.docId,
       role: "medico",
@@ -182,7 +188,7 @@ async function loginMedico(db, admin, cedula, pin, prefer) {
       sexo: p.sexo ? String(p.sexo) : c.sexo ? String(c.sexo) : undefined,
       nacionalidad: String(p.nacionalidad || c.nacionalidad || "Venezuela"),
       cloudUserId: cloud.docId,
-    };
+    });
   }
 
   // app / auto: prefer cloud passwordHash, else profesional pinHash
@@ -195,7 +201,7 @@ async function loginMedico(db, admin, cedula, pin, prefer) {
         const expected = hashPin(p.cedula || prof.docId, pin);
         if (p.pinHash === expected) {
           const token = await mintToken(admin, appUser.docId, { role: "medico", cedula: cedNorm });
-          return {
+          return finishMedicoLogin(db, appUser.docId, cedNorm, {
             token,
             uid: appUser.docId,
             role: "medico",
@@ -205,13 +211,13 @@ async function loginMedico(db, admin, cedula, pin, prefer) {
             especialidad: String(c.especialidad || p.especialidad || "Médico general"),
             mpps: String(c.mpps || p.mpps || ""),
             cloudUserId: appUser.docId,
-          };
+          });
         }
       }
       throw Object.assign(new Error("Cédula o PIN incorrectos"), { status: 401 });
     }
     const token = await mintToken(admin, appUser.docId, { role: "medico", cedula: cedNorm });
-    return {
+    return finishMedicoLogin(db, appUser.docId, cedNorm, {
       token,
       uid: appUser.docId,
       role: "medico",
@@ -223,7 +229,7 @@ async function loginMedico(db, admin, cedula, pin, prefer) {
       sexo: c.sexo ? String(c.sexo) : undefined,
       nacionalidad: String(c.nacionalidad || "Venezuela"),
       cloudUserId: appUser.docId,
-    };
+    });
   }
 
   if (prof) {
@@ -237,7 +243,7 @@ async function loginMedico(db, admin, cedula, pin, prefer) {
     }
     const cloud = await ensureCloudUserFromProfesional(db, prof.snap, prof.docId, pin);
     const token = await mintToken(admin, cloud.docId, { role: "medico", cedula: cedNorm });
-    return {
+    return finishMedicoLogin(db, cloud.docId, cedNorm, {
       token,
       uid: cloud.docId,
       role: "medico",
@@ -247,7 +253,7 @@ async function loginMedico(db, admin, cedula, pin, prefer) {
       especialidad: String(p.especialidad || "Médico general"),
       mpps: String(p.mpps || ""),
       cloudUserId: cloud.docId,
-    };
+    });
   }
 
   throw Object.assign(new Error("Cédula o PIN incorrectos"), { status: 401 });

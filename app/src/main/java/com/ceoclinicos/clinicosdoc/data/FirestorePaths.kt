@@ -29,12 +29,12 @@ object FirestorePaths {
     /** Centros de salud / clínicas (modo empresa). */
     const val CLINICS = "${PREFIX}clinics"
     const val CLINIC_INVITES = "${PREFIX}clinic_invites"
+    /** Legado — ya no se usa en flujo nuevo */
     const val DOCTOR_INVITES = "${PREFIX}doctor_invites"
     const val SUB_MEMBERS = "members"
+    /** Invitaciones: clínica → clinicosdoc_clinics/{id}/invitations; médico → clinicosdoc_user/{uid}/invitations */
     const val SUB_INVITATIONS = "invitations"
     const val SUB_CLINIC_MEMBERSHIPS = "clinic_memberships"
-    /** Buzón de invitaciones del médico (clínica escribe, médico lee al abrir la app). */
-    const val SUB_CLINIC_NOTICES = "clinic_notices"
     const val SUB_PENDING = "pending"
     /** Registro portal pacientes (modo paciente / ficha emergencia). */
     const val PORTAL_PACIENTES = "pacientes"

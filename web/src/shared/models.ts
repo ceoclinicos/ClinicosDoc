@@ -13,9 +13,8 @@ export const FirestorePaths = {
   /** Centros de salud / clínicas (modo empresa) */
   CLINICS: "clinicosdoc_clinics",
   CLINIC_INVITES: "clinicosdoc_clinic_invites",
-  /** Invitaciones pendientes indexadas por cédula del médico */
-  DOCTOR_INVITES: "clinicosdoc_doctor_invites",
   SUB_MEMBERS: "members",
+  /** Invitaciones: clínica y buzón del médico (clinicosdoc_user/{uid}/invitations) */
   SUB_INVITATIONS: "invitations",
 } as const;
 

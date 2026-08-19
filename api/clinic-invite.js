@@ -3,7 +3,14 @@ const { cedulaLookupKeys, normalizeCedula } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
-const { expiresAtIso, INVITE_TTL_DAYS, isInviteExpired, deletePendingInvitePair } = require("./_lib/invite-expiry");
+const {
+  expiresAtIso,
+  INVITE_TTL_DAYS,
+  isInviteExpired,
+  deleteDoctorInvitation,
+  clinicInviteRef,
+  doctorMailboxRef,
+} = require("./_lib/invite-expiry");
 
 async function findAppMedico(db, inputCedula) {
   const keys = cedulaLookupKeys(inputCedula);
@@ -58,8 +65,8 @@ module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Solo POST" });
 
   try {
-    const { admin, uid } = await requireClinicAuth(req);
-    const db = admin.firestore();
+    const { uid } = await requireClinicAuth(req);
+    const db = getAdmin().firestore();
     const body = parseBody(req);
     const clinicId = String(body.clinicId || uid).trim();
     if (clinicId !== uid) {
@@ -86,29 +93,17 @@ module.exports = async function handler(req, res) {
     if (memberSnap.exists) {
       throw Object.assign(new Error("Ese médico ya está en el equipo"), { status: 409 });
     }
-    // También bajo otras claves de cédula
-    for (const key of cedulaLookupKeys(doctorCedula)) {
-      if (key === doctorCedula) continue;
-      const alt = await db
-        .collection("clinicosdoc_clinics")
-        .doc(clinicId)
-        .collection("members")
-        .doc(key)
-        .get();
-      if (alt.exists) {
-        throw Object.assign(new Error("Ese médico ya está en el equipo"), { status: 409 });
-      }
-    }
 
-    const pendingRef = db
-      .collection("clinicosdoc_clinics")
-      .doc(clinicId)
-      .collection("invitations")
-      .doc(doctorCedula);
+    const pendingRef = clinicInviteRef(db, clinicId, doctorCedula);
     const pendingSnap = await pendingRef.get();
     if (pendingSnap.exists && pendingSnap.data()?.status === "pending") {
       if (isInviteExpired(pendingSnap.data() || {})) {
-        await deletePendingInvitePair(db, clinicId, doctorCedula);
+        await deleteDoctorInvitation(
+          db,
+          clinicId,
+          doctorCedula,
+          pendingSnap.data()?.cloudUserId,
+        );
       } else {
         throw Object.assign(new Error("Ya hay una invitación pendiente para esa cédula"), {
           status: 409,
@@ -117,17 +112,21 @@ module.exports = async function handler(req, res) {
     }
 
     const prof = await findProfesional(db, doctorCedula);
-    const cloud = await findAppMedico(db, doctorCedula);
+    let cloud = await findAppMedico(db, doctorCedula);
     const hint = String(body.doctorNombreHint || "").trim();
     const doctorNombre =
       (prof?.nombre || cloud?.data?.nombre || hint || "").trim() || `Médico C.I. ${doctorCedula}`;
     if (!prof && !cloud && !hint) {
       throw Object.assign(
         new Error(
-          "No encontramos esa cédula en ClinicosDoc. Indique el nombre del médico o pídale que se registre primero.",
+          "No encontramos esa cédula. Indique el nombre del médico o pídale que se registre en la app primero.",
         ),
         { status: 404 },
       );
+    }
+
+    if (!cloud) {
+      cloud = await findAppMedico(db, doctorCedula);
     }
 
     const invitedAt = new Date().toISOString();
@@ -143,60 +142,21 @@ module.exports = async function handler(req, res) {
       ttlDays: INVITE_TTL_DAYS,
     };
 
+    // 1) Copia en la clínica (lista Equipo)
     await pendingRef.set(invitation);
-    // Guardar bajo cédula (todas las variantes) y bajo cloudUserId si existe
-    const inviteKeys = [
-      ...new Set(
-        [doctorCedula, ...cedulaLookupKeys(doctorCedula), cloud?.id || ""].filter(Boolean),
-      ),
-    ];
-    for (const key of inviteKeys) {
-      await db
-        .collection("clinicosdoc_doctor_invites")
-        .doc(key)
-        .collection("pending")
-        .doc(clinicId)
-        .set(invitation);
-    }
-    // Buzón del médico: lo lee la app al abrir (solo dueño de la cuenta)
-    const noticePayload = {
-      type: "invite",
-      clinicId,
-      clinicName: invitation.clinicName,
-      invitedAt: invitation.invitedAt,
-      expiresAt: invitation.expiresAt,
-      status: "pending",
-      message: `La clínica «${invitation.clinicName}» te invitó a su equipo.`,
-    };
+
+    // 2) Buzón del médico — sobreescribe: clinicosdoc_user/{uid}/invitations/{clinicId}
     if (cloud?.id) {
-      await db
-        .collection("clinicosdoc_user")
-        .doc(cloud.id)
-        .collection("clinic_notices")
-        .doc(clinicId)
-        .set(noticePayload, { merge: true });
-    } else {
-      // Reintento: médico pudo registrarse justo antes de la invitación
-      const cloudLate = await findAppMedico(db, doctorCedula);
-      if (cloudLate?.id) {
-        invitation.cloudUserId = cloudLate.id;
-        await pendingRef.set({ cloudUserId: cloudLate.id }, { merge: true });
-        await db
-          .collection("clinicosdoc_doctor_invites")
-          .doc(cloudLate.id)
-          .collection("pending")
-          .doc(clinicId)
-          .set({ ...invitation, cloudUserId: cloudLate.id });
-        await db
-          .collection("clinicosdoc_user")
-          .doc(cloudLate.id)
-          .collection("clinic_notices")
-          .doc(clinicId)
-          .set(noticePayload, { merge: true });
-      }
+      await doctorMailboxRef(db, cloud.id, clinicId).set(invitation, { merge: false });
     }
 
-    return res.status(200).json(invitation);
+    return res.status(200).json({
+      ...invitation,
+      deliveredToDoctor: Boolean(cloud?.id),
+      message: cloud?.id
+        ? "Invitación guardada en la cuenta del médico."
+        : "Invitación registrada. El médico la verá al registrarse o iniciar sesión en la app.",
+    });
   } catch (err) {
     const status = err?.status || (err?.code === "auth/id-token-expired" ? 401 : 500);
     if (status < 500) {
