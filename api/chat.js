@@ -1,20 +1,34 @@
-module.exports = async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+const { getAdmin } = require("./_lib/firebase");
+const { applyCors } = require("./_lib/cors");
+const { parseBody } = require("./_lib/body");
+const { apiError } = require("./_lib/errors");
+const { requireAppAuth } = require("./_lib/require-app-auth");
 
+const MAX_PROMPT_CHARS = 48_000;
+const MAX_OUTPUT_TOKENS = 8192;
+
+module.exports = async function handler(req, res) {
+  applyCors(res);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Solo POST" });
 
-  const body = req.body || {};
-  const prompt = body.prompt;
-  const systemMessage = body.systemMessage || "";
-  const provider = body.provider || "deepseek";
-  const maxTokens = body.max_tokens || body.maxTokens || 4096;
-
-  if (!prompt) return res.status(400).json({ error: "Falta el prompt" });
-
   try {
+    await requireAppAuth(req, getAdmin());
+
+    const body = parseBody(req);
+    const prompt = String(body.prompt || "");
+    const systemMessage = String(body.systemMessage || "");
+    const provider = String(body.provider || "deepseek").toLowerCase();
+    const maxTokens = Math.min(
+      MAX_OUTPUT_TOKENS,
+      Math.max(1, Number(body.max_tokens || body.maxTokens || 4096) || 4096),
+    );
+
+    if (!prompt.trim()) return res.status(400).json({ error: "Falta el prompt" });
+    if (prompt.length > MAX_PROMPT_CHARS) {
+      return res.status(400).json({ error: "Prompt demasiado largo" });
+    }
+
     let text;
 
     if (provider === "deepseek") {
@@ -50,7 +64,7 @@ module.exports = async function handler(req, res) {
       }
 
       text = dsData.choices?.[0]?.message?.content;
-    } else {
+    } else if (provider === "gemini") {
       const gmKey = process.env.GEMINI_API_KEY;
       if (!gmKey) return res.status(500).json({ error: "GEMINI_API_KEY no configurada en Vercel" });
 
@@ -79,11 +93,18 @@ module.exports = async function handler(req, res) {
       }
 
       text = gmData.candidates?.[0]?.content?.parts?.[0]?.text;
+    } else {
+      return res.status(400).json({ error: "Proveedor no válido" });
     }
 
     if (!text) return res.status(500).json({ error: "Respuesta vacía de la IA" });
     return res.status(200).json({ text });
-  } catch (e) {
-    return res.status(500).json({ error: e.message || "Error del servidor" });
+  } catch (err) {
+    const status = err?.status || (err?.code === "auth/id-token-expired" ? 401 : 500);
+    if (status < 500) {
+      return res.status(status).json({ error: err.message || "No autorizado" });
+    }
+    console.error("chat", err);
+    return apiError(res, 500, "Error del servidor de IA", err?.message || String(err), "CHAT_FAILED");
   }
 };

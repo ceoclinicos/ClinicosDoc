@@ -1,15 +1,14 @@
+import { getIdToken } from "../firebase-auth";
+
 export type AiProvider = "deepseek" | "gemini";
 
 const DEFAULT_PROVIDER: AiProvider =
   (import.meta.env.VITE_AI_PROVIDER as AiProvider) || "deepseek";
 
-/** Proxy Vercel (recomendado). Ej: https://tu-proyecto.vercel.app/api/chat */
-const PROXY_URL = import.meta.env.VITE_AI_PROXY_URL?.replace(/\/$/, "") || "";
-
-/** Fallback: proxy legacy de website_clinicos (sin systemMessage separado) */
-const LEGACY_PROXY =
-  import.meta.env.VITE_AI_LEGACY_PROXY?.replace(/\/$/, "") ||
-  "https://ceoclinicos-github-io.vercel.app/api/gemini";
+/** Proxy Vercel protegido (requiere sesión Firebase). */
+const PROXY_URL =
+  import.meta.env.VITE_AI_PROXY_URL?.replace(/\/$/, "") ||
+  "https://clinicos-doc.vercel.app/api/chat";
 
 export async function sendPrompt(options: {
   prompt: string;
@@ -19,41 +18,25 @@ export async function sendPrompt(options: {
 }): Promise<string> {
   const provider = options.provider ?? DEFAULT_PROVIDER;
   const maxTokens = options.maxTokens ?? 4096;
-
-  if (PROXY_URL) {
-    return callProxy(PROXY_URL, options.prompt, options.systemMessage, provider, maxTokens, true);
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error("Inicie sesión para usar la IA.");
   }
 
-  try {
-    return await callProxy(LEGACY_PROXY, options.prompt, options.systemMessage, provider, maxTokens, false);
-  } catch {
-    throw new Error(
-      "No se pudo conectar a la IA. Configura VITE_AI_PROXY_URL en Vercel o despliega api/chat.js con DEEPSEEK_API_KEY.",
-    );
-  }
-}
-
-async function callProxy(
-  baseUrl: string,
-  prompt: string,
-  systemMessage: string | undefined,
-  provider: AiProvider,
-  maxTokens: number,
-  supportsSystem: boolean,
-): Promise<string> {
-  const url = baseUrl.includes("/api/") ? baseUrl : `${baseUrl}/api/chat`;
-  const body: Record<string, unknown> = supportsSystem
-    ? { prompt, systemMessage: systemMessage ?? "", provider, max_tokens: maxTokens }
-    : {
-        prompt: systemMessage?.trim()
-          ? `${systemMessage.trim()}\n\n---\n\n${prompt}`
-          : prompt,
-        provider,
-      };
+  const url = PROXY_URL.includes("/api/") ? PROXY_URL : `${PROXY_URL}/api/chat`;
+  const body = {
+    prompt: options.prompt,
+    systemMessage: options.systemMessage ?? "",
+    provider,
+    max_tokens: maxTokens,
+  };
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify(body),
   });
 
