@@ -1,4 +1,4 @@
-import { PhysicalExamDefaults, displayPriority } from "../../shared/physical-exam-defaults";
+import { PhysicalExamDefaults, displayPriority, PathologicalStyleExamples } from "../../shared/physical-exam-defaults";
 import type { DocumentTemplate, PhysicalExamSystem } from "../../shared/models";
 import { loadJson } from "../local-store";
 import { clinicalOrder, orderEnabledByCatalog } from "../exam-catalog";
@@ -55,6 +55,12 @@ export function buildPhysicalExamBlock(
   const vitalsSystem = systems.find((s) => s.id === "signos_vitales");
   const bodySystems = systems.filter((s) => s.id !== "signos_vitales");
   const namesInOrder = bodySystems.map((s) => s.name).join(", ");
+  const pathologicExamples = systems
+    .map((system) => {
+      const example = PathologicalStyleExamples[system.id];
+      return example ? { system, example } : null;
+    })
+    .filter((x): x is { system: PhysicalExamSystem; example: string } => Boolean(x));
 
   const lines: string[] = [
     "SISTEMAS DE EXAMEN FÍSICO ACTIVOS (OBLIGATORIO incluir TODOS, en este orden):",
@@ -68,6 +74,19 @@ export function buildPhysicalExamBlock(
       lines.push(`     "${system.name}: ${system.defaultText}"`);
     }
   });
+  if (pathologicExamples.length) {
+    lines.push(
+      "",
+      "EJEMPLOS DE ESTILO PATOLÓGICO (referencia de redacción; adapta SOLO a lo dictado, sin inventar):",
+    );
+    pathologicExamples.forEach(({ system, example }) => {
+      lines.push(`- Si el dictado aporta hallazgos en ${system.name}, redacta en este estilo:`);
+      lines.push(`  "${system.name}: ${example}"`);
+    });
+    lines.push(
+      "- En Abdomen, inicie siempre por la apariencia (plano, globoso, batracio, en delantal, etc.) y luego el resto.",
+    );
+  }
   lines.push(
     "",
     "REGLAS OBLIGATORIAS DEL EXAMEN FÍSICO:",

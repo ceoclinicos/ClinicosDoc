@@ -1,6 +1,6 @@
 const { getAdmin } = require("./_lib/firebase");
 const {
-  assertPin4,
+  assertPinLogin,
   cedulaLookupKeys,
   hashPin,
   hashPassword,
@@ -11,6 +11,14 @@ const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
 const { mintAuthToken } = require("./_lib/mint-token");
 const { healDoctorInviteMailbox } = require("./_lib/invite-expiry");
+const { makeDoctorUserId } = require("./_lib/doctor-user-id");
+const {
+  touchDeviceOnLogin,
+  buildPublicStatus,
+  readEntitlement,
+  normalizeDeviceId,
+  initEntitlementOnRegister,
+} = require("./_lib/entitlements");
 
 function normalizeRif(rif) {
   const raw = String(rif || "")
@@ -99,7 +107,7 @@ async function mintToken(admin, uid, claims) {
 }
 
 async function loginPaciente(db, admin, cedula, pin) {
-  assertPin4(pin);
+  assertPinLogin(pin);
   const found = await findPaciente(db, cedula);
   if (!found) throw Object.assign(new Error("Cédula o PIN incorrectos"), { status: 401 });
   const p = found.snap.data() || {};
@@ -129,10 +137,12 @@ async function ensureCloudUserFromProfesional(db, profSnap, profDocId, pin) {
   let cloud = await findAppMedico(db, cedNorm);
   if (cloud) return cloud;
 
-  const ref = db.collection("clinicosdoc_user").doc();
+  const nombre = String(p.nombre || "Médico");
+  const doctorUid = makeDoctorUserId(cedNorm, nombre);
+  const ref = db.collection("clinicosdoc_user").doc(doctorUid);
   const now = new Date().toISOString();
   await ref.set({
-    nombre: String(p.nombre || "Médico"),
+    nombre,
     cedula: String(p.cedula || cedNorm),
     cedulaNormalizada: cedNorm,
     mpps: String(p.mpps || ""),
@@ -149,13 +159,35 @@ async function ensureCloudUserFromProfesional(db, profSnap, profDocId, pin) {
   return { snap, docId: ref.id };
 }
 
-async function finishMedicoLogin(db, uid, cedula, result) {
+async function finishMedicoLogin(db, uid, cedula, result, pin, deviceId) {
   await healDoctorInviteMailbox(db, uid, cedula).catch(() => {});
-  return result;
+  const userRef = db.collection("clinicosdoc_user").doc(uid);
+  const snap = await userRef.get();
+  let userData = snap.exists ? snap.data() || {} : {};
+  if (!userData.entitlement) {
+    await initEntitlementOnRegister(db, userRef, {
+      deviceId: normalizeDeviceId(deviceId),
+      userId: uid,
+    });
+    const again = await userRef.get();
+    userData = again.data() || {};
+  } else {
+    await touchDeviceOnLogin(db, userRef, userData, {
+      deviceId: normalizeDeviceId(deviceId),
+      userId: uid,
+    });
+    const again = await userRef.get();
+    userData = again.data() || {};
+  }
+  return {
+    ...result,
+    needsPinUpgrade: String(pin || "").length === 4,
+    entitlement: buildPublicStatus(readEntitlement(userData)),
+  };
 }
 
-async function loginMedico(db, admin, cedula, pin, prefer) {
-  assertPin4(pin);
+async function loginMedico(db, admin, cedula, pin, prefer, deviceId) {
+  assertPinLogin(pin);
   const cedNorm = normalizeCedula(cedula);
   const appUser = await findAppMedico(db, cedNorm);
   const prof = await findProfesional(db, cedNorm);
@@ -188,7 +220,7 @@ async function loginMedico(db, admin, cedula, pin, prefer) {
       sexo: p.sexo ? String(p.sexo) : c.sexo ? String(c.sexo) : undefined,
       nacionalidad: String(p.nacionalidad || c.nacionalidad || "Venezuela"),
       cloudUserId: cloud.docId,
-    });
+    }, pin, deviceId);
   }
 
   // app / auto: prefer cloud passwordHash, else profesional pinHash
@@ -211,7 +243,7 @@ async function loginMedico(db, admin, cedula, pin, prefer) {
             especialidad: String(c.especialidad || p.especialidad || "Médico general"),
             mpps: String(c.mpps || p.mpps || ""),
             cloudUserId: appUser.docId,
-          });
+          }, pin, deviceId);
         }
       }
       throw Object.assign(new Error("Cédula o PIN incorrectos"), { status: 401 });
@@ -229,7 +261,7 @@ async function loginMedico(db, admin, cedula, pin, prefer) {
       sexo: c.sexo ? String(c.sexo) : undefined,
       nacionalidad: String(c.nacionalidad || "Venezuela"),
       cloudUserId: appUser.docId,
-    });
+    }, pin, deviceId);
   }
 
   if (prof) {
@@ -253,14 +285,14 @@ async function loginMedico(db, admin, cedula, pin, prefer) {
       especialidad: String(p.especialidad || "Médico general"),
       mpps: String(p.mpps || ""),
       cloudUserId: cloud.docId,
-    });
+    }, pin, deviceId);
   }
 
   throw Object.assign(new Error("Cédula o PIN incorrectos"), { status: 401 });
 }
 
 async function loginClinica(db, admin, accountOrRif, pin) {
-  assertPin4(pin);
+  assertPinLogin(pin);
   const found = await findClinica(db, accountOrRif);
   if (!found) throw Object.assign(new Error("Nombre de cuenta o PIN incorrectos"), { status: 401 });
   const c = found.snap.data() || {};
@@ -320,7 +352,14 @@ module.exports = async function handler(req, res) {
     ) {
       const prefer =
         tipo === "profesional" || tipo === "medico-web" ? "profesional" : tipo === "app" ? "app" : "auto";
-      result = await loginMedico(db, admin, cedula, pin, prefer);
+      result = await loginMedico(
+        db,
+        admin,
+        cedula,
+        pin,
+        prefer,
+        normalizeDeviceId(body.deviceId || body.deviceFingerprint),
+      );
     } else {
       return res.status(400).json({ error: "Tipo de cuenta no válido" });
     }

@@ -1,5 +1,6 @@
 import { ApiCallError } from "../ui/error-dialog";
 import { signInWithFirebaseToken } from "./firebase-auth";
+import { getDeviceId } from "./device-id";
 import type { AuthLoginResult } from "./auth-login";
 
 const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(/\/$/, "");
@@ -14,7 +15,7 @@ export async function authRegister(body: Record<string, unknown>): Promise<AuthL
     res = await fetch(`${API_BASE}/api/auth-register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, deviceId: getDeviceId() }),
     });
   } catch (err) {
     throw new ApiCallError("No se pudo conectar con el servidor", {

@@ -33,7 +33,7 @@ export const DocumentTypeLabels: Record<DocumentType, string> = {
   receta: "Receta",
 };
 
-export const DocumentTypesInformes: DocumentType[] = ["historiaClinica", "informe", "reposo"];
+export const DocumentTypesInformes: DocumentType[] = ["historiaClinica", "informe"];
 export const DocumentTypesRecetas: DocumentType[] = ["ordenesMedicas", "receta"];
 
 export interface Patient {
@@ -86,6 +86,11 @@ export interface PatientMembrete {
   sexo: string;
   fechaNacimiento: string;
   fecha: string;
+  telefono?: string;
+  direccion?: string;
+  ocupacion?: string;
+  acompananteNombre?: string;
+  acompananteTelefono?: string;
 }
 
 export interface ClinicalDocument {

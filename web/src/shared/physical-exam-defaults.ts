@@ -68,6 +68,21 @@ export const PhysicalExamDefaults: PhysicalExamSystem[] = [
 
 export const DefaultEnabledExamIds = PhysicalExamDefaults.map((s) => s.id);
 
+/**
+ * Ejemplos de estilo cuando el dictado aporta hallazgos patológicos.
+ * No sustituyen el texto base normal; solo guían la redacción.
+ */
+export const PathologicalStyleExamples: Record<string, string> = {
+  cardiopulmonar:
+    "Tórax simétrico, normoexpansible, se auscultan sibilantes en hemitórax derecho o bilaterales, ruidos cardiacos hipofonéticos, no soplo, no galope.",
+  abdomen:
+    "Globoso a expensas de panículo adiposo (inicie por apariencia: plano, globoso, batracio o en delantal), ruidos hidroaéreos disminuidos, doloroso a la palpación en flanco e hipocondrio derecho.",
+  extremidades:
+    "Se evidencia aumento de volumen y limitación funcional a la flexoextensión activa y pasiva de la rodilla derecha, pulsos distales conservados. Resto de extremidades simétricas, eutróficas, sin edema.",
+  neurologico:
+    "Obnubilado, lenguaje no coherente, desorientado en tiempo, espacio y persona, Glasgow 12/15 puntos.",
+};
+
 export function orderEnabledIds(ids: string[]): string[] {
   // Conserva el orden recibido (plantilla / catálogo). Solo elimina duplicados.
   return [...new Set(ids)];

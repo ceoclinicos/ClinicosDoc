@@ -210,11 +210,45 @@ fun JoinClinicScreen(onBack: () -> Unit) {
                 )
             } else {
                 memberships.forEach { m: ClinicMembership ->
-                    Text(
-                        "• ${m.clinicName}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.padding(vertical = 4.dp),
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "• ${m.clinicName}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    loading = true
+                                    try {
+                                        ClinicService.leaveClinic(context, m.clinicId)
+                                        Toast.makeText(
+                                            context,
+                                            "Desvinculado de ${m.clinicName}",
+                                            Toast.LENGTH_SHORT,
+                                        ).show()
+                                        reload()
+                                    } catch (e: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            e.message ?: "No se pudo desvincular",
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                    } finally {
+                                        loading = false
+                                    }
+                                }
+                            },
+                            enabled = !loading,
+                        ) {
+                            Text("Desvincular")
+                        }
+                    }
                 }
             }
         }

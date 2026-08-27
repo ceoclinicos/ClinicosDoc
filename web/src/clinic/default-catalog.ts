@@ -14,18 +14,15 @@ import {
   RECIPE_SECTION,
 } from "../shared/receta";
 import { DefaultEnabledExamIds } from "../shared/physical-exam-defaults";
-import { SectionCatalog, defaultSectionsFor } from "../shared/section-catalog";
+import { defaultSectionsFor } from "../shared/section-catalog";
 
+/** Sin informe de reposo: HC, informe, órdenes y receta. */
 const DOC_TYPES: DocumentType[] = [
   "historiaClinica",
   "informe",
-  "reposo",
   "ordenesMedicas",
   "receta",
 ];
-
-const DIAS_REPOSO_DEFAULT =
-  "Nota: En vista de la sintomatología del paciente se indican cumplir 3 días de reposo médico completo.";
 
 function sectionDefaultTextsFor(type: DocumentType): Record<string, string> | undefined {
   if (type === "ordenesMedicas") {
@@ -36,9 +33,6 @@ function sectionDefaultTextsFor(type: DocumentType): Record<string, string> | un
       [RECIPE_SECTION]: RECETA_MOLDE_RECIPE,
       [RECETA_INDICACIONES_SECTION]: RECETA_MOLDE_INDICACIONES,
     };
-  }
-  if (type === "reposo") {
-    return { [SectionCatalog.DIAS_REPOSO]: DIAS_REPOSO_DEFAULT };
   }
   return undefined;
 }
@@ -52,9 +46,7 @@ export function makeDefaultClinicTemplates(): DocumentTemplate[] {
     isDefault: true,
     enabledPhysicalExamSystemIds: [...DefaultEnabledExamIds],
     enfermedadActualEjemplo:
-      type === "informe" || type === "historiaClinica" || type === "reposo"
-        ? ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT
-        : "",
+      type === "informe" || type === "historiaClinica" ? ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT : "",
     sectionDefaultTexts: sectionDefaultTextsFor(type),
   }));
 }

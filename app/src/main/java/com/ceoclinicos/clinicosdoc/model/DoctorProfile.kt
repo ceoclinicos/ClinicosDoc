@@ -16,4 +16,13 @@ data class DoctorProfile(
 
     val esVenezolano: Boolean
         get() = nacionalidad.equals("Venezuela", ignoreCase = true)
+
+    val tituloProfesional: String
+        get() {
+            val s = sexo.trim().lowercase()
+            return when {
+                s == "femenino" || s == "f" || s.startsWith("fem") || s == "mujer" -> "Dra."
+                else -> "Dr."
+            }
+        }
 }

@@ -27,6 +27,7 @@ import {
 import { loadJson } from "../services/local-store";
 import { bindMembreteEditor, membreteEditorHtml, readMembreteFromEditor } from "../ui/membrete-editor";
 import { bindNavButtons, emptyState, page } from "./helpers";
+import { formatDocumentDateTime } from "../shared/clinical-datetime";
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -48,7 +49,7 @@ registerRoute({
               (d) => `
             <li class="list-item list-item-action" data-nav="/informes/${d.id}">
               <strong>${DocumentTypeLabels[d.type]}</strong>
-              <span class="muted">${escapeHtml(d.patientNombre)} · ${escapeHtml(d.templateName ?? "")} · ${new Date(d.createdAt).toLocaleString("es")}</span>
+              <span class="muted">${escapeHtml(d.patientNombre)} · ${escapeHtml(d.templateName ?? "")} · ${formatDocumentDateTime(d.createdAt)}</span>
             </li>`,
             )
             .join("")}</ul>`;
@@ -113,7 +114,7 @@ registerRoute({
     const el = page(
       DocumentReportTitles[doc.type],
       `
-      <p class="muted">${escapeHtml(doc.patientNombre)} · C.I. ${escapeHtml(doc.patientCedula)} · ${new Date(doc.createdAt).toLocaleString("es")}</p>
+      <p class="muted">${escapeHtml(doc.patientNombre)} · C.I. ${escapeHtml(doc.patientCedula)} · ${formatDocumentDateTime(doc.createdAt)}</p>
 
       <div class="result-actions">
         <button type="button" class="btn btn-primary" id="btn-save">Guardar cambios</button>
@@ -131,7 +132,7 @@ registerRoute({
         </select>
       </div>
 
-      ${membreteEditorHtml(editableMembrete)}
+      ${membreteEditorHtml(editableMembrete, doc.type)}
 
       <h2 class="home-section-title">Editar secciones</h2>
       <div id="sections-editor" class="stack">${sectionsHtml}</div>

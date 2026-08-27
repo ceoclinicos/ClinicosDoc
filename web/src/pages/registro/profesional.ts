@@ -25,6 +25,7 @@ import { loadDoctorProfile, saveDoctorProfile } from "../../services/doctor-loca
 import { syncOnLogin } from "../../services/cloud-sync";
 import { loadTemplates } from "../../services/clinical-store";
 import { bindBirthDateSelects, birthDateFieldsHtml, parseBirthFromForm } from "../../services/birth-date";
+import { openPinUpgradeDialog } from "../../ui/pin-upgrade-dialog";
 import { bindNavButtons, page } from "../helpers";
 
 function seedDoctorFromSession(s: ProfesionalSession): void {
@@ -55,7 +56,7 @@ function loginForm(): string {
     ${tabs("login")}
     <form class="form" id="prof-login">
       ${cedulaFieldHtml({ autocomplete: "username" })}
-      <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required autocomplete="current-password" /></label>
+      <label>PIN (contraseña, 4 o 6 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}|[0-9]{6}" maxlength="6" minlength="4" required autocomplete="current-password" /></label>
       <p class="muted"><a href="#/olvide-pin?tipo=profesional">Olvidé mi PIN (contraseña)</a></p>
       <button type="submit" class="btn btn-primary">Ingresar</button>
     </form>
@@ -101,7 +102,7 @@ function registerForm(): string {
         <label>Código MPPS<input name="mpps" id="mpps-input" placeholder="Ej. 154472" /></label>
         <p class="muted">Se valida en vivo contra SACS (cédula + MPPS deben coincidir).</p>
       </div>
-      <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+      <label>PIN (contraseña, 6 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" required /></label>
       <button type="submit" class="btn btn-primary">Registrar profesional</button>
     </form>
   `;
@@ -187,10 +188,8 @@ function bindProfesionalPage(el: HTMLElement): void {
         e.preventDefault();
         const fd = new FormData(e.target as HTMLFormElement);
         try {
-          const s = await loginProfesional(
-            readCedulaFromForm(fd),
-            String(fd.get("pin")),
-          );
+          const pin = String(fd.get("pin"));
+          const s = await loginProfesional(readCedulaFromForm(fd), pin);
           clearClinicSession();
           setProfessionalSession(s);
           seedDoctorFromSession(s);
@@ -199,6 +198,9 @@ function bindProfesionalPage(el: HTMLElement): void {
             loadTemplates();
           } catch (syncErr) {
             console.warn("Sync cloud:", syncErr);
+          }
+          if (s.needsPinUpgrade) {
+            await openPinUpgradeDialog(pin);
           }
           navigate("/");
         } catch (err) {

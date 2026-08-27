@@ -3,6 +3,7 @@ package com.ceoclinicos.clinicosdoc.service
 import android.content.Context
 import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
 import com.ceoclinicos.clinicosdoc.model.DocumentTemplate
+import com.ceoclinicos.clinicosdoc.model.PhysicalExamDefaults
 
 object PhysicalExamPromptBuilder {
     fun buildBlock(
@@ -20,6 +21,11 @@ object PhysicalExamPromptBuilder {
         val vitalsSystem = systems.firstOrNull { it.id == "signos_vitales" }
         val bodySystems = systems.filter { it.id != "signos_vitales" }
         val namesInOrder = bodySystems.joinToString(", ") { it.name }
+        val pathologicExamples = systems.mapNotNull { system ->
+            PhysicalExamDefaults.pathologicalStyleExamples[system.id]?.let { example ->
+                system to example
+            }
+        }
 
         return buildString {
             appendLine("SISTEMAS DE EXAMEN FÍSICO ACTIVOS (OBLIGATORIO incluir TODOS, en este orden):")
@@ -31,6 +37,15 @@ object PhysicalExamPromptBuilder {
                     appendLine("   → Texto base (usar intacto si el dictado NO menciona este sistema):")
                     appendLine("     \"${system.name}: ${system.defaultText}\"")
                 }
+            }
+            if (pathologicExamples.isNotEmpty()) {
+                appendLine()
+                appendLine("EJEMPLOS DE ESTILO PATOLÓGICO (referencia de redacción; adapta SOLO a lo dictado, sin inventar):")
+                pathologicExamples.forEach { (system, example) ->
+                    appendLine("- Si el dictado aporta hallazgos en ${system.name}, redacta en este estilo:")
+                    appendLine("  \"${system.name}: $example\"")
+                }
+                appendLine("- En Abdomen, inicie siempre por la apariencia (plano, globoso, batracio, en delantal, etc.) y luego el resto.")
             }
             appendLine()
             appendLine("REGLAS OBLIGATORIAS DEL EXAMEN FÍSICO:")

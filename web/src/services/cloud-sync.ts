@@ -10,6 +10,7 @@ import {
   type DocumentTemplate,
   type DocumentType,
   type Patient,
+  type PatientMembrete,
   type PhysicalExamSystem,
 } from "../shared/models";
 import { PhysicalExamDefaults, orderEnabledIds } from "../shared/physical-exam-defaults";
@@ -121,28 +122,39 @@ function parsePatient(data: DocumentData, id: string): Patient | null {
   };
 }
 
+function parseMembrete(data: DocumentData): PatientMembrete | undefined {
+  const nested = data.membrete as Record<string, unknown> | undefined;
+  const hasFlat =
+    data.membreteNombre ||
+    data.membreteEdad ||
+    data.membreteCedula ||
+    data.membreteSexo ||
+    data.membreteFechaNacimiento ||
+    data.membreteFecha ||
+    data.membreteTelefono ||
+    data.membreteDireccion ||
+    data.membreteOcupacion ||
+    data.membreteAcompananteNombre ||
+    data.membreteAcompananteTelefono;
+  if (!hasFlat && !nested) return undefined;
+  return {
+    nombre: String(nested?.nombre ?? data.membreteNombre ?? ""),
+    edad: String(nested?.edad ?? data.membreteEdad ?? ""),
+    cedula: String(nested?.cedula ?? data.membreteCedula ?? data.patientCedula ?? ""),
+    sexo: String(nested?.sexo ?? data.membreteSexo ?? ""),
+    fechaNacimiento: String(nested?.fechaNacimiento ?? data.membreteFechaNacimiento ?? ""),
+    fecha: String(nested?.fecha ?? data.membreteFecha ?? ""),
+    telefono: String(nested?.telefono ?? data.membreteTelefono ?? ""),
+    direccion: String(nested?.direccion ?? data.membreteDireccion ?? ""),
+    ocupacion: String(nested?.ocupacion ?? data.membreteOcupacion ?? ""),
+    acompananteNombre: String(nested?.acompananteNombre ?? data.membreteAcompananteNombre ?? ""),
+    acompananteTelefono: String(nested?.acompananteTelefono ?? data.membreteAcompananteTelefono ?? ""),
+  };
+}
+
 function parseDocument(data: DocumentData, id: string): ClinicalDocument | null {
   if (!data.content || !data.type) return null;
-  const membrete =
-    data.membreteNombre || data.membrete
-      ? {
-          nombre: String((data.membrete as { nombre?: string })?.nombre ?? data.membreteNombre ?? ""),
-          edad: String((data.membrete as { edad?: string })?.edad ?? data.membreteEdad ?? ""),
-          cedula: String(
-            (data.membrete as { cedula?: string })?.cedula ??
-              data.membreteCedula ??
-              data.patientCedula ??
-              "",
-          ),
-          sexo: String((data.membrete as { sexo?: string })?.sexo ?? data.membreteSexo ?? ""),
-          fechaNacimiento: String(
-            (data.membrete as { fechaNacimiento?: string })?.fechaNacimiento ??
-              data.membreteFechaNacimiento ??
-              "",
-          ),
-          fecha: String((data.membrete as { fecha?: string })?.fecha ?? data.membreteFecha ?? ""),
-        }
-      : undefined;
+  const membrete = parseMembrete(data);
   return {
     id: String(data.id ?? id),
     patientId: String(data.patientId ?? ""),
@@ -423,6 +435,11 @@ export async function pushDocument(d: ClinicalDocument, userId = userIdOrThrow()
     membreteSexo: d.membrete?.sexo ?? null,
     membreteFechaNacimiento: d.membrete?.fechaNacimiento ?? null,
     membreteFecha: d.membrete?.fecha ?? null,
+    membreteTelefono: d.membrete?.telefono ?? null,
+    membreteDireccion: d.membrete?.direccion ?? null,
+    membreteOcupacion: d.membrete?.ocupacion ?? null,
+    membreteAcompananteNombre: d.membrete?.acompananteNombre ?? null,
+    membreteAcompananteTelefono: d.membrete?.acompananteTelefono ?? null,
     doctorId: userId,
     doctorNombre,
     sourceDocumentId: d.sourceDocumentId ?? null,
@@ -466,6 +483,11 @@ async function pushGlobalDocument(
       membreteSexo: document.membrete?.sexo ?? null,
       membreteFechaNacimiento: document.membrete?.fechaNacimiento ?? null,
       membreteFecha: document.membrete?.fecha ?? null,
+      membreteTelefono: document.membrete?.telefono ?? null,
+      membreteDireccion: document.membrete?.direccion ?? null,
+      membreteOcupacion: document.membrete?.ocupacion ?? null,
+      membreteAcompananteNombre: document.membrete?.acompananteNombre ?? null,
+      membreteAcompananteTelefono: document.membrete?.acompananteTelefono ?? null,
       doctorId: userId,
       doctorNombre,
       patientFirestoreKey: patientKey,

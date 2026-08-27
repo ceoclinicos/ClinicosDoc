@@ -29,6 +29,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,6 +61,11 @@ import com.ceoclinicos.clinicosdoc.ui.theme.NavyLight
 import com.ceoclinicos.clinicosdoc.ui.theme.SurfaceBg
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
+import com.ceoclinicos.clinicosdoc.util.ClinicalDateTimeFormat
+import com.ceoclinicos.clinicosdoc.util.PatientActivity
+import com.ceoclinicos.clinicosdoc.util.PatientActivityRow
+
+private const val HOME_PAGE_SIZE = 10
 
 @Composable
 fun HomeScreen(
@@ -66,16 +73,25 @@ fun HomeScreen(
     onRedactar: () -> Unit,
     onOpenPlantillas: () -> Unit,
     onOpenDrafts: () -> Unit,
+    onOpenPatientInformes: (cedula: String, patientId: String, nombre: String) -> Unit = { _, _, _ -> },
+    tutorialBtnTick: Int = 0,
 ) {
     val context = LocalContext.current
     var doctor by remember { mutableStateOf<DoctorProfile?>(null) }
     var showTutorial by remember { mutableStateOf(false) }
+    var showTutorialButton by remember {
+        mutableStateOf(OnboardingStorage.isTutorialButtonEnabled(context))
+    }
 
     LaunchedEffect(Unit) {
         doctor = DoctorStorage.loadProfile(context)
         if (!OnboardingStorage.hasSeenRedactarTutorial(context)) {
             showTutorial = true
         }
+    }
+
+    LaunchedEffect(tutorialBtnTick) {
+        showTutorialButton = OnboardingStorage.isTutorialButtonEnabled(context)
     }
 
     if (showTutorial) {
@@ -111,7 +127,7 @@ fun HomeScreen(
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "Buenos días, ${doctor?.saludo ?: "Doctor"}",
+            text = "${ClinicalDateTimeFormat.saludoHora()}, ${doctor?.tituloProfesional ?: "Dr."}",
             style = MaterialTheme.typography.headlineLarge,
         )
         Spacer(modifier = Modifier.height(6.dp))
@@ -121,15 +137,16 @@ fun HomeScreen(
         )
         Spacer(modifier = Modifier.height(32.dp))
         RedactarHero(onTap = onRedactar)
-        Spacer(modifier = Modifier.height(12.dp))
-        // TODO: ocultar cuando el tutorial esté validado
-        OutlinedButton(
-            onClick = { showTutorial = true },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(Icons.Outlined.School, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Probar tutorial")
+        if (showTutorialButton) {
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = { showTutorial = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Outlined.School, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Probar tutorial")
+            }
         }
         Spacer(modifier = Modifier.height(28.dp))
         Text("Accesos rápidos", style = MaterialTheme.typography.titleLarge)
@@ -152,7 +169,7 @@ fun HomeScreen(
             )
         }
         Spacer(modifier = Modifier.height(24.dp))
-        RecentActivityCard()
+        RecentPatientsCard(onOpenPatientInformes = onOpenPatientInformes)
         Spacer(modifier = Modifier.height(24.dp))
     }
 }
@@ -182,7 +199,7 @@ private fun RedactarHero(onTap: () -> Unit) {
             Text("Redactar", style = MaterialTheme.typography.headlineMedium.copy(color = Color.White))
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "Historia clínica, informe, reposo u órdenes médicas",
+                "Historia clínica, informe u órdenes médicas",
                 style = MaterialTheme.typography.bodyMedium.copy(color = Color.White.copy(alpha = 0.85f)),
             )
             Spacer(modifier = Modifier.height(20.dp))
@@ -232,30 +249,101 @@ private fun QuickActionCard(
 }
 
 @Composable
-private fun RecentActivityCard() {
+private fun RecentPatientsCard(
+    onOpenPatientInformes: (cedula: String, patientId: String, nombre: String) -> Unit,
+) {
+    val context = LocalContext.current
+    var rows by remember { mutableStateOf<List<PatientActivityRow>>(emptyList()) }
+    var visible by remember { mutableIntStateOf(HOME_PAGE_SIZE) }
+
+    LaunchedEffect(Unit) {
+        rows = PatientActivity.buildRows(context)
+        visible = HOME_PAGE_SIZE
+    }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = CardWhite),
         shape = RoundedCornerShape(20.dp),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row {
-                Text("Actividad reciente", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Text("Pacientes recientes", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 Icon(Icons.Default.History, contentDescription = null, tint = TextSecondary.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
             }
             Spacer(modifier = Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceBg)
-                        .padding(10.dp),
-                ) {
-                    Icon(Icons.Outlined.Description, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(20.dp))
+            if (rows.isEmpty()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(SurfaceBg)
+                            .padding(10.dp),
+                    ) {
+                        Icon(Icons.Outlined.Description, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(20.dp))
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text("Sin informes aún", style = MaterialTheme.typography.labelLarge)
+                        Text("Crea tu primer informe clínico", style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
-                Spacer(modifier = Modifier.width(14.dp))
-                Column {
-                    Text("Sin informes aún", style = MaterialTheme.typography.labelLarge)
-                    Text("Crea tu primer informe clínico", style = MaterialTheme.typography.bodyMedium)
+            } else {
+                val slice = rows.take(visible)
+                slice.forEachIndexed { index, row ->
+                    if (index > 0) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        HorizontalDivider(color = DividerColor)
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onOpenPatientInformes(row.patientCedula, row.patientId, row.patientNombre)
+                            },
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(row.patientNombre, style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                buildString {
+                                    if (row.patientCedula.isNotBlank()) append("C.I. ${row.patientCedula}")
+                                    if (row.edad != "—") {
+                                        if (isNotEmpty()) append(" · ")
+                                        append("${row.edad} años")
+                                    }
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                            )
+                            Text(
+                                row.lastAtLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                row.diagnostico,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                }
+                if (visible < rows.size) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "$visible de ${rows.size}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                    OutlinedButton(
+                        onClick = { visible = minOf(visible + HOME_PAGE_SIZE, rows.size) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Cargar más")
+                    }
                 }
             }
         }

@@ -897,7 +897,7 @@ dialog {
   width: min(100%, 210mm);
   min-height: 260px;
   margin: 0 auto;
-  padding: 14mm 12mm;
+  padding: 9mm 12mm 16.8mm 12mm;
   box-shadow: 0 8px 28px rgba(11, 31, 51, 0.18);
   border: 1px solid #c5ced8;
   font-family: "Times New Roman", Times, Georgia, serif;
@@ -906,7 +906,7 @@ dialog {
 
 .doc-live-preview .print-header {
   text-align: center;
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.35rem;
 }
 
 .doc-live-preview .print-header-logo {
@@ -921,7 +921,7 @@ dialog {
 .doc-live-preview .print-header-name {
   font-weight: 700;
   color: #111;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
 }
 
 .exam-sys-row {
@@ -970,18 +970,18 @@ dialog {
 .doc-live-preview .print-header-sub,
 .doc-live-preview .print-header-desc {
   color: #333;
-  font-size: 0.88rem;
+  font-size: 0.78rem;
 }
 
 .doc-live-preview .print-date-row {
   text-align: right;
-  font-size: 0.85rem;
-  margin-bottom: 0.35rem;
+  font-size: 0.75rem;
+  margin: 0 0 0.2rem;
 }
 
 .doc-live-preview .print-title {
   text-align: center;
-  font-size: 1rem;
+  font-size: 0.9rem;
   letter-spacing: 0.03em;
   margin: 0.65rem 0 0.85rem;
   font-weight: 700;
@@ -989,8 +989,19 @@ dialog {
 }
 
 .doc-live-preview .print-membrete {
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   margin-bottom: 0.65rem;
+}
+
+.doc-live-preview .print-membrete-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  line-height: 1.45;
+}
+
+.doc-live-preview .print-membrete-line + .print-membrete-line {
+  margin-top: 0.2rem;
 }
 
 .doc-live-preview .print-rule {
@@ -1000,7 +1011,7 @@ dialog {
 }
 
 .doc-live-preview .print-section h3 {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   color: #111;
   margin: 0.85rem 0 0.25rem;
   font-weight: 700;
@@ -1010,7 +1021,7 @@ dialog {
   white-space: pre-wrap;
   font-family: inherit;
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   color: #111;
 }
 
@@ -1201,6 +1212,36 @@ dialog {
 .btn-block {
   width: 100%;
   margin-top: 1rem;
+}
+
+.plantilla-step-form {
+  display: flex;
+  flex-direction: column;
+  min-height: min(72vh, calc(100dvh - 11rem));
+  margin-bottom: 0;
+}
+
+.plantilla-step-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 0.75rem;
+}
+
+.plantilla-step-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 0 calc(0.85rem + env(safe-area-inset-bottom, 0px));
+  margin-top: 0.25rem;
+  background: linear-gradient(to top, var(--bg, #f5f7fa) 78%, transparent);
+  border-top: 1px solid var(--border, #d8dee6);
+}
+
+.plantilla-step-footer .btn-block {
+  margin-top: 0;
 }
 
 .dictado-toolbar {
@@ -1743,9 +1784,158 @@ textarea[name="enfermedadEjemplo"] {
   outline: none;
 }
 
+.clinic-table-dx {
+  max-width: 18rem;
+  white-space: normal;
+  line-height: 1.35;
+  color: var(--text-secondary, #5a6570);
+  font-size: 0.92em;
+}
+
+.clinic-table-date {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .clinic-table-action {
   color: var(--teal);
   font-weight: 600;
   text-align: right;
 }
+
+.home-patient-table td {
+  vertical-align: top;
+}
+
+.home-patient-table tbody tr + tr td {
+  border-top: 1px solid var(--divider, #e2e8f0);
+}
+
+.home-patient-meta {
+  display: block;
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.home-patient-date {
+  display: block;
+  font-size: 0.82rem;
+  margin-top: 0.2rem;
+  color: var(--text-secondary, #5b6472);
+}
+
+.home-patient-dx {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--text, #1a2332);
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.35;
+  max-width: 36rem;
+}
+
+.patient-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+}
+
+.patient-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.patient-card-main strong {
+  display: block;
+}
+
+.patient-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.patient-row-actions .btn-ver-informes {
+  min-width: 2.5rem;
+  padding-inline: 0.65rem;
+}
+
+.btn-icon-eye {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+#sync-toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+  max-width: min(92vw, 26rem);
+}
+
+.sync-toast {
+  background: var(--navy);
+  color: #fff;
+  padding: 0.7rem 1rem;
+  border-radius: 999px;
+  font-size: 0.92rem;
+  box-shadow: var(--shadow);
+  text-align: center;
+  animation: sync-toast-in 0.2s ease-out;
+}
+
+.sync-toast-warn {
+  background: #92400e;
+}
+
+.sync-toast-err {
+  background: #9f1239;
+}
+
+.sync-toast-out {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.25s, transform 0.25s;
+}
+
+@keyframes sync-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sync-pending-banner {
+  margin: 0.75rem 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, #f59e0b 16%, #fff);
+  color: #78350f;
+  font-size: 0.92rem;
+}
+
+.clinic-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  flex-wrap: wrap;
+}
+
 

@@ -34,10 +34,23 @@ function hashPin(cedula, pin) {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
-function assertPin4(pin) {
-  if (!/^\d{4}$/.test(String(pin))) {
-    throw new Error("El PIN debe tener exactamente 4 dígitos");
+/** PIN nuevo / registro / reset: exactamente 6 dígitos. */
+function assertPin6(pin) {
+  if (!/^\d{6}$/.test(String(pin))) {
+    throw new Error("El PIN debe tener exactamente 6 dígitos");
   }
+}
+
+/** Login: acepta 4 (legado) o 6 dígitos. */
+function assertPinLogin(pin) {
+  if (!/^\d{4}$|^\d{6}$/.test(String(pin))) {
+    throw new Error("El PIN debe tener 4 o 6 dígitos");
+  }
+}
+
+/** @deprecated Usar assertPin6; se mantiene el nombre por imports existentes. */
+function assertPin4(pin) {
+  assertPin6(pin);
 }
 
 function digitsOnly(s) {
@@ -50,8 +63,8 @@ function hashPassword(password) {
 }
 
 function assertPassword(password) {
-  if (String(password).length < 4) {
-    throw new Error("La contraseña debe tener al menos 4 caracteres");
+  if (!/^\d{6}$/.test(String(password))) {
+    throw new Error("La contraseña (PIN) debe tener exactamente 6 dígitos");
   }
 }
 
@@ -60,6 +73,8 @@ module.exports = {
   cedulaLookupKeys,
   hashPin,
   assertPin4,
+  assertPin6,
+  assertPinLogin,
   digitsOnly,
   hashPassword,
   assertPassword,

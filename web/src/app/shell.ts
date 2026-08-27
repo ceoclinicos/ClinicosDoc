@@ -8,6 +8,11 @@ import {
 } from "./router";
 import { getPatientSession, isUserLoggedIn, logoutAllSessions } from "../registro/session";
 import { clearClinicSession } from "../clinic/session";
+import {
+  isTutorialButtonEnabled,
+  setTutorialButtonEnabled,
+} from "../services/onboarding";
+import { showSyncToast } from "../services/sync-feedback";
 
 function linksHtml(
   items: { path: string; title: string; navLabel?: string }[],
@@ -98,6 +103,39 @@ export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => v
       e.preventDefault();
       navigate("/paciente");
     }
+  });
+
+  /** 6× Inicio → mostrar tutorial; 3× → ocultar (solo médico). */
+  let homeTapCount = 0;
+  let homeTapTimer = 0;
+  const HOME_TAP_WINDOW_MS = 2200;
+
+  function onHomeNavTap(): void {
+    if (!isMedicoLoggedIn()) return;
+    window.clearTimeout(homeTapTimer);
+    homeTapCount += 1;
+    homeTapTimer = window.setTimeout(() => {
+      homeTapCount = 0;
+    }, HOME_TAP_WINDOW_MS);
+
+    const enabled = isTutorialButtonEnabled();
+    if (!enabled && homeTapCount >= 6) {
+      homeTapCount = 0;
+      setTutorialButtonEnabled(true);
+      showSyncToast("Tutorial activado", "ok");
+    } else if (enabled && homeTapCount >= 3) {
+      homeTapCount = 0;
+      setTutorialButtonEnabled(false);
+      showSyncToast("Tutorial oculto", "warn");
+    }
+  }
+
+  bottomnav.addEventListener("click", (e) => {
+    const a = (e.target as HTMLElement).closest<HTMLElement>(".nav-link[data-path]");
+    if (!a || !bottomnav.contains(a)) return;
+    const path = a.getAttribute("data-path");
+    if (path === "/") onHomeNavTap();
+    else homeTapCount = 0;
   });
 
   function renderNav(): void {

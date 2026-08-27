@@ -36,7 +36,12 @@ object DocumentPdfExporter {
     private const val LANDSCAPE_WIDTH = 842
     private const val LANDSCAPE_HEIGHT = 595
     private const val MARGIN = 48f
+    /** Margen superior más compacto (fecha y encabezado). */
+    private const val TOP_MARGIN = 36f
+    /** Margen inferior +20 % respecto al lateral/superior. */
+    private const val BOTTOM_MARGIN = MARGIN * 1.2f
     private const val RECETA_MARGIN = 28f
+    private const val RECETA_BOTTOM_MARGIN = RECETA_MARGIN * 1.2f
     private const val LINE_HEIGHT = 18f
     private const val LOGO_SIZE = 70f
     private const val LOGO_GAP = 14f
@@ -54,30 +59,30 @@ object DocumentPdfExporter {
 
         val pdf = PdfDocument()
         val bodyPaint = Paint().apply {
-            textSize = 11f
+            textSize = 10f
             color = android.graphics.Color.BLACK
         }
         val boldPaint = Paint(bodyPaint).apply { typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD) }
         val mainHeaderPaint = Paint().apply {
-            textSize = 13f
+            textSize = 12f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             color = android.graphics.Color.BLACK
         }
         val secondaryHeaderPaint = Paint().apply {
-            textSize = 11f
+            textSize = 10f
             color = android.graphics.Color.BLACK
         }
         val descHeaderPaint = Paint().apply {
-            textSize = 10f
+            textSize = 9f
             color = android.graphics.Color.DKGRAY
         }
         val titlePaint = Paint().apply {
-            textSize = 14f
+            textSize = 13f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             color = android.graphics.Color.BLACK
         }
         val metaPaint = Paint().apply {
-            textSize = 10f
+            textSize = 9f
             color = android.graphics.Color.DKGRAY
         }
 
@@ -85,17 +90,17 @@ object DocumentPdfExporter {
         var pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNumber).create()
         var page = pdf.startPage(pageInfo)
         var canvas = page.canvas
-        var y = MARGIN
+        var y = TOP_MARGIN
         val membrete = document.membrete ?: PatientMembrete.forDocument(document)
 
         fun newPageIfNeeded(extra: Float = LINE_HEIGHT) {
-            if (y + extra > PAGE_HEIGHT - MARGIN) {
+            if (y + extra > PAGE_HEIGHT - BOTTOM_MARGIN) {
                 pdf.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, pageNumber).create()
                 page = pdf.startPage(pageInfo)
                 canvas = page.canvas
-                y = MARGIN
+                y = TOP_MARGIN
             }
         }
 
@@ -103,12 +108,12 @@ object DocumentPdfExporter {
             val dateText = membrete.displayFecha()
             if (dateText == "—") return
             val paint = Paint(metaPaint).apply {
-                textSize = 11f
+                textSize = 9f
                 color = android.graphics.Color.BLACK
             }
             val width = paint.measureText(dateText)
             canvas.drawText(dateText, PAGE_WIDTH - MARGIN - width, y, paint)
-            y += LINE_HEIGHT + 6f
+            y += LINE_HEIGHT + 2f
         }
 
         fun drawLineAt(x: Float, text: String, paint: Paint = bodyPaint) {
@@ -206,14 +211,7 @@ object DocumentPdfExporter {
             y += 14f
         }
 
-        fun drawMembreteLine(membrete: PatientMembrete) {
-            val fields = listOf(
-                "Nombre" to membrete.displayNombre(),
-                "Edad" to membrete.displayEdad(),
-                "C.I." to membrete.displayCedula(),
-                "Sexo" to membrete.displaySexo(),
-                "Fecha de nacimiento" to membrete.displayFechaNacimiento(),
-            )
+        fun drawMembreteFieldsRow(fields: List<Pair<String, String>>) {
             val maxWidth = PAGE_WIDTH - (MARGIN * 2)
             val gap = "   "
             val gapWidth = bodyPaint.measureText(gap)
@@ -233,7 +231,6 @@ object DocumentPdfExporter {
                 }
                 canvas.drawText(labelText, x, y, boldPaint)
                 x += labelWidth
-                // Si el valor solo no cabe, lo partimos palabra a palabra
                 if (valueWidth > maxWidth - labelWidth && value.contains(' ')) {
                     val words = value.split(" ")
                     var line = StringBuilder()
@@ -263,6 +260,33 @@ object DocumentPdfExporter {
                 }
             }
             y += LINE_HEIGHT
+        }
+
+        fun drawMembreteLine(membrete: PatientMembrete) {
+            drawMembreteFieldsRow(
+                listOf(
+                    "Nombre" to membrete.displayNombre(),
+                    "Edad" to membrete.displayEdad(),
+                    "C.I." to membrete.displayCedula(),
+                    "Sexo" to membrete.displaySexo(),
+                    "Fecha de nacimiento" to membrete.displayFechaNacimiento(),
+                ),
+            )
+            if (document.type == DocumentType.HISTORIA_CLINICA) {
+                drawMembreteFieldsRow(
+                    listOf(
+                        "Teléfono" to membrete.displayTelefono(),
+                        "Dirección" to membrete.displayDireccion(),
+                        "Ocupación" to membrete.displayOcupacion(),
+                    ),
+                )
+                drawMembreteFieldsRow(
+                    listOf(
+                        "Acompañante" to membrete.displayAcompananteNombre(),
+                        "Tel. acompañante" to membrete.displayAcompananteTelefono(),
+                    ),
+                )
+            }
         }
 
         fun drawSectionTitleText(title: String) {
@@ -307,7 +331,7 @@ object DocumentPdfExporter {
 
             val sideReserve = if (hasLogo) MARGIN + LOGO_SIZE + LOGO_GAP else MARGIN
             val maxLineWidth = PAGE_WIDTH - (sideReserve * 2f)
-            var textY = headerStartY + 18f
+            var textY = headerStartY + 8f
 
             fun drawHeaderText(text: String, paint: Paint) {
                 val words = text.split(" ")
@@ -338,7 +362,7 @@ object DocumentPdfExporter {
             header.subtitle.takeIf { it.isNotBlank() }?.let { drawHeaderText(it, secondaryHeaderPaint) }
             header.description.takeIf { it.isNotBlank() }?.let { drawHeaderText(it, descHeaderPaint) }
 
-            y = maxOf(textY, logoBottom) + 8f
+            y = maxOf(textY, logoBottom) + 4f
         }
 
         drawFullWidthSeparator()
@@ -385,7 +409,7 @@ object DocumentPdfExporter {
         val canvas = page.canvas
 
         val bodyPaint = Paint().apply {
-            textSize = 10f
+            textSize = 9f
             color = android.graphics.Color.BLACK
             isAntiAlias = true
         }
@@ -393,19 +417,19 @@ object DocumentPdfExporter {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val titlePaint = Paint().apply {
-            textSize = 12f
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            color = android.graphics.Color.BLACK
-            isAntiAlias = true
-        }
-        val headerPaint = Paint().apply {
             textSize = 11f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             color = android.graphics.Color.BLACK
             isAntiAlias = true
         }
+        val headerPaint = Paint().apply {
+            textSize = 10f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            color = android.graphics.Color.BLACK
+            isAntiAlias = true
+        }
         val subPaint = Paint().apply {
-            textSize = 9f
+            textSize = 8f
             color = android.graphics.Color.DKGRAY
             isAntiAlias = true
         }
@@ -419,7 +443,7 @@ object DocumentPdfExporter {
             color = android.graphics.Color.LTGRAY
             strokeWidth = 1.2f
         }
-        canvas.drawLine(midX, RECETA_MARGIN, midX, LANDSCAPE_HEIGHT - RECETA_MARGIN, dividerPaint)
+        canvas.drawLine(midX, RECETA_MARGIN, midX, LANDSCAPE_HEIGHT - RECETA_BOTTOM_MARGIN, dividerPaint)
 
         val membrete = document.membrete ?: PatientMembrete.forDocument(document)
         val sections = parseDocumentSections(sanitizeDocumentContent(document.content))
@@ -579,7 +603,7 @@ object DocumentPdfExporter {
         ) {
             var y = RECETA_MARGIN + 12f
             val center = (left + right) / 2f
-            val maxContentY = LANDSCAPE_HEIGHT - RECETA_MARGIN - footerReserve
+            val maxContentY = LANDSCAPE_HEIGHT - RECETA_BOTTOM_MARGIN - footerReserve
 
             // Encabezado: logo a la izquierda (como antes); textos centrados
             document.headerSnapshot?.let { header ->
@@ -664,7 +688,7 @@ object DocumentPdfExporter {
             )
 
             // Fecha y firma cerca del borde inferior
-            val footerY = LANDSCAPE_HEIGHT - RECETA_MARGIN - 8f
+            val footerY = LANDSCAPE_HEIGHT - RECETA_BOTTOM_MARGIN - 8f
             val fecha = membrete.displayFecha().takeIf { it != "—" }
                 ?: java.time.LocalDate.now().toString()
             canvas.drawText("Fecha: $fecha", left, footerY - 22f, bodyPaint)

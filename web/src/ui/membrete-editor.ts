@@ -1,11 +1,35 @@
-import type { PatientMembrete } from "../shared/models";
+import type { DocumentType, PatientMembrete } from "../shared/models";
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 /** Formulario editable del membrete (paridad PatientMembreteEditor Android). */
-export function membreteEditorHtml(membrete: PatientMembrete): string {
+export function membreteEditorHtml(membrete: PatientMembrete, documentType?: DocumentType): string {
+  const extendedHistoria = documentType === "historiaClinica";
+  const historiaFields = extendedHistoria
+    ? `
+      <div class="grid-2">
+        <label>Teléfono
+          <input type="tel" name="mTelefono" class="m-telefono" value="${escapeHtml(membrete.telefono || "")}" />
+        </label>
+        <label>Dirección
+          <input type="text" name="mDireccion" class="m-direccion" value="${escapeHtml(membrete.direccion || "")}" />
+        </label>
+      </div>
+      <label>Ocupación
+        <input type="text" name="mOcupacion" class="m-ocupacion" value="${escapeHtml(membrete.ocupacion || "")}" />
+      </label>
+      <p class="muted" style="margin:0.75rem 0 0.35rem"><strong>Acompañante</strong></p>
+      <div class="grid-2">
+        <label>Nombre
+          <input type="text" name="mAcompNombre" class="m-acomp-nombre" value="${escapeHtml(membrete.acompananteNombre || "")}" />
+        </label>
+        <label>Teléfono
+          <input type="tel" name="mAcompTel" class="m-acomp-tel" value="${escapeHtml(membrete.acompananteTelefono || "")}" />
+        </label>
+      </div>`
+    : "";
   return `
     <fieldset class="card-panel" id="membrete-editor">
       <legend><strong>Identificación del paciente</strong></legend>
@@ -32,6 +56,7 @@ export function membreteEditorHtml(membrete: PatientMembrete): string {
       <label>F. nacimiento
         <input type="text" name="mNac" class="m-nac" value="${escapeHtml(membrete.fechaNacimiento)}" placeholder="dd/MM/yyyy" />
       </label>
+      ${historiaFields}
     </fieldset>`;
 }
 
@@ -46,6 +71,17 @@ export function readMembreteFromEditor(root: HTMLElement, fallback: PatientMembr
     fechaNacimiento:
       (box.querySelector(".m-nac") as HTMLInputElement)?.value.trim() || fallback.fechaNacimiento,
     fecha: (box.querySelector(".m-fecha") as HTMLInputElement)?.value.trim() || fallback.fecha,
+    telefono: (box.querySelector(".m-telefono") as HTMLInputElement)?.value.trim() || fallback.telefono || "",
+    direccion: (box.querySelector(".m-direccion") as HTMLInputElement)?.value.trim() || fallback.direccion || "",
+    ocupacion: (box.querySelector(".m-ocupacion") as HTMLInputElement)?.value.trim() || fallback.ocupacion || "",
+    acompananteNombre:
+      (box.querySelector(".m-acomp-nombre") as HTMLInputElement)?.value.trim() ||
+      fallback.acompananteNombre ||
+      "",
+    acompananteTelefono:
+      (box.querySelector(".m-acomp-tel") as HTMLInputElement)?.value.trim() ||
+      fallback.acompananteTelefono ||
+      "",
   };
 }
 

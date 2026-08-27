@@ -41,8 +41,7 @@ import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
 import com.ceoclinicos.clinicosdoc.ui.theme.Navy
 import com.ceoclinicos.clinicosdoc.ui.theme.NavyLight
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import com.ceoclinicos.clinicosdoc.util.ClinicalDateTimeFormat
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -54,7 +53,7 @@ fun InformeScreen(
     var docs by remember { mutableStateOf(DocumentStorage.loadAll(context)) }
     var loading by remember { mutableStateOf(true) }
     var docToDelete by remember { mutableStateOf<ClinicalDocument?>(null) }
-    val dateFormatter = remember { DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(ZoneId.systemDefault()) }
+    val dateFormatter = remember { ClinicalDateTimeFormat::formatDocumentDateTime }
 
     LaunchedEffect(refreshKey) {
         loading = true
@@ -103,7 +102,7 @@ fun InformeScreen(
                                 Text(buildString {
                                     append(doc.patientNombre)
                                     doc.templateName?.let { append(" · $it") }
-                                    append(" · ${dateFormatter.format(doc.createdAt)}")
+                                    append(" · ${dateFormatter(doc.createdAt)}")
                                 })
                             },
                             trailingContent = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null) },

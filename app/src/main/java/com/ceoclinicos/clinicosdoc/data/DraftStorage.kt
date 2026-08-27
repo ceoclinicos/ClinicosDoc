@@ -6,11 +6,13 @@ import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.time.Duration
 import java.time.Instant
 
 object DraftStorage {
     private const val PREFS = "clinicos_doc_prefs"
     private const val KEY = "clinical_drafts_json"
+    private const val DRAFT_MAX_AGE_DAYS = 7L
     private val gson = Gson()
 
     private fun prefs(context: Context) =
@@ -19,10 +21,22 @@ object DraftStorage {
     fun loadAll(context: Context): List<ClinicalDraft> {
         val raw = prefs(context).getString(KEY, null) ?: return emptyList()
         val type = object : TypeToken<List<ClinicalDraftDto>>() {}.type
-        return gson.fromJson<List<ClinicalDraftDto>>(raw, type)
+        val parsed = gson.fromJson<List<ClinicalDraftDto>>(raw, type)
             ?.map { it.toModel() }
             ?.sortedByDescending { it.updatedAt }
             ?: emptyList()
+        return purgeExpired(context, parsed)
+    }
+
+    /** Elimina borradores con más de [DRAFT_MAX_AGE_DAYS] sin actualizarse. */
+    private fun purgeExpired(context: Context, drafts: List<ClinicalDraft>): List<ClinicalDraft> {
+        val cutoff = Instant.now().minus(Duration.ofDays(DRAFT_MAX_AGE_DAYS))
+        val fresh = drafts.filter { !it.updatedAt.isBefore(cutoff) }
+        if (fresh.size == drafts.size) return fresh
+        val expiredIds = drafts.filter { it.updatedAt.isBefore(cutoff) }.map { it.id }
+        saveAllLocal(context, fresh)
+        expiredIds.forEach { SyncCoordinator.afterDraftDeleted(context, it) }
+        return fresh
     }
 
     fun findById(context: Context, id: String): ClinicalDraft? =
@@ -63,6 +77,11 @@ object DraftStorage {
         membreteSexo = membrete?.sexo,
         membreteFechaNacimiento = membrete?.fechaNacimiento,
         membreteFecha = membrete?.fecha,
+        membreteTelefono = membrete?.telefono,
+        membreteDireccion = membrete?.direccion,
+        membreteOcupacion = membrete?.ocupacion,
+        membreteAcompananteNombre = membrete?.acompananteNombre,
+        membreteAcompananteTelefono = membrete?.acompananteTelefono,
         createdAt = createdAt.toString(),
         updatedAt = updatedAt.toString(),
     )
@@ -78,25 +97,20 @@ object DraftStorage {
         templateName = templateName,
         headerId = headerId,
         generatedContent = generatedContent,
-        membrete = if (
-            membreteNombre != null ||
-            membreteEdad != null ||
-            membreteCedula != null ||
-            membreteSexo != null ||
-            membreteFechaNacimiento != null ||
-            membreteFecha != null
-        ) {
-            PatientMembrete(
-                nombre = membreteNombre.orEmpty(),
-                edad = membreteEdad.orEmpty(),
-                cedula = membreteCedula.orEmpty().ifBlank { patientCedula },
-                sexo = membreteSexo.orEmpty(),
-                fechaNacimiento = membreteFechaNacimiento.orEmpty(),
-                fecha = membreteFecha.orEmpty(),
-            )
-        } else {
-            null
-        },
+        membrete = PatientMembrete.fromStorageFields(
+            patientCedula = patientCedula,
+            nombre = membreteNombre,
+            edad = membreteEdad,
+            cedula = membreteCedula,
+            sexo = membreteSexo,
+            fechaNacimiento = membreteFechaNacimiento,
+            fecha = membreteFecha,
+            telefono = membreteTelefono,
+            direccion = membreteDireccion,
+            ocupacion = membreteOcupacion,
+            acompananteNombre = membreteAcompananteNombre,
+            acompananteTelefono = membreteAcompananteTelefono,
+        ),
         createdAt = Instant.parse(createdAt),
         updatedAt = Instant.parse(updatedAt),
     )

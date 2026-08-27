@@ -32,21 +32,10 @@ android {
         applicationId = "com.ceoclinicos.clinicosdoc"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        buildConfigField(
-            "String",
-            "GEMINI_API_KEY",
-            "\"${localProperties.getProperty("GEMINI_API_KEY", "")}\"",
-        )
-        buildConfigField(
-            "String",
-            "DEEPSEEK_API_KEY",
-            "\"${localProperties.getProperty("DEEPSEEK_API_KEY", "")}\"",
-        )
     }
 
     signingConfigs {
@@ -76,7 +65,7 @@ android {
     }
     buildFeatures {
         compose = true
-        buildConfig = true
+        buildConfig = false
     }
 }
 
@@ -94,7 +83,6 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.gson)
     implementation(libs.okhttp)
-    implementation(libs.generativeai)
     implementation(libs.coil.compose)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.firestore)

@@ -14,7 +14,6 @@ const Section = {
   PLAN: "Plan",
   OBSERVACIONES: "Observaciones",
   CONCLUSIONES: "Conclusiones",
-  DIAS_REPOSO: "Días de reposo indicados",
   INDICACIONES: "Indicaciones",
   ORDENES: "Órdenes",
   RECIPE: "Recipe",
@@ -23,7 +22,6 @@ const Section = {
 const LABELS = {
   historiaClinica: "Historia clínica",
   informe: "Informe",
-  reposo: "Reposo",
   ordenesMedicas: "Órdenes médicas",
   receta: "Receta",
 };
@@ -75,9 +73,6 @@ const RECETA_INDICACIONES = [
   "Tomar 1 tableta vía oral cada 8 horas por 5 días (con alimentos).",
 ].join("\n");
 
-const DIAS_REPOSO =
-  "Nota: En vista de la sintomatología del paciente se indican cumplir 3 días de reposo médico completo.";
-
 function sectionsFor(type) {
   switch (type) {
     case "informe":
@@ -87,15 +82,6 @@ function sectionsFor(type) {
         Section.ENFERMEDAD_ACTUAL,
         Section.EXAMEN_FISICO,
         Section.DIAGNOSTICO,
-      ];
-    case "reposo":
-      return [
-        Section.DATOS_PACIENTE,
-        Section.MOTIVO_CONSULTA,
-        Section.ENFERMEDAD_ACTUAL,
-        Section.EXAMEN_FISICO,
-        Section.DIAGNOSTICO,
-        Section.DIAS_REPOSO,
       ];
     case "historiaClinica":
       return [
@@ -129,7 +115,6 @@ function textsFor(type) {
       [Section.INDICACIONES]: RECETA_INDICACIONES,
     };
   }
-  if (type === "reposo") return { [Section.DIAS_REPOSO]: DIAS_REPOSO };
   return {};
 }
 
@@ -142,9 +127,7 @@ function makeDefaultTemplates() {
     isDefault: true,
     enabledPhysicalExamSystemIds: [...EXAM_IDS],
     enfermedadActualEjemplo:
-      type === "informe" || type === "historiaClinica" || type === "reposo"
-        ? ENFERMEDAD_EJEMPLO
-        : "",
+      type === "informe" || type === "historiaClinica" ? ENFERMEDAD_EJEMPLO : "",
     sectionDefaultTexts: textsFor(type),
   }));
 }
@@ -174,8 +157,18 @@ async function ensureClinicDefaultCatalog(db, clinicId, clinicName) {
     tplSnap.docs.map((d) => String((d.data() || {}).documentType || "")).filter(Boolean),
   );
   const needed = Object.keys(LABELS).filter((t) => !existingTypes.has(t));
+  const reposoDocs = tplSnap.docs.filter(
+    (d) => String((d.data() || {}).documentType || "") === "reposo",
+  );
   let seeded = false;
   const now = new Date().toISOString();
+
+  if (reposoDocs.length) {
+    const batch = db.batch();
+    for (const d of reposoDocs) batch.delete(d.ref);
+    await batch.commit();
+    seeded = true;
+  }
 
   if (needed.length) {
     const defaults = makeDefaultTemplates().filter((t) => needed.includes(t.documentType));
@@ -191,6 +184,18 @@ async function ensureClinicDefaultCatalog(db, clinicId, clinicName) {
     const header = makeDefaultHeader(clinicName);
     await hdrCol.doc(header.id).set({ ...header, updatedAt: now, seededAt: now });
     seeded = true;
+  }
+
+  if (seeded) {
+    const clinicSnap = await clinicRef.get();
+    const prev = Number(clinicSnap.data()?.templatesVersion || 0) || 0;
+    await clinicRef.set(
+      {
+        templatesVersion: prev + 1,
+        templatesUpdatedAt: now,
+      },
+      { merge: true },
+    );
   }
 
   const [tplAfter, hdrAfter] = await Promise.all([tplCol.get(), hdrCol.get()]);

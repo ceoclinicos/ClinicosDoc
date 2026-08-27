@@ -8,6 +8,7 @@ import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.data.FirestorePaths
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
 import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
+import com.ceoclinicos.clinicosdoc.util.DeviceId
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
@@ -37,11 +38,16 @@ object DoctorAuthService {
         if (!isConfigured(context)) {
             return Result.failure(IllegalStateException("Sin conexión a Firebase"))
         }
-        if (!password.matches(Regex("^\\d{4}$"))) {
-            return Result.failure(IllegalStateException("El PIN debe tener exactamente 4 dígitos"))
+        if (!password.matches(Regex("^\\d{4}$|^\\d{6}$"))) {
+            return Result.failure(IllegalStateException("El PIN debe tener 4 o 6 dígitos"))
         }
         return runCatching {
-            val auth = AuthLoginService.login(cedulaInput, password, "app").getOrThrow()
+            val auth = AuthLoginService.login(
+                cedulaInput,
+                password,
+                "app",
+                DeviceId.get(context),
+            ).getOrThrow()
             val profile = DoctorProfile(
                 nombre = auth.nombre,
                 cedula = auth.cedula.ifBlank { CedulaNormalizer.normalize(cedulaInput) },
@@ -73,8 +79,8 @@ object DoctorAuthService {
         if (profile.correo.isBlank() || !profile.correo.contains("@")) {
             return Result.failure(IllegalStateException("Correo electrónico requerido"))
         }
-        if (!password.matches(Regex("^\\d{4}$"))) {
-            return Result.failure(IllegalStateException("El PIN debe tener exactamente 4 dígitos"))
+        if (!password.matches(Regex("^\\d{6}$"))) {
+            return Result.failure(IllegalStateException("El PIN debe tener exactamente 6 dígitos"))
         }
         if (profile.sexo !in listOf("Masculino", "Femenino")) {
             return Result.failure(IllegalStateException("Seleccione el sexo"))
@@ -118,6 +124,7 @@ object DoctorAuthService {
                 nacionalidad = profileValidated.nacionalidad,
                 whatsapp = profileValidated.whatsapp,
                 esMedicoGeneral = profileValidated.especialidad.contains("general", ignoreCase = true),
+                deviceId = DeviceId.get(context),
             ).getOrThrow()
             val saved = profileValidated.copy(
                 nombre = auth.nombre.ifBlank { profileValidated.nombre },

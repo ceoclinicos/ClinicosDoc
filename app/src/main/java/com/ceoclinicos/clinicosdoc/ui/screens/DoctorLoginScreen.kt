@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MedicalServices
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,6 +44,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -57,11 +59,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.model.DoctorProfile
+import com.ceoclinicos.clinicosdoc.service.AuthLoginService
 import com.ceoclinicos.clinicosdoc.service.DoctorAuthService
 import com.ceoclinicos.clinicosdoc.service.MppsValidationService
 import com.ceoclinicos.clinicosdoc.service.PinResetService
 import androidx.compose.material.icons.outlined.Email
-import androidx.compose.material3.TextButton
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumTextField
@@ -106,6 +108,12 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
     var correoError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var whatsappError by remember { mutableStateOf<String?>(null) }
+    var showPinUpgrade by remember { mutableStateOf(false) }
+    var pinUpgradeOld by remember { mutableStateOf("") }
+    var newPin by remember { mutableStateOf("") }
+    var newPin2 by remember { mutableStateOf("") }
+    var pinUpgradeError by remember { mutableStateOf<String?>(null) }
+    var pinUpgradeBusy by remember { mutableStateOf(false) }
 
     val firebaseReady = remember(context) { DoctorAuthService.isConfigured(context) }
     val sexos = listOf("Masculino", "Femenino")
@@ -114,6 +122,84 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
     val esVenezolano = nacionalidad == "Venezuela"
 
     fun showToast(msg: String) = Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+
+    if (showPinUpgrade) {
+        AlertDialog(
+            onDismissRequest = { /* actualizar o más tarde */ },
+            title = { Text("Actualiza tu PIN") },
+            text = {
+                Column {
+                    Text("Por seguridad, el PIN ahora debe tener 6 dígitos.")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = newPin,
+                        onValueChange = { newPin = it.filter { c -> c.isDigit() }.take(6) },
+                        label = { Text("Nuevo PIN (6 dígitos)") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = keyboardDigits(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newPin2,
+                        onValueChange = { newPin2 = it.filter { c -> c.isDigit() }.take(6) },
+                        label = { Text("Confirmar PIN") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = keyboardDigits(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    pinUpgradeError?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(it, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pinUpgradeError = when {
+                            newPin.length != 6 -> "El PIN debe tener 6 dígitos"
+                            newPin != newPin2 -> "Los PIN no coinciden"
+                            newPin == pinUpgradeOld -> "Elige un PIN distinto"
+                            else -> null
+                        }
+                        if (pinUpgradeError != null) return@TextButton
+                        pinUpgradeBusy = true
+                        scope.launch {
+                            val result = AuthLoginService.changePin(pinUpgradeOld, newPin)
+                            pinUpgradeBusy = false
+                            result.fold(
+                                onSuccess = {
+                                    showToast("PIN actualizado")
+                                    showPinUpgrade = false
+                                    onRegistered()
+                                },
+                                onFailure = {
+                                    pinUpgradeError = it.message ?: "No se pudo actualizar"
+                                },
+                            )
+                        }
+                    },
+                    enabled = !pinUpgradeBusy,
+                ) {
+                    Text(if (pinUpgradeBusy) "Guardando…" else "Actualizar")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showPinUpgrade = false
+                        onRegistered()
+                    },
+                    enabled = !pinUpgradeBusy,
+                ) {
+                    Text("Más tarde")
+                }
+            },
+        )
+    }
 
     AppScaffold(
         title = if (authMode == AuthMode.LOGIN) "Iniciar sesión" else "Registro médico",
@@ -185,7 +271,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                     cedulaDigits = cedulaDigits,
                     onCedulaDigitsChange = { cedulaDigits = it.filter { c -> c.isDigit() }.take(9) },
                     password = password,
-                    onPasswordChange = { password = it.filter { c -> c.isDigit() }.take(4) },
+                    onPasswordChange = { password = it.filter { c -> c.isDigit() }.take(6) },
                     cedulaError = cedulaError,
                     passwordError = passwordError,
                     loading = loading,
@@ -197,7 +283,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                         }
                         passwordError = when {
                             password.isBlank() -> "Ingresa tu PIN (contraseña)"
-                            password.length != 4 -> "El PIN debe tener 4 dígitos"
+                            password.length != 4 && password.length != 6 -> "El PIN debe tener 4 o 6 dígitos"
                             else -> null
                         }
                         if (cedulaError != null || passwordError != null) return@LoginForm
@@ -209,10 +295,21 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
 
                         loading = true
                         scope.launch {
+                            val pinUsed = password
                             val result = DoctorAuthService.signIn(context, cedula, password)
                             loading = false
                             result.fold(
-                                onSuccess = { onRegistered() },
+                                onSuccess = {
+                                    if (pinUsed.length == 4) {
+                                        pinUpgradeOld = pinUsed
+                                        newPin = ""
+                                        newPin2 = ""
+                                        pinUpgradeError = null
+                                        showPinUpgrade = true
+                                    } else {
+                                        onRegistered()
+                                    }
+                                },
                                 onFailure = { showToast(it.message ?: "Error al iniciar sesión") },
                             )
                         }
@@ -266,7 +363,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                         mpps = mpps,
                         onMppsChange = { mpps = it.filter { c -> c.isDigit() } },
                         password = password,
-                        onPasswordChange = { password = it.filter { c -> c.isDigit() }.take(4) },
+                        onPasswordChange = { password = it.filter { c -> c.isDigit() }.take(6) },
                         nombreError = nombreError,
                         cedulaError = cedulaError,
                         correoError = correoError,
@@ -288,7 +385,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                             mppsError = if (esVenezolano && mpps.isBlank()) "Ingresa tu MPPS" else null
                             passwordError = when {
                                 password.isBlank() -> "Ingresa tu PIN (contraseña)"
-                                password.length != 4 -> "El PIN debe tener 4 dígitos"
+                                password.length != 6 -> "El PIN debe tener 6 dígitos"
                                 else -> null
                             }
                             if (!esMedicoGeneral && especialidad.isNullOrBlank()) {
@@ -496,10 +593,10 @@ private fun LoginForm(
     )
     Spacer(modifier = Modifier.height(20.dp))
     PremiumTextField(
-        "PIN (contraseña, 4 dígitos)",
+        "PIN (contraseña, 4 o 6 dígitos)",
         password,
         onPasswordChange,
-        hint = "4 dígitos",
+        hint = "4 o 6 dígitos",
         prefixIcon = Icons.Outlined.Lock,
         keyboardOptions = keyboardDigits(),
         visualTransformation = PasswordVisualTransformation(),
@@ -707,10 +804,10 @@ private fun RegistrationStep1(
     }
     Spacer(modifier = Modifier.height(20.dp))
     PremiumTextField(
-        "PIN (contraseña, 4 dígitos)",
+        "PIN (contraseña, 6 dígitos)",
         password,
         onPasswordChange,
-        hint = "4 dígitos",
+        hint = "6 dígitos",
         prefixIcon = Icons.Outlined.Lock,
         keyboardOptions = keyboardDigits(),
         visualTransformation = PasswordVisualTransformation(),

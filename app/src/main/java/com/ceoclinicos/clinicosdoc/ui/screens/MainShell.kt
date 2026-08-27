@@ -37,15 +37,38 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.ceoclinicos.clinicosdoc.data.ClinicMembershipStorage
 import com.ceoclinicos.clinicosdoc.data.ClinicService
+import com.ceoclinicos.clinicosdoc.data.OnboardingStorage
+import com.ceoclinicos.clinicosdoc.data.SyncCoordinator
 import com.ceoclinicos.clinicosdoc.model.ClinicDoctorInvitation
 import com.ceoclinicos.clinicosdoc.ui.components.BottomNavItem
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumBottomBar
 import com.ceoclinicos.clinicosdoc.ui.theme.SurfaceBg
+import com.ceoclinicos.clinicosdoc.util.PatientActivity
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import android.widget.Toast
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.unit.dp
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private data class PatientInformesTarget(
+    val cedula: String,
+    val patientId: String,
+    val nombre: String,
+)
 
 @Composable
 fun MainShell(
@@ -69,11 +92,43 @@ fun MainShell(
     var pendingInvite by remember { mutableStateOf<ClinicDoctorInvitation?>(null) }
     var inviteBusy by remember { mutableStateOf(false) }
     var inviteRefreshJob by remember { mutableStateOf<Job?>(null) }
+    var tutorialBtnTick by remember { mutableIntStateOf(0) }
+    var homeTapCount by remember { mutableIntStateOf(0) }
+    var homeTapResetJob by remember { mutableStateOf<Job?>(null) }
+    var patientInformes by remember { mutableStateOf<PatientInformesTarget?>(null) }
     val items = listOf(
         BottomNavItem("Home", Icons.Outlined.Home, Icons.Default.Home),
         BottomNavItem("Paciente", Icons.Outlined.Person, Icons.Default.Person),
         BottomNavItem("Informe", Icons.Outlined.Description, Icons.Default.Description),
     )
+
+    fun openPatientInformes(cedula: String, patientId: String, nombre: String) {
+        patientInformes = PatientInformesTarget(cedula, patientId, nombre)
+    }
+
+    fun onHomeTapped() {
+        homeTapResetJob?.cancel()
+        homeTapCount += 1
+        homeTapResetJob = scope.launch {
+            delay(2200)
+            homeTapCount = 0
+        }
+        val enabled = OnboardingStorage.isTutorialButtonEnabled(context)
+        when {
+            !enabled && homeTapCount >= 6 -> {
+                homeTapCount = 0
+                OnboardingStorage.setTutorialButtonEnabled(context, true)
+                tutorialBtnTick += 1
+                Toast.makeText(context, "Tutorial activado", Toast.LENGTH_SHORT).show()
+            }
+            enabled && homeTapCount >= 3 -> {
+                homeTapCount = 0
+                OnboardingStorage.setTutorialButtonEnabled(context, false)
+                tutorialBtnTick += 1
+                Toast.makeText(context, "Tutorial oculto", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     fun applyPendingUi(invites: List<ClinicDoctorInvitation>? = null) {
         pendingInvite = invites?.firstOrNull()
@@ -105,18 +160,32 @@ fun MainShell(
 
     LaunchedEffect(Unit) {
         scheduleInviteRefresh()
+        SyncCoordinator.flushPending(context, quiet = true)
     }
 
     DisposableEffect(lifecycleOwner) {
+        val cm = context.getSystemService(ConnectivityManager::class.java)
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                SyncCoordinator.flushPending(context, force = true)
+            }
+        }
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+        runCatching { cm?.registerNetworkCallback(request, callback) }
+
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 scheduleInviteRefresh()
+                SyncCoordinator.flushPending(context, quiet = true)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             inviteRefreshJob?.cancel()
             lifecycleOwner.lifecycle.removeObserver(observer)
+            runCatching { cm?.unregisterNetworkCallback(callback) }
         }
     }
 
@@ -214,6 +283,48 @@ fun MainShell(
         }
     }
 
+    patientInformes?.let { target ->
+        val docs = remember(target) {
+            PatientActivity.documentsForPatient(context, target.cedula, target.patientId)
+        }
+        val dateFmt = remember {
+            DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(ZoneId.systemDefault())
+        }
+        AlertDialog(
+            onDismissRequest = { patientInformes = null },
+            title = { Text("Informes · ${target.nombre}") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    if (docs.isEmpty()) {
+                        Text("Sin informes para este paciente.")
+                    } else {
+                        docs.forEachIndexed { index, doc ->
+                            if (index > 0) HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        patientInformes = null
+                                        onOpenInforme(doc.id)
+                                    }
+                                    .padding(vertical = 4.dp),
+                            ) {
+                                Text(doc.typeLabel)
+                                Text(
+                                    dateFmt.format(doc.createdAt),
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { patientInformes = null }) { Text("Cerrar") }
+            },
+        )
+    }
+
     Scaffold(
         modifier = Modifier.background(SurfaceBg),
         contentWindowInsets = WindowInsets.safeDrawing.only(
@@ -224,6 +335,7 @@ fun MainShell(
                 modifier = Modifier.navigationBarsPadding(),
                 currentIndex = currentIndex,
                 onTap = { index ->
+                    if (index == 0) onHomeTapped() else homeTapCount = 0
                     currentIndex = index
                     if (index == 1) onPatientTabSelected()
                     if (index == 2) onInformeTabSelected()
@@ -239,11 +351,14 @@ fun MainShell(
                     onRedactar = onRedactar,
                     onOpenPlantillas = onOpenPlantillas,
                     onOpenDrafts = onOpenDrafts,
+                    onOpenPatientInformes = ::openPatientInformes,
+                    tutorialBtnTick = tutorialBtnTick,
                 )
                 1 -> PacienteScreen(
                     refreshKey = patientRefreshKey,
                     onAddPatient = onAddPatient,
                     onEditPatient = onEditPatient,
+                    onOpenPatientInformes = ::openPatientInformes,
                 )
                 else -> InformeScreen(refreshKey = informeRefreshKey, onOpenInforme = onOpenInforme)
             }

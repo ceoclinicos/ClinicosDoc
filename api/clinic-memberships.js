@@ -22,14 +22,23 @@ async function membershipsFromUser(db, uid) {
     .doc(uid)
     .collection("clinic_memberships")
     .get();
-  return snap.docs.map((d) => {
+  const out = [];
+  for (const d of snap.docs) {
     const data = d.data() || {};
-    return {
-      clinicId: String(data.clinicId || d.id),
-      clinicName: String(data.clinicName || "Centro"),
+    const clinicId = String(data.clinicId || d.id);
+    if (!clinicId) continue;
+    const clinicSnap = await db.collection("clinicosdoc_clinics").doc(clinicId).get();
+    if (!clinicSnap.exists) {
+      await d.ref.delete().catch(() => {});
+      continue;
+    }
+    out.push({
+      clinicId,
+      clinicName: String(data.clinicName || clinicSnap.data()?.nombre || "Centro"),
       role: String(data.role || "medico"),
-    };
-  });
+    });
+  }
+  return out;
 }
 
 async function upsertMembership(db, uid, clinicId, clinicName, role, joinedAt) {
@@ -68,8 +77,9 @@ async function healFromClinics(db, uid, cedula) {
   async function recordMember(clinicRef, memberSnap) {
     const clinicId = clinicRef.id;
     if (seen.has(clinicId)) return;
-    seen.add(clinicId);
     const clinicSnap = await clinicRef.get();
+    if (!clinicSnap.exists) return;
+    seen.add(clinicId);
     const clinicName = String(clinicSnap.data()?.nombre || "Centro");
     const role = String(memberSnap?.data()?.role || "medico");
     const joinedAt = memberSnap?.data()?.joinedAt || new Date().toISOString();

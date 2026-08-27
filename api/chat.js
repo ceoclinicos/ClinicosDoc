@@ -3,6 +3,7 @@ const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
 const { requireAppAuth } = require("./_lib/require-app-auth");
+const { consumeAiUse } = require("./_lib/entitlements");
 
 const MAX_PROMPT_CHARS = 48_000;
 const MAX_OUTPUT_TOKENS = 8192;
@@ -13,7 +14,23 @@ module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Solo POST" });
 
   try {
-    await requireAppAuth(req, getAdmin());
+    const auth = await requireAppAuth(req, getAdmin());
+    const admin = getAdmin();
+    const db = admin.firestore();
+
+    // Solo médicos consumen cupo de IA (clínicas no usan /chat normalmente).
+    let entitlementStatus = null;
+    if (auth.role === "medico") {
+      const consumed = await consumeAiUse(db, auth.uid);
+      entitlementStatus = consumed.status;
+      if (!consumed.ok) {
+        return res.status(consumed.httpStatus || 402).json({
+          error: consumed.status?.message || "Suscripción requerida para usar la IA",
+          code: consumed.status?.code || "PAYWALL",
+          entitlement: consumed.status,
+        });
+      }
+    }
 
     const body = parseBody(req);
     const prompt = String(body.prompt || "");
@@ -98,7 +115,12 @@ module.exports = async function handler(req, res) {
     }
 
     if (!text) return res.status(500).json({ error: "Respuesta vacía de la IA" });
-    return res.status(200).json({ text });
+    const payload = { text };
+    if (entitlementStatus) {
+      payload.entitlement = entitlementStatus;
+      if (entitlementStatus.message) payload.notice = entitlementStatus.message;
+    }
+    return res.status(200).json(payload);
   } catch (err) {
     const status = err?.status || (err?.code === "auth/id-token-expired" ? 401 : 500);
     if (status < 500) {

@@ -132,7 +132,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
 
   let docType: DocumentType =
     existingDraft?.documentType ??
-    (tipoQ && ["historiaClinica", "informe", "reposo", "ordenesMedicas", "receta"].includes(tipoQ) ? tipoQ : "informe");
+    (tipoQ && ["historiaClinica", "informe", "ordenesMedicas", "receta"].includes(tipoQ) ? tipoQ : "informe");
 
   let workingTemplate: DocumentTemplate = structuredClone(templateForType(docType));
   let selectedHeader: DocumentHeader | undefined =
@@ -256,6 +256,37 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     if (menu) menu.hidden = true;
   });
 
+  function stopDictation(): void {
+    stopSpeech?.();
+    stopSpeech = null;
+    listening = false;
+  }
+
+  function navigateBackInFlow(): void {
+    stopDictation();
+    switch (step) {
+      case "resultado":
+        step = "dictado";
+        break;
+      case "dictado":
+        step = "plantilla";
+        break;
+      case "plantilla":
+        step = "paciente";
+        break;
+      case "molde":
+        step = "origen";
+        break;
+      case "origen":
+        step = "paciente";
+        break;
+      case "paciente":
+        navigate("/");
+        return;
+    }
+    render();
+  }
+
   function render(): void {
     if (step === "paciente") renderPaciente();
     else if (step === "origen") renderOrigen();
@@ -317,7 +348,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       )
       .join("");
 
-    const typeBtns = (["historiaClinica", "informe", "reposo", "ordenesMedicas", "receta"] as DocumentType[])
+    const typeBtns = (["historiaClinica", "informe", "ordenesMedicas", "receta"] as DocumentType[])
       .map(
         (t) =>
           `<button type="button" class="tile ${docType === t ? "tile-selected" : ""}" data-pick-type="${t}">${DocumentTypeLabels[t]}</button>`,
@@ -352,16 +383,9 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         </fieldset>
         <button type="submit" class="btn btn-primary" ${filtered.length ? "" : "disabled"}>Continuar</button>
         <button type="button" class="btn btn-ghost" data-nav="/pacientes/nuevo">Agregar paciente</button>
-        <button type="button" class="btn btn-ghost" id="btn-back-origen-pac">Volver</button>
       </form>
     `;
 
-    root.querySelector("#btn-back-origen-pac")?.addEventListener("click", () => {
-      if (usedMoldePicker && clinicMoldChoices.length) step = "molde";
-      else if (doctorMemberships.length) step = "origen";
-      else navigate("/");
-      render();
-    });
     root.querySelectorAll("[data-pick-type]").forEach((btn) => {
       btn.addEventListener("click", () => {
         docType = btn.getAttribute("data-pick-type") as DocumentType;
@@ -553,9 +577,9 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     const ejemploActual = resolveEnfermedadActualEjemplo(workingTemplate.enfermedadActualEjemplo);
 
     root.innerHTML = `
-      <p class="step-badge">${plantillaStepLabel()} · Plantilla${clinicContext ? ` · ${escapeHtml(clinicContext.clinicName)} · ${escapeHtml(workingTemplate.name)}` : ""}</p>
-      <p class="lead">Configura secciones${needsExam ? " y examen físico" : ""} para este documento.</p>
-      <form class="form" id="tpl-step-form">
+      <p class="step-badge">${plantillaStepLabel()}${clinicContext ? ` · ${escapeHtml(clinicContext.clinicName)} · ${escapeHtml(workingTemplate.name)}` : ""}</p>
+      <form class="form plantilla-step-form" id="tpl-step-form">
+        <div class="plantilla-step-scroll">
         <label>Nombre de plantilla
           <input name="name" required value="${escapeHtml(workingTemplate.name)}" />
         </label>
@@ -583,8 +607,11 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
             : ""
         }
         <p class="muted">${isSpeechSupported() ? "Dictado por voz disponible" : "Dictado solo texto"}</p>
-        <button type="submit" class="btn btn-primary">Continuar al dictado</button>
-        <button type="button" class="btn btn-ghost" id="btn-back-pac">Volver</button>
+        </div>
+        <div class="plantilla-step-footer">
+          <button type="submit" class="btn btn-primary btn-block">Continuar al dictado</button>
+          <button type="button" class="btn btn-ghost btn-block" id="btn-back-pac">Volver</button>
+        </div>
       </form>
     `;
 
@@ -833,7 +860,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         micBtn.classList.add("mic-active");
         micBtn.textContent = "⏹ Detener";
       }
-  if (status) status.textContent = "Escuchando… sigue hablando. Detener o Procesar con IA para terminar.";
+  if (status) status.textContent = "Escuchando…";
       const taNow = root.querySelector("#dictation") as HTMLTextAreaElement;
       stopSpeech = startDictation(
         taNow?.value ?? dictation,
@@ -856,19 +883,16 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     });
 
     root.querySelector("#btn-back")?.addEventListener("click", () => {
-      stopSpeech?.();
-      listening = false;
-      step = "plantilla";
-      render();
+      navigateBackInFlow();
     });
     root.querySelector("#btn-cfg-tpl")?.addEventListener("click", () => {
-      stopSpeech?.();
-      listening = false;
+      stopDictation();
       step = "plantilla";
       render();
     });
 
     root.querySelector("#btn-process")?.addEventListener("click", async () => {
+      stopDictation();
       dictation = (root.querySelector("#dictation") as HTMLTextAreaElement)?.value.trim() ?? dictation.trim();
       const notesEl = root.querySelector("#ordenes-notes") as HTMLTextAreaElement | null;
       if (notesEl) ordenesNotes = notesEl.value;
@@ -894,8 +918,6 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
 
       processing = true;
       errEl.textContent = "";
-      stopSpeech?.();
-      listening = false;
       renderDictado();
 
       try {
@@ -976,9 +998,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     });
     savedDocumentId = id;
     deleteDraft(currentDraftId);
-    if (opts?.showAlert !== false) {
-      alert(existing ? "Documento actualizado" : "Documento guardado");
-    }
+    // Feedback de sync: toast desde syncWithFeedback (clinical-store)
     if (opts?.navigateAfter) {
       navigate(`/informes/${doc.id}`);
     }
@@ -1038,7 +1058,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         <select id="header-select">${headerOpts || `<option value="">Sin encabezados — cree uno en Plantillas</option>`}</select>
       </div>
 
-      ${membreteEditorHtml(membrete)}
+      ${membreteEditorHtml(membrete, docType)}
 
       <h2 class="home-section-title">Editar secciones</h2>
       <div id="sections-editor" class="stack">${sectionsHtml}</div>

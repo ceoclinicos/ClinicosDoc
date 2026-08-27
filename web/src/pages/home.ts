@@ -6,41 +6,77 @@ import {
 import { showPendingAffiliationNotices } from "../clinic/affiliation-notices";
 import { listPendingInvitationsForDoctor } from "../clinic/store";
 import { getPatientSession, getProfessionalSession } from "../registro/session";
-import { loadDocuments, loadDrafts } from "../services/clinical-store";
-import { hasSeenRedactarTutorial, resetRedactarTutorial } from "../services/onboarding";
-import { DocumentTypeLabels } from "../shared/models";
+import { loadDrafts } from "../services/clinical-store";
+import {
+  hasSeenRedactarTutorial,
+  isTutorialButtonEnabled,
+  resetRedactarTutorial,
+} from "../services/onboarding";
+import { flushPendingCloudSync } from "../services/sync-feedback";
+import { buildPatientActivityRows } from "../services/patient-activity";
+import { saludoHora, tituloProfesional } from "../shared/clinical-datetime";
 import { openRedactarTutorial } from "../ui/redactar-tutorial";
 import { bindNavButtons, page } from "./helpers";
 
-function saludoHora(): string {
-  const h = new Date().getHours();
-  if (h < 12) return "Buenos días";
-  if (h < 19) return "Buenas tardes";
-  return "Buenas noches";
+const HOME_PAGE_SIZE = 10;
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function medicoHome(): HTMLElement {
   const prof = getProfessionalSession();
-  const primerNombre = prof?.nombre?.trim().split(/\s+/)[0] || "Doctor";
-  const recent = loadDocuments().slice(0, 3);
+  const saludoNombre = tituloProfesional(prof?.sexo);
   const draftsCount = loadDrafts().length;
+  const allRows = buildPatientActivityRows();
+  let visible = Math.min(HOME_PAGE_SIZE, allRows.length);
 
-  const actividad =
-    recent.length === 0
-      ? `
+  function rowsHtml(limit: number): string {
+    const slice = allRows.slice(0, limit);
+    if (!slice.length) {
+      return `
       <div class="home-activity-empty">
         <p class="muted"><strong>Sin informes aún</strong></p>
         <p class="muted">Crea tu primer informe clínico</p>
-      </div>`
-      : `<ul class="list home-activity-list">${recent
-          .map(
-            (d) => `
-          <li class="list-item list-item-action" data-nav="/informes/${d.id}">
-            <strong>${DocumentTypeLabels[d.type]}</strong>
-            <span class="muted">${d.patientNombre} · ${new Date(d.createdAt).toLocaleDateString("es")}</span>
-          </li>`,
-          )
-          .join("")}</ul>`;
+      </div>`;
+    }
+    return `
+      <div class="clinic-table-wrap home-patient-table-wrap">
+        <table class="clinic-table home-patient-table">
+          <thead>
+            <tr>
+              <th>Paciente</th>
+            </tr>
+          </thead>
+          <tbody id="home-patient-body">
+            ${slice
+              .map(
+                (r) => {
+                  const cedulaMeta = r.patientCedula ? `C.I. ${escapeHtml(r.patientCedula)}` : "";
+                  const edadMeta = r.edad !== "—" ? `${escapeHtml(r.edad)} años` : "";
+                  const metaLine = [cedulaMeta, edadMeta].filter(Boolean).join(" · ");
+                  return `
+              <tr class="clinic-table-row home-patient-row" tabindex="0" role="link"
+                data-cedula="${escapeHtml(r.patientCedula)}"
+                data-id="${escapeHtml(r.patientId)}">
+                <td>
+                  <strong>${escapeHtml(r.patientNombre)}</strong>
+                  ${metaLine ? `<span class="muted home-patient-meta">${metaLine}</span>` : ""}
+                  <span class="home-patient-date">${escapeHtml(r.lastAtLabel)}</span>
+                  <span class="home-patient-dx" title="${escapeHtml(r.diagnostico)}">${escapeHtml(r.diagnostico)}</span>
+                </td>
+              </tr>`;
+                },
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="clinic-pager" id="home-patient-pager" ${allRows.length > limit ? "" : "hidden"}>
+        <span class="muted">${limit} de ${allRows.length}</span>
+        <button type="button" class="btn btn-secondary" id="home-patient-more">Cargar más</button>
+      </div>`;
+  }
 
   const el = document.createElement("section");
   el.className = "page home-medico";
@@ -48,7 +84,7 @@ function medicoHome(): HTMLElement {
     <header class="home-medico-top">
       <div>
         <p class="home-brand">Clínicos Doc</p>
-        <h1 class="home-saludo">${saludoHora()}, ${primerNombre}</h1>
+        <h1 class="home-saludo">${saludoHora()}, ${escapeHtml(saludoNombre)}</h1>
         <p class="lead home-tagline">Gestiona tus historias clínicas con elegancia</p>
       </div>
       <button type="button" class="icon-gear" data-nav="/configuracion" aria-label="Configuración" title="Configuración">⚙</button>
@@ -57,13 +93,12 @@ function medicoHome(): HTMLElement {
     <button type="button" class="home-redactar-hero" id="btn-open-redactar">
       <div class="home-redactar-text">
         <span class="hero-title">Redactar</span>
-        <span class="hero-sub">Historia clínica, informe, reposo, órdenes y recetas</span>
+        <span class="hero-sub">Historia clínica, informe, órdenes y recetas</span>
       </div>
       <span class="home-redactar-cta">Redactar →</span>
     </button>
 
-    <!-- TODO: ocultar cuando el tutorial esté validado -->
-    <button type="button" class="btn btn-ghost" id="btn-probar-tutorial" style="margin:0.75rem 0 0;width:100%">
+    <button type="button" class="btn btn-ghost" id="btn-probar-tutorial" hidden style="margin:0.75rem 0 0;width:100%">
       Probar tutorial
     </button>
 
@@ -80,8 +115,8 @@ function medicoHome(): HTMLElement {
     </div>
 
     <div class="card-panel home-activity">
-      <h2 class="home-section-title" style="margin-top:0">Actividad reciente</h2>
-      ${actividad}
+      <h2 class="home-section-title" style="margin-top:0">Pacientes recientes</h2>
+      <div id="home-patient-activity">${rowsHtml(visible)}</div>
     </div>
 
     <p class="muted home-panel-link"><a href="#/profesional">Panel de atenciones (registro por cédula)</a></p>
@@ -102,7 +137,6 @@ function medicoHome(): HTMLElement {
         <p class="muted">Selecciona el tipo de documento clínico</p>
         <button type="button" class="tile tile-full" data-type="historiaClinica">Historia clínica</button>
         <button type="button" class="tile tile-full" data-type="informe">Informe</button>
-        <button type="button" class="tile tile-full" data-type="reposo">Reposo</button>
         <button type="button" class="tile tile-full" data-type="ordenesMedicas">Órdenes médicas</button>
         <button type="button" class="tile tile-full" data-type="receta">Receta</button>
         <button type="submit" class="btn btn-ghost" value="cancel">Cancelar</button>
@@ -114,6 +148,37 @@ function medicoHome(): HTMLElement {
   const typeSheet = el.querySelector("#doc-type-sheet") as HTMLDialogElement;
   const originOptions = el.querySelector("#origin-options") as HTMLElement;
   const originStatus = el.querySelector("#origin-status") as HTMLElement;
+  const activityHost = el.querySelector("#home-patient-activity") as HTMLElement;
+
+  function openPatientHistorial(cedula: string, id: string): void {
+    const q = new URLSearchParams();
+    if (cedula) q.set("cedula", cedula);
+    if (id) q.set("id", id);
+    navigate(`/pacientes/historial?${q.toString()}`);
+  }
+
+  function bindHomePatientActivity(): void {
+    activityHost.querySelectorAll(".home-patient-row").forEach((row) => {
+      const open = () => {
+        const elRow = row as HTMLElement;
+        openPatientHistorial(elRow.dataset.cedula || "", elRow.dataset.id || "");
+      };
+      row.addEventListener("click", open);
+      row.addEventListener("keydown", (ev) => {
+        const e = ev as KeyboardEvent;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          open();
+        }
+      });
+    });
+    activityHost.querySelector("#home-patient-more")?.addEventListener("click", () => {
+      visible = Math.min(visible + HOME_PAGE_SIZE, allRows.length);
+      activityHost.innerHTML = rowsHtml(visible);
+      bindHomePatientActivity();
+    });
+  }
+  bindHomePatientActivity();
 
   function openTypeSheet(): void {
     typeSheet.showModal();
@@ -202,8 +267,15 @@ function medicoHome(): HTMLElement {
     });
   };
 
+  const tutorialBtn = el.querySelector("#btn-probar-tutorial") as HTMLButtonElement | null;
+  const syncTutorialBtn = () => {
+    if (tutorialBtn) tutorialBtn.hidden = !isTutorialButtonEnabled();
+  };
+  syncTutorialBtn();
+  window.addEventListener("tutorialbtnchange", syncTutorialBtn);
+
   el.querySelector("#btn-open-redactar")?.addEventListener("click", () => void openOriginSheet());
-  el.querySelector("#btn-probar-tutorial")?.addEventListener("click", () => {
+  tutorialBtn?.addEventListener("click", () => {
     resetRedactarTutorial();
     openTutorial();
   });
@@ -220,6 +292,8 @@ function medicoHome(): HTMLElement {
   if (!hasSeenRedactarTutorial()) {
     requestAnimationFrame(openTutorial);
   }
+
+  void flushPendingCloudSync({ quiet: true });
 
   void (async () => {
     try {

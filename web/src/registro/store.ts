@@ -21,8 +21,12 @@ import type {
 } from "./models";
 import { RegistroPaths } from "./models";
 
-function assertPin4(pin: string): void {
-  if (!/^\d{4}$/.test(pin)) throw new Error("El PIN debe tener exactamente 4 dígitos");
+function assertPin6(pin: string): void {
+  if (!/^\d{6}$/.test(pin)) throw new Error("El PIN debe tener exactamente 6 dígitos");
+}
+
+function assertPinLogin(pin: string): void {
+  if (!/^\d{4}$|^\d{6}$/.test(pin)) throw new Error("El PIN debe tener 4 o 6 dígitos");
 }
 
 /** Solo dígitos — igual que la app y app-account (acepta "MPPS-164775" o "164775"). */
@@ -64,7 +68,7 @@ export async function registerPaciente(input: {
   correo: string;
   pin: string;
 }): Promise<PacienteRegistro> {
-  assertPin4(input.pin);
+  assertPin6(input.pin);
   const auth = await authRegister({
     tipo: "paciente",
     cedula: input.cedula,
@@ -102,7 +106,7 @@ export async function registerProfesional(input: {
   sexo: string;
   nacionalidad: string;
 }): Promise<ProfesionalRegistro> {
-  assertPin4(input.pin);
+  assertPin6(input.pin);
   const correo = input.correo.trim();
   if (!correo || !correo.includes("@")) throw new Error("Correo electrónico requerido");
   if (input.sexo !== "Masculino" && input.sexo !== "Femenino") {
@@ -148,7 +152,7 @@ export async function consultarPaciente(cedula: string): Promise<PacienteRegistr
 }
 
 export async function loginPaciente(cedula: string, pin: string): Promise<PacienteRegistro> {
-  assertPin4(pin);
+  assertPinLogin(pin);
   const auth = await authLogin({ tipo: "paciente", cedula, pin });
   const p = await getPaciente(auth.cedula || cedula);
   if (!p) {
@@ -172,8 +176,8 @@ export async function loginProfesional(
   cedula: string,
   pin: string,
   _mpps = "",
-): Promise<ProfesionalSession> {
-  assertPin4(pin);
+): Promise<ProfesionalSession & { needsPinUpgrade?: boolean }> {
+  assertPinLogin(pin);
   const auth = await authLogin({ tipo: "profesional", cedula, pin });
   const cedNorm = normalizeCedula(auth.cedula || cedula);
   const p = await getProfesional(cedNorm);
@@ -186,6 +190,7 @@ export async function loginProfesional(
     cloudUserId: auth.cloudUserId || auth.uid,
     sexo: auth.sexo || p?.sexo,
     nacionalidad: auth.nacionalidad || p?.nacionalidad,
+    needsPinUpgrade: auth.needsPinUpgrade === true || pin.length === 4,
   };
 }
 

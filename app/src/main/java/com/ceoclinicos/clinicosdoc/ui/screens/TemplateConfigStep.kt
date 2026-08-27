@@ -2,6 +2,7 @@ package com.ceoclinicos.clinicosdoc.ui.screens
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -56,11 +57,14 @@ fun TemplateConfigStep(
         documentType == DocumentType.INFORME ||
         documentType == DocumentType.REPOSO
 
-    Column(
-        modifier = Modifier
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-    ) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp)
+                .padding(top = 24.dp),
+        ) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(patient.nombre, style = MaterialTheme.typography.labelLarge)
@@ -72,15 +76,6 @@ fun TemplateConfigStep(
         }
 
         Spacer(modifier = Modifier.height(20.dp))
-        Text("Plantilla", style = MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            "Configura qué incluir en este ${documentType.label.lowercase()} antes de dictar.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextSecondary,
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(template.name, style = MaterialTheme.typography.titleMedium)
@@ -147,15 +142,23 @@ fun TemplateConfigStep(
             )
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
-        PremiumPrimaryButton(
-            label = "Continuar al dictado",
-            onClick = {
-                if (showPhysicalExam && enabledExamIds.isEmpty()) return@PremiumPrimaryButton
-                onContinue()
-            },
-            enabled = !showPhysicalExam || enabledExamIds.isNotEmpty(),
-        )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(top = 8.dp, bottom = 24.dp),
+        ) {
+            PremiumPrimaryButton(
+                label = "Continuar al dictado",
+                onClick = {
+                    if (showPhysicalExam && enabledExamIds.isEmpty()) return@PremiumPrimaryButton
+                    onContinue()
+                },
+                enabled = !showPhysicalExam || enabledExamIds.isNotEmpty(),
+            )
+        }
     }
 }
 

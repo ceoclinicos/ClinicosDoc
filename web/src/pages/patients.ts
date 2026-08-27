@@ -74,14 +74,18 @@ function renderPatientList(patients: Patient[], highlightCedula?: string): strin
     .map((p) => {
       const isMatch =
         highlight && findPatientByCedula([p], highlight)?.cedula === p.cedula;
-      return `<li class="list-item list-item-action${isMatch ? " list-item-highlight" : ""}" data-cedula="${escapeAttr(p.cedula)}" role="button" tabindex="0">
-        <div class="list-item-row">
-          <div>
-            <strong>${escapeHtml(p.nombre)}</strong>
-            <span>C.I. ${escapeHtml(p.cedula)} · ${p.edad} años · ${escapeHtml(p.sexo || "—")} · Nac. ${escapeHtml(formatNac(p.fechaNacimiento))}</span>
-            <span class="muted">Tocar para ficha · Editar datos con el botón</span>
-          </div>
+      return `<li class="list-item patient-card${isMatch ? " list-item-highlight" : ""}" data-cedula="${escapeAttr(p.cedula)}">
+        <div class="patient-card-main">
+          <strong>${escapeHtml(p.nombre)}</strong>
+          <span>C.I. ${escapeHtml(p.cedula)} · ${p.edad} años · ${escapeHtml(p.sexo || "—")} · Nac. ${escapeHtml(formatNac(p.fechaNacimiento))}</span>
+        </div>
+        <div class="patient-row-actions">
           <button type="button" class="btn btn-ghost btn-sm btn-edit-patient" data-edit-id="${escapeAttr(p.id)}">Editar</button>
+          <button type="button" class="btn btn-secondary btn-sm btn-ver-informes" title="Ver informes" aria-label="Ver informes"
+            data-cedula="${escapeAttr(p.cedula)}" data-id="${escapeAttr(p.id)}">
+            <span class="btn-icon-eye" aria-hidden="true">👁</span>
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm btn-ficha-patient" data-cedula="${escapeAttr(p.cedula)}">Ficha</button>
         </div>
       </li>`;
     })
@@ -114,7 +118,7 @@ registerRoute({
         </label>
         <button type="button" class="btn btn-primary" id="cedula-search-btn">Buscar</button>
       </div>
-      <p class="muted" id="search-hint">Busca en tu lista y en pacientes registrados en el portal. Deja vacío para ver todos.</p>
+      <p class="muted" id="search-hint">Busca en tu lista y en pacientes registrados en el portal. Deja vacío para ver todos. Usa «Ver informes» para el historial.</p>
       <div id="patient-results">
         ${
           patients.length === 0
@@ -157,20 +161,19 @@ registerRoute({
     }
 
     function bindPatientCards(root: HTMLElement): void {
-      root.querySelectorAll("[data-cedula]").forEach((node) => {
-        const open = () => {
-          const cedula = (node as HTMLElement).getAttribute("data-cedula");
-          if (cedula) void openFicha(cedula);
-        };
-        node.addEventListener("click", (e) => {
-          if ((e.target as HTMLElement).closest(".btn-edit-patient")) return;
-          open();
+      root.querySelectorAll(".btn-ver-informes").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const b = btn as HTMLElement;
+          const q = new URLSearchParams();
+          if (b.dataset.cedula) q.set("cedula", b.dataset.cedula);
+          if (b.dataset.id) q.set("id", b.dataset.id);
+          navigate(`/pacientes/historial?${q.toString()}`);
         });
-        node.addEventListener("keydown", (e) => {
-          if ((e as KeyboardEvent).key === "Enter" || (e as KeyboardEvent).key === " ") {
-            e.preventDefault();
-            open();
-          }
+      });
+      root.querySelectorAll(".btn-ficha-patient").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const cedula = (btn as HTMLElement).dataset.cedula;
+          if (cedula) void openFicha(cedula);
         });
       });
       root.querySelectorAll(".btn-edit-patient").forEach((btn) => {

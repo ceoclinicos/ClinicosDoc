@@ -15,7 +15,6 @@ import { bindNavButtons, page } from "../helpers";
 const DOC_TYPES: DocumentType[] = [
   "historiaClinica",
   "informe",
-  "reposo",
   "ordenesMedicas",
   "receta",
 ];

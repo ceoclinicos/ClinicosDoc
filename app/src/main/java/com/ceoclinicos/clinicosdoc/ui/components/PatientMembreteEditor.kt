@@ -16,6 +16,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
 import com.ceoclinicos.clinicosdoc.ui.theme.CardWhite
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
@@ -24,8 +25,10 @@ import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 fun PatientMembreteEditor(
     membrete: PatientMembrete,
     onMembreteChange: (PatientMembrete) -> Unit,
+    documentType: DocumentType? = null,
     modifier: Modifier = Modifier,
 ) {
+    val extendedHistoria = documentType == DocumentType.HISTORIA_CLINICA
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
             "Identificación del paciente",
@@ -85,8 +88,60 @@ fun PatientMembreteEditor(
                         containerColor = CardWhite,
                     )
                 }
+                if (extendedHistoria) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        PremiumTextField(
+                            label = "Teléfono",
+                            value = membrete.telefono,
+                            onValueChange = { onMembreteChange(membrete.copy(telefono = it)) },
+                            modifier = Modifier.weight(1f),
+                            containerColor = CardWhite,
+                        )
+                        PremiumTextField(
+                            label = "Dirección",
+                            value = membrete.direccion,
+                            onValueChange = { onMembreteChange(membrete.copy(direccion = it)) },
+                            modifier = Modifier.weight(1.2f),
+                            containerColor = CardWhite,
+                        )
+                    }
+                    PremiumTextField(
+                        label = "Ocupación",
+                        value = membrete.ocupacion,
+                        onValueChange = { onMembreteChange(membrete.copy(ocupacion = it)) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        containerColor = CardWhite,
+                    )
+                    Text(
+                        "Acompañante",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 14.dp, bottom = 4.dp),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        PremiumTextField(
+                            label = "Nombre",
+                            value = membrete.acompananteNombre,
+                            onValueChange = { onMembreteChange(membrete.copy(acompananteNombre = it)) },
+                            modifier = Modifier.weight(1.2f),
+                            containerColor = CardWhite,
+                        )
+                        PremiumTextField(
+                            label = "Teléfono",
+                            value = membrete.acompananteTelefono,
+                            onValueChange = { onMembreteChange(membrete.copy(acompananteTelefono = it)) },
+                            modifier = Modifier.weight(1f),
+                            containerColor = CardWhite,
+                        )
+                    }
+                }
                 Text(
-                    text = buildMembreteAnnotated(membrete),
+                    text = buildMembreteAnnotated(membrete, documentType),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(top = 14.dp),
                 )
@@ -98,16 +153,20 @@ fun PatientMembreteEditor(
 @Composable
 fun PatientMembreteDisplay(
     membrete: PatientMembrete,
+    documentType: DocumentType? = null,
     modifier: Modifier = Modifier,
 ) {
     Text(
-        text = buildMembreteAnnotated(membrete),
+        text = buildMembreteAnnotated(membrete, documentType),
         style = MaterialTheme.typography.bodyLarge,
         modifier = modifier.fillMaxWidth(),
     )
 }
 
-fun buildMembreteAnnotated(membrete: PatientMembrete): AnnotatedString = buildAnnotatedString {
+fun buildMembreteAnnotated(
+    membrete: PatientMembrete,
+    documentType: DocumentType? = null,
+): AnnotatedString = buildAnnotatedString {
     fun field(label: String, value: String) {
         withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
             append("$label: ")
@@ -123,4 +182,16 @@ fun buildMembreteAnnotated(membrete: PatientMembrete): AnnotatedString = buildAn
     field("Sexo", membrete.displaySexo())
     append("   ")
     field("Fecha de nacimiento", membrete.displayFechaNacimiento())
+    if (documentType == DocumentType.HISTORIA_CLINICA) {
+        append("\n")
+        field("Teléfono", membrete.displayTelefono())
+        append("   ")
+        field("Dirección", membrete.displayDireccion())
+        append("   ")
+        field("Ocupación", membrete.displayOcupacion())
+        append("\n")
+        field("Acompañante", membrete.displayAcompananteNombre())
+        append("   ")
+        field("Tel. acompañante", membrete.displayAcompananteTelefono())
+    }
 }

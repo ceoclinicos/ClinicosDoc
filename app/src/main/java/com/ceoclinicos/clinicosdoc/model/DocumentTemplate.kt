@@ -17,6 +17,38 @@ data class DocumentTemplate(
     /** Ejemplo de estilo para enfermedad actual / narrativa clínica. */
     val enfermedadActualEjemplo: String = "",
 ) {
+    /** Evita NPE si Gson/caché trae listas nulas (plantillas de clínica mal cacheadas). */
+    fun sanitized(): DocumentTemplate = copy(
+        id = id.ifBlank { "tpl_${documentType.name.lowercase()}" },
+        name = name.ifBlank { "Plantilla" },
+        sections = sectionsOrEmpty(),
+        sectionLayoutOrder = sectionLayoutOrderOrEmpty(),
+        enabledPhysicalExamSystemIds = examIdsOrEmpty(),
+        physicalExamTextOverrides = overridesOrEmpty(),
+        sectionDefaultTexts = sectionTextsOrEmpty(),
+        enfermedadActualEjemplo = enfermedadActualEjemplo.orEmpty(),
+    )
+
+    @Suppress("UNNECESSARY_SAFE_CALL", "USELESS_ELVIS")
+    private fun sectionsOrEmpty(): List<String> =
+        (sections as List<String>?)?.filterNotNull().orEmpty()
+
+    @Suppress("UNNECESSARY_SAFE_CALL", "USELESS_ELVIS")
+    private fun sectionLayoutOrderOrEmpty(): List<String> =
+        (sectionLayoutOrder as List<String>?)?.filterNotNull().orEmpty()
+
+    @Suppress("UNNECESSARY_SAFE_CALL", "USELESS_ELVIS")
+    private fun examIdsOrEmpty(): List<String> =
+        (enabledPhysicalExamSystemIds as List<String>?)?.filterNotNull().orEmpty()
+
+    @Suppress("UNNECESSARY_SAFE_CALL", "USELESS_ELVIS")
+    private fun overridesOrEmpty(): Map<String, String> =
+        (physicalExamTextOverrides as Map<String, String>?) ?: emptyMap()
+
+    @Suppress("UNNECESSARY_SAFE_CALL", "USELESS_ELVIS")
+    private fun sectionTextsOrEmpty(): Map<String, String> =
+        (sectionDefaultTexts as Map<String, String>?) ?: emptyMap()
+
     fun usesPhysicalExamCatalog(): Boolean =
         documentType == DocumentType.INFORME ||
             sections.any { it.equals("Examen físico", ignoreCase = true) }

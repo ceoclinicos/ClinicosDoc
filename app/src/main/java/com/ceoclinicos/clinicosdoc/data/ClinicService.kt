@@ -42,6 +42,7 @@ object ClinicService {
 
     private const val ACCEPT_INVITE_URL = "https://clinicos-doc.vercel.app/api/clinic-accept-invite"
     private const val MEMBERSHIPS_URL = "https://clinicos-doc.vercel.app/api/clinic-memberships"
+    private const val LEAVE_CLINIC_URL = "https://clinicos-doc.vercel.app/api/clinic-leave"
     private const val TEMPLATES_URL = "https://clinicos-doc.vercel.app/api/clinic-templates"
 
     @Volatile
@@ -120,14 +121,47 @@ object ClinicService {
         ClinicCatalogStorage.retainClinics(context, memberships.map { it.clinicId }.toSet())
         for (m in memberships) {
             runCatching {
-                val tpls = listTemplates(context, m.clinicId, documentType = null, forceRefresh = true)
-                val hdrs = listHeaders(context, m.clinicId, forceRefresh = true)
-                ClinicCatalogStorage.saveTemplates(context, m.clinicId, tpls)
-                ClinicCatalogStorage.saveHeaders(context, m.clinicId, hdrs)
+                syncClinicCatalogIfNeeded(context, m.clinicId)
             }
         }
         lastAffiliationSyncAtMs = System.currentTimeMillis()
         return memberships
+    }
+
+    /** Lee templatesVersion del documento de la clínica (ligero). */
+    private suspend fun readRemoteTemplatesVersion(clinicId: String): Long {
+        return runCatching {
+            val snap = clinicRef(clinicId).get().await()
+            when (val v = snap.get("templatesVersion")) {
+                is Number -> v.toLong()
+                is String -> v.toLongOrNull() ?: 0L
+                else -> 0L
+            }
+        }.getOrDefault(0L)
+    }
+
+    /**
+     * Descarga plantillas/encabezados solo si la clínica subió templatesVersion
+     * o si no hay caché local.
+     * @return true si descargó
+     */
+    suspend fun syncClinicCatalogIfNeeded(
+        context: Context,
+        clinicId: String,
+        force: Boolean = false,
+    ): Boolean {
+        val localVer = ClinicCatalogStorage.getTemplatesVersion(context, clinicId)
+        val hasCache = ClinicCatalogStorage.loadTemplates(context, clinicId).isNotEmpty()
+        val remoteVer = readRemoteTemplatesVersion(clinicId)
+        val needsDownload = force || !hasCache || remoteVer > localVer
+        if (!needsDownload) return false
+
+        listTemplates(context, clinicId, documentType = null, forceRefresh = true)
+        listHeaders(context, clinicId, forceRefresh = true)
+        if (ClinicCatalogStorage.getTemplatesVersion(context, clinicId) < remoteVer) {
+            ClinicCatalogStorage.setTemplatesVersion(context, clinicId, remoteVer)
+        }
+        return true
     }
     private fun inviteRef(code: String) =
         db().collection(FirestorePaths.CLINIC_INVITES).document(code.trim().uppercase())
@@ -442,6 +476,52 @@ object ClinicService {
         ClinicMembershipStorage.removePendingInvite(context, clinicId)
     }
 
+    /** El médico se desvincula del centro y borra plantillas locales de esa clínica. */
+    suspend fun leaveClinic(context: Context, clinicId: String) {
+        if (!DoctorAuthService.isConfigured(context)) {
+            throw IllegalStateException("Firebase no configurado")
+        }
+        val profile = DoctorStorage.loadProfile(context)
+            ?: throw IllegalStateException("Sin sesión de médico")
+        val doctorCedula = CedulaNormalizer.normalize(profile.cedula)
+
+        // Intenta remoto; si la clínica ya no existe o hay fallo de red, igual limpia local.
+        try {
+            val idToken = idTokenOrThrow()
+            withContext(Dispatchers.IO) {
+                val bodyJson = JSONObject()
+                    .put("clinicId", clinicId)
+                    .put("doctorCedula", doctorCedula)
+                    .toString()
+                val request = Request.Builder()
+                    .url(LEAVE_CLINIC_URL)
+                    .post(bodyJson.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .header("Accept", "application/json")
+                    .header("Authorization", "Bearer $idToken")
+                    .build()
+                httpClient.newCall(request).execute().use { response ->
+                    if (response.code == 401 || response.code == 403) {
+                        val raw = response.body?.string().orEmpty()
+                        val json = runCatching { JSONObject(raw) }.getOrNull()
+                        error(json?.optString("error").orEmpty().ifBlank { "Sesión inválida" })
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            val msg = e.message.orEmpty()
+            val isAuth =
+                msg.contains("sesión", ignoreCase = true) ||
+                    msg.contains("token", ignoreCase = true) ||
+                    msg.contains("Firebase no configurado", ignoreCase = true)
+            if (isAuth) throw e
+            // Clínica inexistente / red: continuar con limpieza local
+        }
+
+        ClinicMembershipStorage.remove(context, clinicId)
+        ClinicCatalogStorage.removeClinic(context, clinicId)
+        lastAffiliationSyncAtMs = 0L
+    }
+
     /**
      * @param allowEmptyOverwrite si false, no borra el caché local cuando la API viene vacía
      *        (evita el falso “no afiliado” por heal lento / fallo parcial).
@@ -570,8 +650,9 @@ object ClinicService {
                     if (!response.isSuccessful) {
                         error(json.optString("error").ifBlank { "No se pudieron cargar plantillas" })
                     }
-                    val arr = json.optJSONArray("templates") ?: return@use emptyList()
-                    buildList {
+                    val remoteVersion = json.optLong("templatesVersion", 0L)
+                    val arr = json.optJSONArray("templates") ?: return@use emptyList<DocumentTemplate>()
+                    val list = buildList {
                         for (i in 0 until arr.length()) {
                             val data = arr.optJSONObject(i) ?: continue
                             val typeRaw = data.optString("documentType")
@@ -616,14 +697,15 @@ object ClinicService {
                             )
                         }
                     }
-                }
-            }.also { remote ->
-                if (documentType == null) {
-                    ClinicCatalogStorage.saveTemplates(context, clinicId, remote)
-                } else {
-                    val merged = ClinicCatalogStorage.loadTemplates(context, clinicId)
-                        .filterNot { it.documentType == documentType } + remote
-                    ClinicCatalogStorage.saveTemplates(context, clinicId, merged)
+                    if (documentType == null) {
+                        ClinicCatalogStorage.saveTemplates(context, clinicId, list)
+                        ClinicCatalogStorage.setTemplatesVersion(context, clinicId, remoteVersion)
+                    } else {
+                        val merged = ClinicCatalogStorage.loadTemplates(context, clinicId)
+                            .filterNot { it.documentType == documentType } + list
+                        ClinicCatalogStorage.saveTemplates(context, clinicId, merged)
+                    }
+                    list
                 }
             }
         }.getOrElse {
@@ -758,6 +840,11 @@ object ClinicService {
                     "sexo" to m.sexo,
                     "fechaNacimiento" to m.fechaNacimiento,
                     "fecha" to m.fecha,
+                    "telefono" to m.telefono,
+                    "direccion" to m.direccion,
+                    "ocupacion" to m.ocupacion,
+                    "acompananteNombre" to m.acompananteNombre,
+                    "acompananteTelefono" to m.acompananteTelefono,
                 )
             },
             "sourceDocumentId" to document.sourceDocumentId,

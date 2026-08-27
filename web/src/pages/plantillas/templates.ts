@@ -350,7 +350,6 @@ registerRoute({
         sectionDefaultTexts: draftSectionTexts,
         isDefault: true,
       });
-      alert("Plantilla guardada");
       navigate(DocumentTypesRecetas.includes(tipo) ? "/plantillas/recetas" : "/plantillas/documentos");
     });
 

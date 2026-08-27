@@ -1,4 +1,4 @@
-# Copia este archivo a ai_keys.properties y completa tus claves.
-# ai_keys.properties está en .gitignore y NO debe subirse a GitHub.
-GEMINI_API_KEY=
-DEEPSEEK_API_KEY=
+# Las claves de IA viven solo en el servidor (Vercel).
+# La app Android usa el proxy /api/chat con sesión Firebase; no incluya keys en el APK.
+#
+# Este archivo ya no se usa. Se conserva solo como referencia histórica.

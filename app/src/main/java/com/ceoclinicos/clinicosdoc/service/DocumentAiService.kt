@@ -39,7 +39,7 @@ object DocumentAiService {
         sessionConfig: ReportSessionConfig? = null,
     ): String {
         AiConfig.load(context.applicationContext)
-        val effectiveTemplate = sessionConfig?.applyTo(template) ?: template
+        val effectiveTemplate = (sessionConfig?.applyTo(template) ?: template).sanitized()
         val headerBlock = header?.toPlainTextBlock()
         val textOverrides = sessionConfig?.physicalExamTextOverrides.orEmpty()
         val physicalExamBlock = PhysicalExamPromptBuilder.buildBlock(context, effectiveTemplate, textOverrides)

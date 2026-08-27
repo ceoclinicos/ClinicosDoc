@@ -2,9 +2,11 @@ import "./styles/app.css";
 import { mountShell } from "./app/shell";
 import { canAccessRoute, matchRoute, navigate } from "./app/router";
 import { startClinicDocumentSyncWatcher } from "./services/clinic-doc-sync";
+import { startPendingSyncWatcher } from "./services/sync-feedback";
 import "./pages";
 
 startClinicDocumentSyncWatcher();
+startPendingSyncWatcher();
 
 const root = document.querySelector<HTMLDivElement>("#app");
 if (!root) throw new Error("#app no encontrado");

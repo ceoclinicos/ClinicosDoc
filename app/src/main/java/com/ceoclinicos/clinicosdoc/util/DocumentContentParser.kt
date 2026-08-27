@@ -182,6 +182,30 @@ fun parseDocumentSections(content: String): List<DocumentSection> {
     }
 }
 
+/** Vista corta del diagnóstico para tablas / listas. */
+fun extractDiagnosticoPreview(content: String, maxLen: Int = 100): String {
+    val dx = parseDocumentSections(content).firstOrNull { section ->
+        IS_DIAGNOSTICO.containsMatchIn(section.title) ||
+            Regex("""(?i)impresi[oó]n\s+diagn""").containsMatchIn(section.title)
+    }
+    var raw = dx?.body?.trim().orEmpty()
+    if (raw.isEmpty()) return "Sin diagnóstico"
+    raw = raw.replace(Regex("""\*\*(.+?)\*\*"""), "$1")
+    val firstLine = raw.lines().firstOrNull { it.trim().isNotEmpty() }?.trim().orEmpty()
+    var cleaned = firstLine
+        .replace(Regex("""^\d+[\).\-\s]+"""), "")
+        .replace(Regex("""^(diagnóstico|impresión diagnóstica)\s*:?\s*""", RegexOption.IGNORE_CASE), "")
+        .trim()
+    if (cleaned.contains(";")) {
+        cleaned = cleaned.substringBefore(";").trim()
+    }
+    if (cleaned.isEmpty()) {
+        cleaned = raw.replace(Regex("""\s+"""), " ").trim()
+    }
+    if (cleaned.isEmpty()) return "Sin diagnóstico"
+    return if (cleaned.length > maxLen) cleaned.take(maxLen) + "…" else cleaned
+}
+
 fun normalizeSectionMarkdown(content: String): String {
     val text = content.replace("\r\n", "\n").trim()
     val promoted = promotePlainSectionHeaders(text)

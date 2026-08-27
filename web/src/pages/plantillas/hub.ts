@@ -20,7 +20,7 @@ registerRoute({
         </button>
         <button type="button" class="tile tile-full" data-nav="/plantillas/documentos">
           <strong>Informes y historias</strong>
-          <span class="muted">Historia, informe y reposo</span>
+          <span class="muted">Historia e informe</span>
         </button>
         <button type="button" class="tile tile-full" data-nav="/plantillas/recetas">
           <strong>Recetas</strong>

@@ -18,7 +18,7 @@ function loginForm(): string {
     ${tabs("login")}
     <form class="form" id="clinic-login">
       <label>Nombre de la cuenta<input name="accountName" required autocomplete="username" pattern="[A-Za-z0-9._-]{4,32}" maxlength="32" placeholder="Ej. ceosalud" /></label>
-      <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required autocomplete="current-password" /></label>
+      <label>PIN (4 o 6 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}|[0-9]{6}" maxlength="6" minlength="4" required autocomplete="current-password" /></label>
       <p class="muted">El nombre de la cuenta va pegado, sin espacios. <a href="#/olvide-pin?tipo=clinica">Olvidé mi PIN</a></p>
       <button type="submit" class="btn btn-primary">Ingresar al centro</button>
     </form>
@@ -34,7 +34,7 @@ function registerForm(): string {
       <label>Código jurídico (solo números)<input name="rif" required inputmode="numeric" pattern="[0-9]{5,12}" maxlength="12" placeholder="Ej. 123456789" /></label>
       <label>Correo administrativo<input name="correo" type="email" required /></label>
       <label>Dirección (opcional)<input name="direccion" placeholder="Ciudad, sede…" /></label>
-      <label>PIN (4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+      <label>PIN (6 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" required /></label>
       <button type="submit" class="btn btn-primary">Crear cuenta de centro</button>
     </form>
   `;

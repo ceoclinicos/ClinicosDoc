@@ -67,8 +67,7 @@ import com.ceoclinicos.clinicosdoc.util.sanitizeDocumentContent
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
 import kotlinx.coroutines.launch
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import com.ceoclinicos.clinicosdoc.util.ClinicalDateTimeFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,9 +90,7 @@ fun InformeDetailScreen(
     var showPreview by remember { mutableStateOf(false) }
     var openEditHeaderId by rememberSaveable { mutableStateOf<String?>(null) }
     var showLeaveEditDialog by remember { mutableStateOf(false) }
-    val dateTimeFormatter = remember {
-        DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm").withZone(ZoneId.systemDefault())
-    }
+    val formatDocDateTime = remember { ClinicalDateTimeFormat::formatDocumentDateTime }
 
     fun requestLeave() {
         if (editing) {
@@ -290,7 +287,7 @@ fun InformeDetailScreen(
                 .padding(horizontal = 24.dp, vertical = 16.dp),
         ) {
             Text(
-                "${document.patientNombre} · ${dateTimeFormatter.format(document.createdAt)}",
+                "${document.patientNombre} · ${formatDocDateTime(document.createdAt)}",
                 style = MaterialTheme.typography.bodyMedium,
             )
             document.templateName?.let {
@@ -356,9 +353,10 @@ fun InformeDetailScreen(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 PatientMembreteEditor(
-                    membrete = editableMembrete,
-                    onMembreteChange = { editableMembrete = it },
-                )
+                        membrete = editableMembrete,
+                        onMembreteChange = { editableMembrete = it },
+                        documentType = document.type,
+                    )
                 Spacer(modifier = Modifier.height(20.dp))
                 EditableDocumentContent(
                     content = editableContent,

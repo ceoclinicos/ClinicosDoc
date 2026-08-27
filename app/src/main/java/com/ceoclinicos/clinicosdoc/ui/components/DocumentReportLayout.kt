@@ -44,7 +44,7 @@ fun DocumentReportLayout(
             textAlign = TextAlign.Center,
         )
         Spacer(modifier = Modifier.height(16.dp))
-        PatientMembreteDisplay(membrete = membrete)
+        PatientMembreteDisplay(membrete = membrete, documentType = documentType)
         Spacer(modifier = Modifier.height(16.dp))
         FormattedDocumentText(sanitizeDocumentContent(content))
     }

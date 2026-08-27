@@ -20,10 +20,10 @@ registerRoute({
       isPassword ? "Crear contraseña nueva" : "Crear PIN nuevo",
       token
         ? `
-      <p class="lead">Elija un PIN (contraseña) de 4 dígitos${isPassword ? " para la app" : ""}.</p>
+      <p class="lead">Elija un PIN (contraseña) de 6 dígitos${isPassword ? " para la app" : ""}.</p>
       <form class="form" id="form-nuevo-pin">
-        <label>PIN nuevo (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
-        <label>Confirmar PIN (contraseña)<input name="pin2" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+        <label>PIN nuevo (contraseña, 6 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" required /></label>
+        <label>Confirmar PIN (contraseña)<input name="pin2" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" required /></label>
         <button type="submit" class="btn btn-primary">Guardar PIN (contraseña)</button>
       </form>
       <div id="reset-msg"></div>

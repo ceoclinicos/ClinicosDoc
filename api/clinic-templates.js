@@ -73,8 +73,10 @@ module.exports = async function handler(req, res) {
       templates = templates.filter((t) => String(t.documentType) === typeFilter);
     }
     const headers = ensured.headers;
+    const clinicAfter = await db.collection("clinicosdoc_clinics").doc(clinicId).get();
+    const templatesVersion = Number(clinicAfter.data()?.templatesVersion || 0) || 0;
 
-    return res.status(200).json({ templates, headers });
+    return res.status(200).json({ templates, headers, templatesVersion });
   } catch (err) {
     const status = err?.status || (err?.code === "auth/id-token-expired" ? 401 : 500);
     if (status < 500) {

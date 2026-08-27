@@ -2,6 +2,7 @@ package com.ceoclinicos.clinicosdoc.data
 
 import android.content.Context
 import android.util.Log
+import android.widget.Toast
 import com.ceoclinicos.clinicosdoc.model.Appointment
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
 import com.ceoclinicos.clinicosdoc.model.ClinicalDraft
@@ -24,13 +25,16 @@ import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
 import com.ceoclinicos.clinicosdoc.util.PatientFirestoreId
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
+
 object CloudSyncService {
     private const val TAG = "CloudSyncService"
     private val gson = Gson()
@@ -141,8 +145,22 @@ object CloudSyncService {
                     }
                 }
             }
-            lastError?.let {
-                Log.w(TAG, "No se pudo sincronizar informe a clínica tras reintentos: ${it.message}")
+            lastError?.let { err ->
+                Log.w(TAG, "No se pudo sincronizar informe a clínica tras reintentos: ${err.message}")
+                val clinicLabel = document.clinicName?.takeIf { it.isNotBlank() } ?: "el centro"
+                val patientLabel = document.patientNombre.takeIf { it.isNotBlank() } ?: "el paciente"
+                ClinicMembershipStorage.enqueueNotice(
+                    context,
+                    "No se pudo enviar el informe de $patientLabel a «$clinicLabel». " +
+                        "Revise la conexión e intente guardar de nuevo.",
+                )
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        context.applicationContext,
+                        "El informe no llegó a la clínica. Se avisará al reabrir la app.",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
             }
         }
     }
@@ -596,25 +614,20 @@ object CloudSyncService {
             templateName = dto.templateName,
             headerId = dto.headerId,
             generatedContent = dto.generatedContent,
-            membrete = if (
-                dto.membreteNombre != null ||
-                dto.membreteEdad != null ||
-                dto.membreteCedula != null ||
-                dto.membreteSexo != null ||
-                dto.membreteFechaNacimiento != null ||
-                dto.membreteFecha != null
-            ) {
-                PatientMembrete(
-                    nombre = dto.membreteNombre.orEmpty(),
-                    edad = dto.membreteEdad.orEmpty(),
-                    cedula = dto.membreteCedula.orEmpty().ifBlank { dto.patientCedula },
-                    sexo = dto.membreteSexo.orEmpty(),
-                    fechaNacimiento = dto.membreteFechaNacimiento.orEmpty(),
-                    fecha = dto.membreteFecha.orEmpty(),
-                )
-            } else {
-                null
-            },
+            membrete = PatientMembrete.fromStorageFields(
+                patientCedula = dto.patientCedula,
+                nombre = dto.membreteNombre,
+                edad = dto.membreteEdad,
+                cedula = dto.membreteCedula,
+                sexo = dto.membreteSexo,
+                fechaNacimiento = dto.membreteFechaNacimiento,
+                fecha = dto.membreteFecha,
+                telefono = dto.membreteTelefono,
+                direccion = dto.membreteDireccion,
+                ocupacion = dto.membreteOcupacion,
+                acompananteNombre = dto.membreteAcompananteNombre,
+                acompananteTelefono = dto.membreteAcompananteTelefono,
+            ),
             createdAt = Instant.parse(dto.createdAt),
             updatedAt = Instant.parse(dto.updatedAt),
         )
@@ -679,6 +692,11 @@ object CloudSyncService {
         membreteSexo = membrete?.sexo,
         membreteFechaNacimiento = membrete?.fechaNacimiento,
         membreteFecha = membrete?.fecha,
+        membreteTelefono = membrete?.telefono,
+        membreteDireccion = membrete?.direccion,
+        membreteOcupacion = membrete?.ocupacion,
+        membreteAcompananteNombre = membrete?.acompananteNombre,
+        membreteAcompananteTelefono = membrete?.acompananteTelefono,
         doctorId = doctorId,
         doctorNombre = doctorNombre,
         patientFirestoreKey = patientFirestoreKey,
@@ -739,6 +757,11 @@ object CloudSyncService {
         membreteSexo = membrete?.sexo,
         membreteFechaNacimiento = membrete?.fechaNacimiento,
         membreteFecha = membrete?.fecha,
+        membreteTelefono = membrete?.telefono,
+        membreteDireccion = membrete?.direccion,
+        membreteOcupacion = membrete?.ocupacion,
+        membreteAcompananteNombre = membrete?.acompananteNombre,
+        membreteAcompananteTelefono = membrete?.acompananteTelefono,
         createdAt = createdAt.toString(),
         updatedAt = updatedAt.toString(),
     )
@@ -754,25 +777,21 @@ object CloudSyncService {
         createdAt = createdAt.toString(),
     )
 
-    private fun ClinicalDocumentDto.toMembrete(): PatientMembrete? {
-        val hasData = listOf(
-            membreteNombre,
-            membreteEdad,
-            membreteCedula,
-            membreteSexo,
-            membreteFechaNacimiento,
-            membreteFecha,
-        ).any { !it.isNullOrBlank() }
-        if (!hasData) return null
-        return PatientMembrete(
-            nombre = membreteNombre.orEmpty(),
-            edad = membreteEdad.orEmpty(),
-            cedula = membreteCedula.orEmpty().ifBlank { patientCedula },
-            sexo = membreteSexo.orEmpty(),
-            fechaNacimiento = membreteFechaNacimiento.orEmpty(),
-            fecha = membreteFecha.orEmpty(),
+    private fun ClinicalDocumentDto.toMembrete(): PatientMembrete? =
+        PatientMembrete.fromStorageFields(
+            patientCedula = patientCedula,
+            nombre = membreteNombre,
+            edad = membreteEdad,
+            cedula = membreteCedula,
+            sexo = membreteSexo,
+            fechaNacimiento = membreteFechaNacimiento,
+            fecha = membreteFecha,
+            telefono = membreteTelefono,
+            direccion = membreteDireccion,
+            ocupacion = membreteOcupacion,
+            acompananteNombre = membreteAcompananteNombre,
+            acompananteTelefono = membreteAcompananteTelefono,
         )
-    }
 
     private fun DocumentHeaderDto.toHeaderModel(): DocumentHeader {
         var lines = infoLines?.map { HeaderInfoLine(it.label ?: "", it.value ?: "") }

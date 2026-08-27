@@ -169,7 +169,7 @@ fun TemplateEditScreen(templateId: String, isNew: Boolean, onBack: () -> Unit) {
                             sectionDefaultTexts = sectionDefaultTexts,
                         ),
                     )
-                    Toast.makeText(context, "Plantilla guardada", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Plantilla guardada. Sincronizando…", Toast.LENGTH_SHORT).show()
                     onBack()
                 },
             )

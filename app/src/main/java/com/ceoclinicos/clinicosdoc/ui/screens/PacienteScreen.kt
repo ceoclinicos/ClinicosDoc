@@ -1,7 +1,7 @@
 package com.ceoclinicos.clinicosdoc.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,9 +19,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.MedicalInformation
 import androidx.compose.material.icons.outlined.PersonAddAlt1
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Card
@@ -30,7 +32,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -63,6 +64,7 @@ fun PacienteScreen(
     refreshKey: Int,
     onAddPatient: () -> Unit,
     onEditPatient: (patientId: String) -> Unit,
+    onOpenPatientInformes: (cedula: String, patientId: String, nombre: String) -> Unit = { _, _, _ -> },
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -182,7 +184,7 @@ fun PacienteScreen(
             Text(it, style = MaterialTheme.typography.bodySmall, color = Teal, modifier = Modifier.padding(top = 6.dp))
         }
         Text(
-            "Toca un paciente para ver su ficha. Usa el lápiz para editar sus datos.",
+            "Usa «Ver informes» para el historial clínico. «Ficha» abre la ficha de emergencia.",
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary,
             modifier = Modifier.padding(top = 8.dp),
@@ -202,35 +204,53 @@ fun PacienteScreen(
                     items(displayedPatients, key = { it.id }) { patient ->
                         Card(
                             colors = CardDefaults.cardColors(),
-                            modifier = Modifier.clickable { openFicha(patient) },
                         ) {
-                            ListItem(
-                                leadingContent = {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         modifier = Modifier.size(40.dp).background(Teal.copy(alpha = 0.1f), CircleShape),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Text(patient.nombre.firstOrNull()?.uppercaseChar()?.toString() ?: "?", color = Teal)
                                     }
-                                },
-                                headlineContent = { Text(patient.nombre) },
-                                supportingContent = {
-                                    Text(
-                                        buildString {
-                                            append("C.I. ${patient.cedula} · ${patient.edad} años")
-                                            if (patient.whatsapp.isNotBlank()) append(" · WA ${patient.whatsapp}")
-                                            append(" · Nac. ${dateFormatter.format(patient.fechaNacimiento)}")
-                                        },
-                                    )
-                                },
-                                trailingContent = {
-                                    IconButton(
-                                        onClick = { onEditPatient(patient.id) },
-                                    ) {
-                                        Icon(Icons.Outlined.Edit, contentDescription = "Editar paciente", tint = Teal)
+                                    Spacer(modifier = Modifier.padding(horizontal = 6.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(patient.nombre, style = MaterialTheme.typography.titleMedium)
+                                        Text(
+                                            buildString {
+                                                append("C.I. ${patient.cedula} · ${patient.edad} años")
+                                                if (patient.whatsapp.isNotBlank()) append(" · WA ${patient.whatsapp}")
+                                                append(" · Nac. ${dateFormatter.format(patient.fechaNacimiento)}")
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = TextSecondary,
+                                        )
                                     }
-                                },
-                            )
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    OutlinedButton(onClick = { onEditPatient(patient.id) }) {
+                                        Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+                                        Text("Editar")
+                                    }
+                                    FilledTonalButton(
+                                        onClick = {
+                                            onOpenPatientInformes(patient.cedula, patient.id, patient.nombre)
+                                        },
+                                    ) {
+                                        Icon(Icons.Outlined.Visibility, contentDescription = "Ver informes", modifier = Modifier.size(18.dp))
+                                    }
+                                    OutlinedButton(onClick = { openFicha(patient) }) {
+                                        Icon(Icons.Outlined.MedicalInformation, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.padding(horizontal = 2.dp))
+                                        Text("Ficha")
+                                    }
+                                }
+                            }
                         }
                     }
                 }

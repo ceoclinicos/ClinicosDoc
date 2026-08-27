@@ -75,6 +75,11 @@ object DocumentStorage {
         membreteSexo = membrete?.sexo,
         membreteFechaNacimiento = membrete?.fechaNacimiento,
         membreteFecha = membrete?.fecha,
+        membreteTelefono = membrete?.telefono,
+        membreteDireccion = membrete?.direccion,
+        membreteOcupacion = membrete?.ocupacion,
+        membreteAcompananteNombre = membrete?.acompananteNombre,
+        membreteAcompananteTelefono = membrete?.acompananteTelefono,
         sourceDocumentId = sourceDocumentId,
         clinicId = clinicId,
         clinicName = clinicName,
@@ -101,25 +106,21 @@ object DocumentStorage {
         doctorNombre = doctorNombre,
     )
 
-    private fun ClinicalDocumentDto.toMembrete(): PatientMembrete? {
-        val hasData = listOf(
-            membreteNombre,
-            membreteEdad,
-            membreteCedula,
-            membreteSexo,
-            membreteFechaNacimiento,
-            membreteFecha,
-        ).any { !it.isNullOrBlank() }
-        if (!hasData) return null
-        return PatientMembrete(
-            nombre = membreteNombre.orEmpty(),
-            edad = membreteEdad.orEmpty(),
-            cedula = membreteCedula.orEmpty().ifBlank { patientCedula },
-            sexo = membreteSexo.orEmpty(),
-            fechaNacimiento = membreteFechaNacimiento.orEmpty(),
-            fecha = membreteFecha.orEmpty(),
+    private fun ClinicalDocumentDto.toMembrete(): PatientMembrete? =
+        PatientMembrete.fromStorageFields(
+            patientCedula = patientCedula,
+            nombre = membreteNombre,
+            edad = membreteEdad,
+            cedula = membreteCedula,
+            sexo = membreteSexo,
+            fechaNacimiento = membreteFechaNacimiento,
+            fecha = membreteFecha,
+            telefono = membreteTelefono,
+            direccion = membreteDireccion,
+            ocupacion = membreteOcupacion,
+            acompananteNombre = membreteAcompananteNombre,
+            acompananteTelefono = membreteAcompananteTelefono,
         )
-    }
 
     private fun DocumentHeader.toDto() = DocumentHeaderDto(
         id = id,

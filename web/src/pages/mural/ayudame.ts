@@ -159,7 +159,7 @@ function registroRapidoForm(): string {
         </label>
         <label>Teléfono<input name="telefono" type="tel" required placeholder="0412…" /></label>
         <label class="grid-full">Correo<input name="correo" type="email" required /></label>
-        <label class="grid-full">PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+        <label class="grid-full">PIN (contraseña, 6 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" required /></label>
       </div>
       <p class="muted">Sus datos se guardan en la base de datos al registrarse.</p>
       <div class="compose-actions">
@@ -174,7 +174,7 @@ function ingresoCedulaForm(): string {
   return `
     <form class="form" id="form-ingreso-cedula">
       ${cedulaFieldHtml()}
-      <label>PIN (contraseña, 4 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" minlength="4" required /></label>
+      <label>PIN (contraseña, 6 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" required /></label>
       <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN (contraseña)</a></p>
       <div class="compose-actions">
         <button type="button" class="btn btn-ghost" id="btn-cancelar-ingreso">Cancelar</button>

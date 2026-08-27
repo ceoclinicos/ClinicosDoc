@@ -1,56 +1,72 @@
 import { navigate, registerRoute } from "../../app/router";
 import { getClinicSession } from "../../clinic/session";
-import { listClinicPatientRows } from "../../clinic/store";
-import type { ClinicPatientRow } from "../../clinic/models";
+import { listClinicDocumentFeedPage } from "../../clinic/store";
+import type { ClinicDocumentFeedRow } from "../../clinic/models";
 import { matchesCedula } from "../../services/cedula";
 import { bindNavButtons, emptyState, page } from "../helpers";
+import type { QueryDocumentSnapshot } from "firebase/firestore";
+
+const PAGE_SIZE = 25;
 
 registerRoute({
   path: "/clinica/panel",
-  title: "Pacientes del centro",
+  title: "Inicio",
   clinicOnly: true,
   nav: true,
-  navLabel: "Pacientes",
+  navLabel: "Inicio",
   render: () => {
     const session = getClinicSession();
     const el = page(
       session?.nombre ?? "Centro de salud",
       `
-      <p class="lead">Pacientes con informes creados por médicos vinculados a este centro.</p>
+      <p class="lead">Informes creados con los moldes de este centro. Los más recientes aparecen arriba.</p>
       <label class="field">
-        <span class="field-label">Buscar</span>
-        <input type="search" id="clinic-patient-q" placeholder="Nombre o cédula" autocomplete="off" />
+        <span class="field-label">Buscar en lo cargado</span>
+        <input type="search" id="clinic-doc-q" placeholder="Paciente, cédula, diagnóstico o médico" autocomplete="off" />
       </label>
-      <div id="clinic-patients-status" class="muted">Cargando…</div>
-      <div class="clinic-table-wrap" id="clinic-patients-wrap" hidden>
-        <table class="clinic-table" id="clinic-patients-table">
+      <div id="clinic-docs-status" class="muted">Cargando…</div>
+      <div class="clinic-table-wrap" id="clinic-docs-wrap" hidden>
+        <table class="clinic-table" id="clinic-docs-table">
           <thead>
             <tr>
+              <th>Fecha</th>
               <th>Paciente</th>
               <th>Cédula</th>
-              <th>Informes</th>
-              <th>Último informe</th>
+              <th>Tipo</th>
+              <th>Diagnóstico</th>
+              <th>Médico</th>
               <th></th>
             </tr>
           </thead>
-          <tbody id="clinic-patients-body"></tbody>
+          <tbody id="clinic-docs-body"></tbody>
         </table>
+        <div class="clinic-pager" id="clinic-docs-pager" hidden>
+          <span class="muted" id="clinic-docs-page-label"></span>
+          <button type="button" class="btn btn-secondary" id="clinic-docs-more">Cargar más</button>
+        </div>
       </div>
       `,
     );
 
-    const status = el.querySelector("#clinic-patients-status") as HTMLElement;
-    const wrap = el.querySelector("#clinic-patients-wrap") as HTMLElement;
-    const body = el.querySelector("#clinic-patients-body") as HTMLElement;
-    const search = el.querySelector("#clinic-patient-q") as HTMLInputElement;
-    let allRows: ClinicPatientRow[] = [];
+    const status = el.querySelector("#clinic-docs-status") as HTMLElement;
+    const wrap = el.querySelector("#clinic-docs-wrap") as HTMLElement;
+    const body = el.querySelector("#clinic-docs-body") as HTMLElement;
+    const search = el.querySelector("#clinic-doc-q") as HTMLInputElement;
+    const pager = el.querySelector("#clinic-docs-pager") as HTMLElement;
+    const pageLabel = el.querySelector("#clinic-docs-page-label") as HTMLElement;
+    const btnMore = el.querySelector("#clinic-docs-more") as HTMLButtonElement;
 
-    function renderRows(rows: ClinicPatientRow[]): void {
+    let loadedRows: ClinicDocumentFeedRow[] = [];
+    let cursor: QueryDocumentSnapshot | null = null;
+    let hasMore = false;
+    let loadingMore = false;
+
+    function renderRows(rows: ClinicDocumentFeedRow[]): void {
       wrap.hidden = false;
       if (!rows.length) {
         body.innerHTML = `
           <tr>
-            <td colspan="5" class="muted">Sin coincidencias</td>
+            <td colspan="7" class="muted">Sin coincidencias</td>
           </tr>`;
         return;
       }
@@ -58,10 +74,12 @@ registerRoute({
         .map(
           (r) => `
           <tr class="clinic-table-row" data-cedula="${encodeURIComponent(r.patientCedula)}" tabindex="0" role="link">
+            <td class="clinic-table-date">${escapeHtml(formatDate(r.createdAt))}</td>
             <td><strong>${escapeHtml(r.patientNombre)}</strong></td>
             <td>${escapeHtml(r.patientCedula)}</td>
-            <td>${r.documentCount}</td>
-            <td>${formatDate(r.lastDocumentAt)}</td>
+            <td>${escapeHtml(r.documentTypeLabel)}</td>
+            <td class="clinic-table-dx" title="${escapeAttr(r.diagnostico)}">${escapeHtml(r.diagnostico)}</td>
+            <td>${escapeHtml(r.doctorNombre)}</td>
             <td class="clinic-table-action">Ver →</td>
           </tr>`,
         )
@@ -82,32 +100,55 @@ registerRoute({
       });
     }
 
-    function applyFilter(): void {
+    function updatePager(): void {
       const q = search.value.trim();
-      if (!q) {
-        status.textContent = `${allRows.length} paciente(s)`;
-        renderRows(allRows);
-        return;
-      }
-      const filtered = allRows.filter(
-        (r) =>
-          matchesCedula(r.patientCedula, q) ||
-          r.patientNombre.toLowerCase().includes(q.toLowerCase()),
-      );
-      status.textContent = `${filtered.length} de ${allRows.length}`;
-      renderRows(filtered);
+      pager.hidden = !hasMore && !q;
+      btnMore.hidden = !hasMore || Boolean(q);
+      pageLabel.textContent = q
+        ? `Mostrando coincidencias en ${loadedRows.length} cargado(s)`
+        : `${loadedRows.length} informe(s) cargado(s)${hasMore ? " · hay más" : ""}`;
     }
 
-    search.addEventListener("input", applyFilter);
+    function applyFilter(): void {
+      const q = search.value.trim().toLowerCase();
+      if (!q) {
+        status.textContent = `${loadedRows.length} informe(s)`;
+        renderRows(loadedRows);
+        updatePager();
+        return;
+      }
+      const filtered = loadedRows.filter(
+        (r) =>
+          matchesCedula(r.patientCedula, q) ||
+          r.patientNombre.toLowerCase().includes(q) ||
+          r.diagnostico.toLowerCase().includes(q) ||
+          r.doctorNombre.toLowerCase().includes(q) ||
+          r.documentTypeLabel.toLowerCase().includes(q),
+      );
+      status.textContent = `${filtered.length} de ${loadedRows.length} cargados`;
+      renderRows(filtered);
+      updatePager();
+    }
 
-    void (async () => {
+    async function loadPage(reset: boolean): Promise<void> {
+      if (loadingMore) return;
+      loadingMore = true;
+      btnMore.disabled = true;
       try {
-        allRows = await listClinicPatientRows(session!.clinicId);
-        if (!allRows.length) {
+        const page = await listClinicDocumentFeedPage(session!.clinicId, {
+          pageSize: PAGE_SIZE,
+          cursor: reset ? null : cursor,
+        });
+        if (reset) loadedRows = page.rows;
+        else loadedRows = [...loadedRows, ...page.rows];
+        cursor = page.cursor;
+        hasMore = page.hasMore;
+        if (!loadedRows.length && reset) {
           search.hidden = true;
           wrap.hidden = true;
+          pager.hidden = true;
           status.innerHTML = emptyState(
-            "Aún no hay pacientes. Cuando un médico vinculado cree un informe con el molde de este centro, aparecerá aquí.",
+            "Aún no hay informes. Cuando un médico vinculado cree un documento con el molde de este centro, aparecerá aquí.",
             "Invitar médicos",
             "/clinica/equipo",
           );
@@ -116,9 +157,21 @@ registerRoute({
         }
         applyFilter();
       } catch (err) {
-        status.textContent = err instanceof Error ? err.message : "No se pudieron cargar pacientes";
+        const msg = err instanceof Error ? err.message : "No se pudieron cargar los informes";
+        status.textContent =
+          /index|createdAt/i.test(msg)
+            ? "Falta índice de Firestore para createdAt. Créalo desde el enlace del error en consola, o contacta soporte."
+            : msg;
+      } finally {
+        loadingMore = false;
+        btnMore.disabled = false;
       }
-    })();
+    }
+
+    search.addEventListener("input", applyFilter);
+    btnMore.addEventListener("click", () => void loadPage(false));
+
+    void loadPage(true);
 
     bindNavButtons(el);
     return el;
@@ -138,5 +191,9 @@ function formatDate(iso: string): string {
 }
 
 function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function escapeAttr(s: string): string {
+  return escapeHtml(s).replace(/'/g, "&#39;");
 }

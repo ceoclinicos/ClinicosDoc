@@ -133,10 +133,37 @@ private val RedactarStepSaver = Saver<RedactarStep, String>(
 )
 
 private val PatientMembreteSaver = Saver<PatientMembrete, List<String>>(
-    save = { listOf(it.nombre, it.edad, it.cedula, it.sexo, it.fechaNacimiento, it.fecha) },
+    save = {
+        listOf(
+            it.nombre,
+            it.edad,
+            it.cedula,
+            it.sexo,
+            it.fechaNacimiento,
+            it.fecha,
+            it.telefono,
+            it.direccion,
+            it.ocupacion,
+            it.acompananteNombre,
+            it.acompananteTelefono,
+        )
+    },
     restore = {
-        when (it.size) {
-            6 -> PatientMembrete(
+        when {
+            it.size >= 11 -> PatientMembrete(
+                nombre = it[0],
+                edad = it[1],
+                cedula = it[2],
+                sexo = it[3],
+                fechaNacimiento = it[4],
+                fecha = it[5],
+                telefono = it[6],
+                direccion = it[7],
+                ocupacion = it[8],
+                acompananteNombre = it[9],
+                acompananteTelefono = it[10],
+            )
+            it.size == 6 -> PatientMembrete(
                 nombre = it[0],
                 edad = it[1],
                 cedula = it[2],
@@ -144,14 +171,14 @@ private val PatientMembreteSaver = Saver<PatientMembrete, List<String>>(
                 fechaNacimiento = it[4],
                 fecha = it[5],
             )
-            5 -> PatientMembrete(
+            it.size == 5 -> PatientMembrete(
                 nombre = it[0],
                 edad = it[1],
                 sexo = it[2],
                 fechaNacimiento = it[3],
                 fecha = it[4],
             )
-            4 -> PatientMembrete(
+            it.size == 4 -> PatientMembrete(
                 nombre = it[0],
                 edad = it[1],
                 sexo = it[2],
@@ -235,19 +262,23 @@ fun RedactarFlowScreen(
     var usedMoldePicker by rememberSaveable { mutableStateOf(false) }
     var showAddFarmaco by remember { mutableStateOf(false) }
     var addingFarmaco by remember { mutableStateOf(false) }
-    var showLeaveResultDialog by remember { mutableStateOf(false) }
     var originApplied by rememberSaveable { mutableStateOf(false) }
 
-    fun requestLeave() {
-        if (step == RedactarStep.RESULTADO) {
-            showLeaveResultDialog = true
-        } else {
-            onBack()
+    fun navigateBackInFlow() {
+        speechService.stopListening()
+        listening = false
+        when (step) {
+            RedactarStep.RESULTADO -> step = RedactarStep.DICTADO
+            RedactarStep.DICTADO -> step = RedactarStep.PLANTILLA
+            RedactarStep.PLANTILLA -> step = RedactarStep.PACIENTE
+            RedactarStep.MOLDE -> step = RedactarStep.ORIGEN
+            RedactarStep.ORIGEN -> step = RedactarStep.PACIENTE
+            RedactarStep.PACIENTE -> onBack()
         }
     }
 
     BackHandler {
-        requestLeave()
+        navigateBackInFlow()
     }
 
     val sessionConfig = remember(
@@ -292,6 +323,19 @@ fun RedactarFlowScreen(
     }
 
     fun reloadTemplate() {
+        val cid = clinicId
+        if (!cid.isNullOrBlank()) {
+            val clinicTpls = ClinicCatalogStorage.loadTemplates(context, cid, documentType)
+                .map { it.sanitized() }
+            if (clinicTpls.isNotEmpty()) {
+                availableTemplates = clinicTpls
+                template = clinicTpls.firstOrNull { it.id == selectedTemplateId }
+                    ?: template?.takeIf { t -> clinicTpls.any { it.id == t.id } }?.sanitized()
+                    ?: clinicTpls.first()
+                template?.let { selectedTemplateId = it.id }
+                return
+            }
+        }
         val ensured = TemplateStorage.ensureTemplateForType(context, documentType)
         availableTemplates = TemplateStorage.forType(context, documentType)
         template = availableTemplates.firstOrNull { it.id == selectedTemplateId }
@@ -301,7 +345,7 @@ fun RedactarFlowScreen(
     }
 
     fun applyTemplateConfig(tpl: DocumentTemplate) {
-        val config = tpl.toSessionConfig()
+        val config = tpl.sanitized().toSessionConfig()
         enabledExamIds = PhysicalExamCatalogStorage.orderEnabledIdsByCatalog(
             config.enabledPhysicalExamSystemIds.ifEmpty { PhysicalExamDefaults.defaultEnabledIds },
             PhysicalExamCatalogStorage.loadAll(context),
@@ -413,10 +457,11 @@ fun RedactarFlowScreen(
     }
 
     fun applyClinicTemplateChoice(chosen: DocumentTemplate) {
-        template = chosen
-        selectedTemplateId = chosen.id
-        availableTemplates = clinicMoldChoices.ifEmpty { listOf(chosen) }
-        applyTemplateConfig(chosen)
+        val safe = chosen.sanitized()
+        template = safe
+        selectedTemplateId = safe.id
+        availableTemplates = clinicMoldChoices.map { it.sanitized() }.ifEmpty { listOf(safe) }
+        applyTemplateConfig(safe)
         if (pendingClinicHeaders.isNotEmpty()) {
             availableHeaders = pendingClinicHeaders
             header = pendingClinicHeaders.firstOrNull { it.isDefault } ?: pendingClinicHeaders.first()
@@ -558,9 +603,6 @@ fun RedactarFlowScreen(
         savedDocumentId = id
         currentDraftId?.let { DraftStorage.delete(context, it) }
         currentDraftId = null
-        if (showToast) {
-            showMsg(if (existing != null) "Documento actualizado" else "Documento guardado")
-        }
         return true
     }
 
@@ -663,7 +705,7 @@ fun RedactarFlowScreen(
 
     AppScaffold(
         title = "${documentType.label} · ${template?.name ?: ""}",
-        onBack = { requestLeave() },
+        onBack = { navigateBackInFlow() },
         actions = {
             Box {
                 IconButton(onClick = { showToolsMenu = true }) {
@@ -808,17 +850,6 @@ fun RedactarFlowScreen(
                     }
                 }
                 PremiumPrimaryButton("Agregar paciente", onClick = onAddPatient, icon = Icons.Default.PersonAdd)
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = {
-                        when {
-                            usedMoldePicker && clinicMoldChoices.isNotEmpty() -> step = RedactarStep.MOLDE
-                            else -> onBack()
-                        }
-                    },
-                ) {
-                    Text("Volver")
-                }
             }
 
             RedactarStep.ORIGEN -> Column(
@@ -911,7 +942,7 @@ fun RedactarFlowScreen(
                 }
             }
 
-            RedactarStep.PLANTILLA -> Box(modifier = Modifier.padding(padding)) {
+            RedactarStep.PLANTILLA -> Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 val patient = selectedPatient!!
                 val tpl = template!!
                 TemplateConfigStep(
@@ -1216,11 +1247,7 @@ fun RedactarFlowScreen(
                         }
                     }
                     Text(
-                        if (listening) {
-                            "Escuchando… sigue hablando. Toca stop o Procesar con IA para terminar."
-                        } else {
-                            "Toca para dictar"
-                        },
+                        if (listening) "Escuchando…" else "Toca para dictar",
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -1284,9 +1311,16 @@ fun RedactarFlowScreen(
                         processing = true
                         error = null
                         scope.launch {
-                            speechService.stopListening()
-                            listening = false
+                            runCatching {
+                                speechService.stopListening()
+                                listening = false
+                            }
                             try {
+                                val tpl = template
+                                if (!isOrdenes && !isReceta && tpl == null) {
+                                    error = "Falta la plantilla del documento"
+                                    return@launch
+                                }
                                 generatedContent = when {
                                     isOrdenes -> {
                                         val modo = OrdenesMedicasDefaults.Modo.entries
@@ -1326,7 +1360,7 @@ fun RedactarFlowScreen(
                                     }
                                     else -> DocumentAiService.generateDocument(
                                         context = context,
-                                        template = template!!,
+                                        template = tpl!!,
                                         patient = selectedPatient!!,
                                         doctor = doc,
                                         dictation = dictation.trim(),
@@ -1342,8 +1376,13 @@ fun RedactarFlowScreen(
                                 } else {
                                     saveDraft(showToast = false)
                                 }
-                            } catch (e: Exception) {
-                                error = e.message?.removePrefix("Exception: ")
+                            } catch (e: Throwable) {
+                                val msg = e.message
+                                    ?.removePrefix("Exception: ")
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?: "No se pudo procesar con IA. Intente de nuevo."
+                                error = msg
+                                showMsg(msg)
                             } finally {
                                 processing = false
                             }
@@ -1421,6 +1460,7 @@ fun RedactarFlowScreen(
                     PatientMembreteEditor(
                         membrete = membrete,
                         onMembreteChange = { membrete = it },
+                        documentType = documentType,
                     )
                     Spacer(modifier = Modifier.height(20.dp))
                     EditableDocumentContent(
@@ -1469,31 +1509,6 @@ fun RedactarFlowScreen(
                 )
             }
         }
-    }
-
-    if (showLeaveResultDialog) {
-        AlertDialog(
-            onDismissRequest = { showLeaveResultDialog = false },
-            title = { Text("Salir") },
-            text = {
-                Text("¿Seguro que quieres salir? Aún puedes seguir editando el documento.")
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showLeaveResultDialog = false
-                        onBack()
-                    },
-                ) {
-                    Text("Salir")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLeaveResultDialog = false }) {
-                    Text("Seguir editando")
-                }
-            },
-        )
     }
 
     if (showPreview) {
@@ -1615,7 +1630,7 @@ fun DocumentTypeSheet(
         Spacer(modifier = Modifier.height(8.dp))
         Text("Selecciona el tipo de documento clínico", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(24.dp))
-        DocumentType.entries.forEach { type ->
+        DocumentType.redactarTypes.forEach { type ->
             Card(
                 onClick = { onSelect(type) },
                 modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),

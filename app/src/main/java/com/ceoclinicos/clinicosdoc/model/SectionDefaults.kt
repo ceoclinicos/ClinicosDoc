@@ -13,13 +13,16 @@ object SectionDefaults {
             "\"vómitos de restos alimenticios\" → \"vómito\"; varios → \"dolor abdominal y vómito\". " +
             "PROHIBIDO: frases largas, \"consulta por…\", \"refiere…\", evolución, antecedentes o diagnóstico."
 
-    /** Diagnóstico clínico real según el dictado (no genérico). */
+    /** Diagnóstico clínico con nomenclatura estándar (CIE-10), sin códigos. */
     const val DIAGNOSTICO_STYLE =
-        "- Diagnóstico / Impresión diagnóstica: fórmulas clínicas reales según síntomas, signos y " +
-            "datos del dictado (ej. \"gastritis aguda\", \"cólico abdominal\", \"GEA\", \"faringoamigdalitis aguda\"). " +
-            "Lista numerada 1. 2. 3. si hay varios. " +
-            "PROHIBIDO dejar solo \"Evaluación clínica\" o frases vacías si el dictado permite un diagnóstico " +
-            "sindromático o nosológico razonable. No inventes hallazgos no referidos."
+        "- Diagnóstico / Impresión diagnóstica: usa nomenclatura clínica estándar al estilo CIE-10 " +
+            "(términos nosológicos o sindromáticos reconocidos). " +
+            "Redacta el diagnóstico según síntomas, signos y evolución del dictado " +
+            "(ej. \"Gastritis aguda\", \"Gastroenteritis aguda infecciosa\", \"Faringoamigdalitis aguda\"). " +
+            "Lista numerada 1. 2. 3. si hay varios; el principal primero. " +
+            "NO incluyas códigos CIE-10 ni abreviaturas entre paréntesis; solo el nombre del diagnóstico. " +
+            "PROHIBIDO dejar solo \"Evaluación clínica\" o frases vacías si el dictado permite un diagnóstico razonable. " +
+            "No inventes hallazgos no referidos en el informe."
 
     const val DIAS_REPOSO_DEFAULT =
         "Nota: En vista de la sintomatología del paciente se indican cumplir 3 días de reposo médico completo."

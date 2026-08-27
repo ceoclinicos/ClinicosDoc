@@ -1,5 +1,6 @@
 import { ApiCallError } from "../ui/error-dialog";
 import { signInWithFirebaseToken } from "./firebase-auth";
+import { getDeviceId } from "./device-id";
 
 const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(/\/$/, "");
 
@@ -22,6 +23,8 @@ export type AuthLoginResult = {
   rif?: string;
   inviteCode?: string;
   esMedicoGeneral?: boolean;
+  /** true si entró con PIN de 4 dígitos (legado). */
+  needsPinUpgrade?: boolean;
 };
 
 type ApiPayload = AuthLoginResult & {
@@ -47,6 +50,7 @@ export async function authLogin(input: {
         tipo: input.tipo,
         cedula: input.cedula,
         pin: input.pin,
+        deviceId: getDeviceId(),
       }),
     });
   } catch (err) {

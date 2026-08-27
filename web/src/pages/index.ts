@@ -3,6 +3,7 @@ import "./mural";
 import "./registro";
 import "./clinica";
 import "./patients";
+import "./patient-historial";
 import "./documents";
 import "./drafts";
 import "./redactar";

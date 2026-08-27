@@ -18,13 +18,20 @@ enum class DocumentType(val label: String) {
         }
 
     companion object {
-        /** Plantillas en «Informes y historias». */
+        /** Plantillas en «Informes y historias» (sin informe de reposo). */
         val informesYHistorias: List<DocumentType> =
-            listOf(HISTORIA_CLINICA, INFORME, REPOSO)
+            listOf(HISTORIA_CLINICA, INFORME)
 
         /** Plantillas en «Recetas» (órdenes + recipe). */
         val recetasYOrdenes: List<DocumentType> =
             listOf(ORDENES_MEDICAS, RECETA)
+
+        /** Tipos con molde predeterminado (sin informe de reposo). */
+        val defaultSeedTypes: List<DocumentType> =
+            listOf(HISTORIA_CLINICA, INFORME, ORDENES_MEDICAS, RECETA)
+
+        /** Tipos seleccionables al redactar. */
+        val redactarTypes: List<DocumentType> = defaultSeedTypes
 
         fun fromName(name: String): DocumentType =
             entries.firstOrNull { it.name.equals(name, ignoreCase = true) || legacyName(it) == name }

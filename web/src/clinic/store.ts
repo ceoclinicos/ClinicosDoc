@@ -5,12 +5,20 @@ import {
   getDocs,
   setDoc,
   deleteDoc,
+  updateDoc,
+  increment,
+  query,
+  orderBy,
+  limit,
+  startAfter,
   type DocumentData,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { getDb } from "../registro/firebase";
 import { authLogin } from "../services/auth-login";
 import { normalizeCedula } from "../services/cedula";
-import { FirestorePaths, type ClinicalDocument, type DocumentHeader, type DocumentTemplate } from "../shared/models";
+import { FirestorePaths, DocumentTypeLabels, type ClinicalDocument, type DocumentHeader, type DocumentTemplate } from "../shared/models";
+import { parseDocumentSections } from "../services/document-parser";
 import {
   clinicTemplateTypes,
   makeDefaultClinicHeader,
@@ -18,6 +26,7 @@ import {
 } from "./default-catalog";
 import type {
   ClinicDoctorInvitation,
+  ClinicDocumentFeedRow,
   ClinicMember,
   ClinicMemberRole,
   ClinicPatientRow,
@@ -25,8 +34,12 @@ import type {
   ClinicSession,
 } from "./models";
 
-function assertPin4(pin: string): void {
-  if (!/^\d{4}$/.test(pin)) throw new Error("El PIN debe tener exactamente 4 dígitos");
+function assertPin6(pin: string): void {
+  if (!/^\d{6}$/.test(pin)) throw new Error("El PIN debe tener exactamente 6 dígitos");
+}
+
+function assertPinLogin(pin: string): void {
+  if (!/^\d{4}$|^\d{6}$/.test(pin)) throw new Error("El PIN debe tener 4 o 6 dígitos");
 }
 
 function normalizeRif(rif: string): string {
@@ -48,6 +61,35 @@ function membersCol(clinicId: string) {
 
 function templatesCol(clinicId: string) {
   return collection(getDb(), FirestorePaths.CLINICS, clinicId, FirestorePaths.SUB_TEMPLATES);
+}
+
+function clinicDoc(clinicId: string) {
+  return doc(getDb(), FirestorePaths.CLINICS, clinicId);
+}
+
+/** Sube templatesVersion para que los médicos sepan que hay moldes nuevos. */
+async function bumpTemplatesVersion(clinicId: string): Promise<void> {
+  await updateDoc(clinicDoc(clinicId), {
+    templatesVersion: increment(1),
+    templatesUpdatedAt: new Date().toISOString(),
+  }).catch(async () => {
+    await setDoc(
+      clinicDoc(clinicId),
+      {
+        templatesVersion: 1,
+        templatesUpdatedAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+  });
+}
+
+export async function getClinicTemplatesVersion(clinicId: string): Promise<number> {
+  const snap = await getDoc(clinicDoc(clinicId));
+  if (!snap.exists()) return 0;
+  const v = snap.data()?.templatesVersion;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
 function headersCol(clinicId: string) {
@@ -133,7 +175,7 @@ export async function registerClinic(input: {
   direccion?: string;
   pin: string;
 }): Promise<ClinicSession> {
-  assertPin4(input.pin);
+  assertPin6(input.pin);
   const accountName = input.accountName.trim().replace(/\s+/g, "");
   const rif = normalizeRif(input.rif);
   if (rif.length < 5) throw new Error("Indique un RIF o código de centro válido");
@@ -177,13 +219,20 @@ export async function ensureClinicDefaultCatalog(
   const existingTypes = new Set(
     tplSnap.docs.map((d) => String(d.data().documentType || "")).filter(Boolean),
   );
+  const reposoDocs = tplSnap.docs.filter((d) => String(d.data().documentType || "") === "reposo");
+  if (reposoDocs.length) {
+    await Promise.all(reposoDocs.map((d) => deleteDoc(d.ref)));
+  }
   const needed = clinicTemplateTypes().filter((t) => !existingTypes.has(t));
   if (needed.length) {
     const defaults = makeDefaultClinicTemplates().filter((t) => needed.includes(t.documentType));
-    await Promise.all(defaults.map((t) => upsertClinicTemplate(clinicId, t)));
+    await Promise.all(defaults.map((t) => upsertClinicTemplate(clinicId, t, { bumpVersion: false })));
   }
   if (hdrSnap.empty) {
-    await upsertClinicHeader(clinicId, makeDefaultClinicHeader(name));
+    await upsertClinicHeader(clinicId, makeDefaultClinicHeader(name), { bumpVersion: false });
+  }
+  if (needed.length || hdrSnap.empty || reposoDocs.length) {
+    await bumpTemplatesVersion(clinicId);
   }
   return {
     templates: await listClinicTemplatesRaw(clinicId),
@@ -234,7 +283,7 @@ async function listClinicHeadersRaw(clinicId: string): Promise<DocumentHeader[]>
 }
 
 export async function loginClinic(accountName: string, pin: string): Promise<ClinicSession> {
-  assertPin4(pin);
+  assertPinLogin(pin);
   const loginName = accountName.trim().replace(/\s+/g, "");
   if (loginName.length < 4) throw new Error("Nombre de la cuenta inválido");
   const auth = await authLogin({ tipo: "clinica", cedula: loginName, pin });
@@ -500,6 +549,48 @@ export async function listPendingInvitationsForDoctor(
   return out.sort((a, b) => b.invitedAt.localeCompare(a.invitedAt));
 }
 
+export async function leaveClinicAsDoctor(input: {
+  clinicId: string;
+  doctorCedula: string;
+}): Promise<void> {
+  const { getIdToken } = await import("../services/firebase-auth");
+  const token = await getIdToken(true);
+  if (!token) {
+    throw new Error("Sesión vencida. Vuelva a iniciar sesión.");
+  }
+  const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(
+    /\/$/,
+    "",
+  );
+  const res = await fetch(`${API_BASE}/api/clinic-leave`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      clinicId: input.clinicId,
+      doctorCedula: input.doctorCedula,
+    }),
+  });
+  const raw = await res.text();
+  let data: { error?: string; ok?: boolean } = {};
+  try {
+    data = raw ? (JSON.parse(raw) as typeof data) : {};
+  } catch {
+    data = {};
+  }
+  if (!res.ok && res.status !== 404) {
+    // Igual que la app: si falla por clínica inexistente / red, igual limpiamos caché local abajo
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(data.error || "Sesión inválida");
+    }
+    console.warn("[leaveClinic]", data.error || raw);
+  }
+  const { setCachedMemberships, getCachedMemberships } = await import("./membership-cache");
+  setCachedMemberships(getCachedMemberships().filter((m) => m.clinicId !== input.clinicId));
+}
+
 export async function acceptDoctorInvitation(input: {
   clinicId: string;
   doctorCedula: string;
@@ -709,16 +800,21 @@ export async function listClinicTemplates(clinicId: string): Promise<DocumentTem
 export async function upsertClinicTemplate(
   clinicId: string,
   template: DocumentTemplate,
+  opts?: { bumpVersion?: boolean },
 ): Promise<DocumentTemplate> {
   await setDoc(doc(templatesCol(clinicId), template.id), {
     ...template,
     updatedAt: new Date().toISOString(),
   } as DocumentData);
+  if (opts?.bumpVersion !== false) {
+    await bumpTemplatesVersion(clinicId);
+  }
   return template;
 }
 
 export async function deleteClinicTemplate(clinicId: string, templateId: string): Promise<void> {
   await deleteDoc(doc(templatesCol(clinicId), templateId));
+  await bumpTemplatesVersion(clinicId);
 }
 
 export async function listClinicHeaders(clinicId: string): Promise<DocumentHeader[]> {
@@ -751,7 +847,11 @@ export async function listClinicHeaders(clinicId: string): Promise<DocumentHeade
   return listClinicHeadersRaw(clinicId);
 }
 
-export async function upsertClinicHeader(clinicId: string, header: DocumentHeader): Promise<DocumentHeader> {
+export async function upsertClinicHeader(
+  clinicId: string,
+  header: DocumentHeader,
+  opts?: { bumpVersion?: boolean },
+): Promise<DocumentHeader> {
   if (header.isDefault) {
     const all = await listClinicHeadersRaw(clinicId);
     await Promise.all(
@@ -768,11 +868,15 @@ export async function upsertClinicHeader(clinicId: string, header: DocumentHeade
     ...header,
     updatedAt: new Date().toISOString(),
   } as DocumentData);
+  if (opts?.bumpVersion !== false) {
+    await bumpTemplatesVersion(clinicId);
+  }
   return header;
 }
 
 export async function deleteClinicHeader(clinicId: string, headerId: string): Promise<void> {
   await deleteDoc(doc(headersCol(clinicId), headerId));
+  await bumpTemplatesVersion(clinicId);
 }
 
 export async function pushClinicDocument(
@@ -827,6 +931,70 @@ export async function listClinicPatientRows(clinicId: string): Promise<ClinicPat
     }
   }
   return [...map.values()].sort((a, b) => b.lastDocumentAt.localeCompare(a.lastDocumentAt));
+}
+
+function extractDiagnosticoPreview(content: string): string {
+  const sections = parseDocumentSections(content || "");
+  const dx = sections.find((s) =>
+    /diagn[oó]stico|impresi[oó]n\s+diagn/i.test(String(s.title || "")),
+  );
+  const raw = (dx?.body || "").replace(/\s+/g, " ").trim();
+  if (!raw) return "—";
+  return raw.length > 140 ? `${raw.slice(0, 140)}…` : raw;
+}
+
+/** Informes del centro (moldes clínicos), más recientes primero. Página desde Firestore. */
+export async function listClinicDocumentFeedPage(
+  clinicId: string,
+  opts?: {
+    pageSize?: number;
+    cursor?: QueryDocumentSnapshot | null;
+  },
+): Promise<{
+  rows: ClinicDocumentFeedRow[];
+  cursor: QueryDocumentSnapshot | null;
+  hasMore: boolean;
+}> {
+  const pageSize = Math.min(Math.max(opts?.pageSize ?? 25, 10), 100);
+  const col = documentsCol(clinicId);
+  const q = opts?.cursor
+    ? query(col, orderBy("createdAt", "desc"), startAfter(opts.cursor), limit(pageSize + 1))
+    : query(col, orderBy("createdAt", "desc"), limit(pageSize + 1));
+  const snap = await getDocs(q);
+  const hasMore = snap.docs.length > pageSize;
+  const pageDocs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
+  const rows: ClinicDocumentFeedRow[] = [];
+  for (const d of pageDocs) {
+    const data = d.data();
+    const cedula = normalizeCedula(String(data.patientCedula ?? ""));
+    if (!cedula) continue;
+    const type = String(data.type || "informe");
+    const label =
+      (DocumentTypeLabels as Record<string, string>)[type] || type || "Documento";
+    rows.push({
+      documentId: String(data.id ?? d.id),
+      patientCedula: cedula,
+      patientNombre: String(data.patientNombre ?? "Paciente"),
+      documentType: type,
+      documentTypeLabel: label,
+      diagnostico: extractDiagnosticoPreview(String(data.content ?? "")),
+      doctorNombre: String(data.doctorNombre ?? "—"),
+      createdAt: String(data.createdAt ?? ""),
+      templateName: data.templateName ? String(data.templateName) : undefined,
+    });
+  }
+  const lastSnap = pageDocs.length ? pageDocs[pageDocs.length - 1] : null;
+  return {
+    rows,
+    cursor: lastSnap,
+    hasMore,
+  };
+}
+
+/** Primera página amplia (compat). Preferir listClinicDocumentFeedPage. */
+export async function listClinicDocumentFeed(clinicId: string): Promise<ClinicDocumentFeedRow[]> {
+  const first = await listClinicDocumentFeedPage(clinicId, { pageSize: 100 });
+  return first.rows;
 }
 
 export async function listClinicDocumentsForPatient(

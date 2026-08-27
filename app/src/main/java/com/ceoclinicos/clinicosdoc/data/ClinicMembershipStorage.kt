@@ -79,6 +79,13 @@ object ClinicMembershipStorage {
         return gson.fromJson(raw, type) ?: emptyList()
     }
 
+    fun enqueueNotice(context: Context, message: String) {
+        val msg = message.trim()
+        if (msg.isEmpty()) return
+        val pending = loadPendingNotices(context) + msg
+        prefs(context).edit().putString(KEY_PENDING_NOTICES, gson.toJson(pending)).apply()
+    }
+
     fun dismissCurrentNotice(context: Context) {
         val rest = loadPendingNotices(context).drop(1)
         prefs(context).edit().putString(KEY_PENDING_NOTICES, gson.toJson(rest)).apply()

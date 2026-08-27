@@ -21,7 +21,7 @@ registerRoute({
     const el = page(
       "Historial del paciente",
       `
-      <p class="muted"><a href="#/clinica/panel">← Pacientes</a></p>
+      <p class="muted"><a href="#/clinica/panel">← Inicio</a></p>
       <p class="lead">C.I. ${escapeHtml(cedula)} · solo informes de <strong>${escapeHtml(session?.nombre ?? "este centro")}</strong></p>
       <div id="status" class="muted">Cargando…</div>
       <div class="clinic-table-wrap" id="docs-wrap" hidden>

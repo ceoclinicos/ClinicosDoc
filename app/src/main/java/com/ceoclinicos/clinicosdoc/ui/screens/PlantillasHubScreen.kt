@@ -48,7 +48,7 @@ fun PlantillasHubScreen(
             SettingsTile(
                 icon = Icons.Outlined.Description,
                 title = "Informes y historias",
-                subtitle = "Historia, informe y reposo",
+                subtitle = "Historia e informe",
                 onClick = onOpenDocumentTemplates,
             )
             Spacer(modifier = Modifier.height(12.dp))

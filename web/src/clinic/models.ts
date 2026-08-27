@@ -55,5 +55,18 @@ export interface ClinicPatientRow {
   documentCount: number;
 }
 
+/** Fila del inicio: un informe creado con molde del centro. */
+export interface ClinicDocumentFeedRow {
+  documentId: string;
+  patientCedula: string;
+  patientNombre: string;
+  documentType: string;
+  documentTypeLabel: string;
+  diagnostico: string;
+  doctorNombre: string;
+  createdAt: string;
+  templateName?: string;
+}
+
 export type ClinicTemplate = DocumentTemplate;
 export type ClinicHeader = DocumentHeader;

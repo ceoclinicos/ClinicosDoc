@@ -1,10 +1,17 @@
 import { registerRoute, navigate } from "../app/router";
 import { getProfessionalSession, logoutAllSessions } from "../registro/session";
 import { loadDoctorProfile, saveDoctorProfile } from "../services/doctor-local";
-import { resetRedactarTutorial } from "../services/onboarding";
+import { resetRedactarTutorial, isTutorialButtonEnabled } from "../services/onboarding";
 import { openRedactarTutorial } from "../ui/redactar-tutorial";
-import { joinClinicByInvite, listMembershipsForDoctor, listPendingInvitationsForDoctor, acceptDoctorInvitation, rejectDoctorInvitation } from "../clinic/store";
+import { joinClinicByInvite, listMembershipsForDoctor, listPendingInvitationsForDoctor, acceptDoctorInvitation, rejectDoctorInvitation, leaveClinicAsDoctor } from "../clinic/store";
+import { setCachedMemberships } from "../clinic/membership-cache";
+import { subscribeSyncStatus, flushPendingCloudSync } from "../services/sync-feedback";
 import { bindNavButtons, page } from "./helpers";
+import {
+  activateSubscription,
+  fetchSubscriptionStatus,
+  formatEntitlementBanner,
+} from "../services/subscription";
 
 registerRoute({
   path: "/configuracion",
@@ -17,10 +24,17 @@ registerRoute({
       "Configuración",
       `
       <div class="stack">
+        <div id="sync-pending-banner" class="sync-pending-banner" hidden></div>
         <div class="card-panel">
           <p class="muted">Sesión</p>
           <p><strong>${session?.nombre ?? doctor?.nombre ?? "—"}</strong></p>
           <p class="muted">${session?.especialidad || doctor?.especialidad || "Médico"} · MPPS ${session?.mpps || doctor?.mpps || "—"}</p>
+        </div>
+
+        <h2 class="home-section-title">Plan y prueba IA</h2>
+        <div class="card-panel" id="plan-panel">
+          <p class="muted" id="plan-status">Cargando plan…</p>
+          <button type="button" class="btn btn-primary" id="btn-subscribe" hidden>Suscribirse (30 días)</button>
         </div>
 
         <h2 class="home-section-title">Centros de salud</h2>
@@ -40,7 +54,7 @@ registerRoute({
         </div>
 
         <h2 class="home-section-title">Ayuda</h2>
-        <button type="button" class="tile tile-full" id="btn-tutorial">Tutorial de redacción</button>
+        <button type="button" class="tile tile-full" id="btn-tutorial" hidden>Tutorial de redacción</button>
 
         <h2 class="home-section-title">Plantillas y documentos</h2>
         <button type="button" class="tile tile-full" data-nav="/plantillas">Todas las plantillas</button>
@@ -153,11 +167,38 @@ registerRoute({
           .map(
             (m) => `
           <li class="list-item">
-            <strong>${escapeHtml(m.clinicName)}</strong>
-            <span class="muted">${m.role}</span>
+            <div>
+              <strong>${escapeHtml(m.clinicName)}</strong>
+              <span class="muted">${escapeHtml(m.role)}</span>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" data-leave="${escapeHtml(m.clinicId)}" data-leave-name="${escapeHtml(m.clinicName)}">Desvincular</button>
           </li>`,
           )
           .join("");
+        memList.querySelectorAll("[data-leave]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const clinicId = btn.getAttribute("data-leave") || "";
+            const clinicName = btn.getAttribute("data-leave-name") || "este centro";
+            if (!clinicId || !cedula) return;
+            if (!confirm(`¿Desvincularse de «${clinicName}»?`)) return;
+            (btn as HTMLButtonElement).disabled = true;
+            try {
+              await leaveClinicAsDoctor({ clinicId, doctorCedula: cedula });
+              setCachedMemberships(
+                list.filter((m) => m.clinicId !== clinicId).map((m) => ({
+                  clinicId: m.clinicId,
+                  clinicName: m.clinicName,
+                  role: m.role,
+                })),
+              );
+              alert(`Desvinculado de ${clinicName}`);
+              await refreshMemberships();
+            } catch (err) {
+              alert(err instanceof Error ? err.message : "No se pudo desvincular");
+              (btn as HTMLButtonElement).disabled = false;
+            }
+          });
+        });
       } catch (err) {
         memStatus.textContent = err instanceof Error ? err.message : "No se pudieron cargar centros";
       }
@@ -191,10 +232,20 @@ registerRoute({
       }
     });
 
+    const tutorialSettingsBtn = el.querySelector("#btn-tutorial") as HTMLButtonElement | null;
+    if (tutorialSettingsBtn) {
+      tutorialSettingsBtn.hidden = !isTutorialButtonEnabled();
+      window.addEventListener("tutorialbtnchange", ((e: CustomEvent<{ enabled: boolean }>) => {
+        tutorialSettingsBtn.hidden = !e.detail.enabled;
+      }) as EventListener);
+    }
+
     el.querySelector("#btn-tutorial")?.addEventListener("click", () => {
       resetRedactarTutorial();
       openRedactarTutorial();
     });
+
+    void flushPendingCloudSync({ quiet: true });
 
     el.querySelector("#doctor-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -212,6 +263,60 @@ registerRoute({
       logoutAllSessions();
       navigate("/");
     });
+
+    const syncBanner = el.querySelector("#sync-pending-banner") as HTMLElement;
+    syncBanner.style.cursor = "pointer";
+    syncBanner.title = "Toca para reintentar ahora";
+    syncBanner.addEventListener("click", () => {
+      void flushPendingCloudSync({ force: true });
+    });
+    subscribeSyncStatus((pending) => {
+      if (!pending.length) {
+        syncBanner.hidden = true;
+        syncBanner.textContent = "";
+        return;
+      }
+      syncBanner.hidden = false;
+      const labels = pending.slice(0, 3).map((p) => p.label).join(", ");
+      const extra = pending.length > 3 ? ` y ${pending.length - 3} más` : "";
+      syncBanner.textContent = `${pending.length} pendiente(s): ${labels}${extra}. Toca para reintentar.`;
+    });
+
+    void (async () => {
+      const statusEl = el.querySelector("#plan-status") as HTMLElement;
+      const btnSub = el.querySelector("#btn-subscribe") as HTMLButtonElement;
+      try {
+        const status = await fetchSubscriptionStatus();
+        statusEl.textContent = formatEntitlementBanner(status);
+        const needsPay =
+          !status.canUseAi ||
+          status.plan === "expired" ||
+          status.plan === "blocked_trial";
+        btnSub.hidden = !needsPay && status.plan !== "trial";
+        if (status.plan === "trial") {
+          btnSub.hidden = false;
+          btnSub.textContent = "Suscribirse ahora";
+        }
+        if (status.plan === "subscribed" || status.plan === "courtesy") {
+          btnSub.hidden = true;
+        }
+      } catch (err) {
+        statusEl.textContent =
+          err instanceof Error ? err.message : "No se pudo cargar el plan";
+      }
+      btnSub.addEventListener("click", async () => {
+        btnSub.disabled = true;
+        try {
+          const status = await activateSubscription();
+          statusEl.textContent = formatEntitlementBanner(status);
+          btnSub.hidden = true;
+          alert("Suscripción activada por 30 días.");
+        } catch (err) {
+          alert(err instanceof Error ? err.message : "No se pudo suscribir");
+          btnSub.disabled = false;
+        }
+      });
+    })();
 
     void refreshInvites();
     void refreshMemberships();

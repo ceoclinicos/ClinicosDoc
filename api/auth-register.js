@@ -1,6 +1,6 @@
 const { getAdmin } = require("./_lib/firebase");
 const {
-  assertPin4,
+  assertPin6,
   cedulaLookupKeys,
   hashPin,
   hashPassword,
@@ -10,6 +10,11 @@ const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
 const { mintAuthToken } = require("./_lib/mint-token");
+const { makeDoctorUserId } = require("./_lib/doctor-user-id");
+const {
+  initEntitlementOnRegister,
+  normalizeDeviceId,
+} = require("./_lib/entitlements");
 
 function normalizeRif(rif) {
   const raw = String(rif || "")
@@ -63,7 +68,7 @@ async function findAppMedico(db, inputCedula) {
 }
 
 async function registerPaciente(db, admin, body) {
-  assertPin4(String(body.pin || ""));
+  assertPin6(String(body.pin || ""));
   const cedula = normalizeCedula(body.cedula);
   if (cedula.length < 7) throw Object.assign(new Error("Cédula inválida"), { status: 400 });
   const nombre = String(body.nombre || "").trim();
@@ -105,7 +110,7 @@ async function registerPaciente(db, admin, body) {
 }
 
 async function registerMedico(db, admin, body) {
-  assertPin4(String(body.pin || ""));
+  assertPin6(String(body.pin || ""));
   const cedula = normalizeCedula(body.cedula);
   if (cedula.length < 7) throw Object.assign(new Error("Cédula inválida"), { status: 400 });
   const nombre = String(body.nombre || "").trim();
@@ -153,7 +158,15 @@ async function registerMedico(db, admin, body) {
   };
   await db.collection("profesionales").doc(cedula).set(prof);
 
-  const cloudRef = db.collection("clinicosdoc_user").doc();
+  const doctorUid = makeDoctorUserId(cedula, nombre);
+  const existingUid = await db.collection("clinicosdoc_user").doc(doctorUid).get();
+  if (existingUid.exists) {
+    throw Object.assign(new Error("Esta cédula ya tiene cuenta en la app. Use Ingresar."), {
+      status: 409,
+    });
+  }
+
+  const cloudRef = db.collection("clinicosdoc_user").doc(doctorUid);
   await cloudRef.set({
     nombre,
     cedula,
@@ -171,13 +184,18 @@ async function registerMedico(db, admin, body) {
     updatedAt: now,
   });
 
-  const token = await mintAuthToken(admin, cloudRef.id, {
+  const entitlement = await initEntitlementOnRegister(db, cloudRef, {
+    deviceId: normalizeDeviceId(body.deviceId || body.deviceFingerprint),
+    userId: doctorUid,
+  });
+
+  const token = await mintAuthToken(admin, doctorUid, {
     role: "medico",
     cedula,
   });
   return {
     token,
-    uid: cloudRef.id,
+    uid: doctorUid,
     role: "medico",
     cedula,
     nombre,
@@ -188,11 +206,15 @@ async function registerMedico(db, admin, body) {
     nacionalidad,
     cloudUserId: cloudRef.id,
     esMedicoGeneral,
+    entitlement: {
+      plan: entitlement.plan,
+      trialGranted: entitlement.trialGranted,
+    },
   };
 }
 
 async function registerClinica(db, admin, body) {
-  assertPin4(String(body.pin || ""));
+  assertPin6(String(body.pin || ""));
   const rif = normalizeRif(body.rif || body.cedula);
   if (rif.length < 5) {
     throw Object.assign(new Error("Indique un RIF o código de centro válido"), { status: 400 });
@@ -248,7 +270,11 @@ async function registerClinica(db, admin, body) {
     createdAt: now,
     updatedAt: now,
   };
-  await db.collection("clinicosdoc_clinics").doc(id).set(data);
+  await db.collection("clinicosdoc_clinics").doc(id).set({
+    ...data,
+    templatesVersion: 1,
+    templatesUpdatedAt: now,
+  });
   await db.collection("clinicosdoc_clinic_invites").doc(inviteCode).set({
     clinicId: id,
     nombre,

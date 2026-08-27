@@ -1,5 +1,5 @@
 const { getAdmin } = require("./_lib/firebase");
-const { hashPin, assertPin4, hashPassword } = require("./_lib/pin");
+const { hashPin, assertPin6, hashPassword } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
@@ -40,7 +40,7 @@ module.exports = async function handler(req, res) {
 
     if (secretKind === "password" || collection === "clinicosdoc_user") {
       try {
-        assertPin4(password);
+        assertPin6(password);
       } catch (e) {
         return res.status(400).json({ error: e.message });
       }
@@ -57,7 +57,7 @@ module.exports = async function handler(req, res) {
     }
 
     try {
-      assertPin4(pin);
+      assertPin6(pin);
     } catch (e) {
       return res.status(400).json({ error: e.message });
     }

@@ -12,6 +12,7 @@ object ClinicCatalogStorage {
     private const val PREFS = "clinicos_doc_prefs"
     private const val KEY_TEMPLATES = "clinic_templates_cache_json"
     private const val KEY_HEADERS = "clinic_headers_cache_json"
+    private const val KEY_VERSIONS = "clinic_templates_version_json"
     private val gson = Gson()
 
     private fun prefs(context: Context) =
@@ -30,23 +31,43 @@ object ClinicCatalogStorage {
     }
 
     fun loadTemplates(context: Context, clinicId: String, documentType: DocumentType? = null): List<DocumentTemplate> {
-        val list = loadAllTemplates(context)[clinicId].orEmpty()
+        val list = loadAllTemplates(context)[clinicId].orEmpty().map { it.sanitized() }
         return if (documentType == null) list else list.filter { it.documentType == documentType }
     }
 
     fun loadHeaders(context: Context, clinicId: String): List<DocumentHeader> =
         loadAllHeaders(context)[clinicId].orEmpty()
 
+    fun getTemplatesVersion(context: Context, clinicId: String): Long =
+        loadAllVersions(context)[clinicId] ?: 0L
+
+    fun setTemplatesVersion(context: Context, clinicId: String, version: Long) {
+        val all = loadAllVersions(context).toMutableMap()
+        all[clinicId] = version.coerceAtLeast(0L)
+        prefs(context).edit().putString(KEY_VERSIONS, gson.toJson(all)).apply()
+    }
+
     fun clear(context: Context) {
-        prefs(context).edit().remove(KEY_TEMPLATES).remove(KEY_HEADERS).apply()
+        prefs(context).edit()
+            .remove(KEY_TEMPLATES)
+            .remove(KEY_HEADERS)
+            .remove(KEY_VERSIONS)
+            .apply()
+    }
+
+    /** Quita plantillas, encabezados y versión local de una clínica. */
+    fun removeClinic(context: Context, clinicId: String) {
+        retainClinics(context, loadAllTemplates(context).keys.filter { it != clinicId }.toSet())
     }
 
     fun retainClinics(context: Context, clinicIds: Set<String>) {
         val t = loadAllTemplates(context).filterKeys { it in clinicIds }
         val h = loadAllHeaders(context).filterKeys { it in clinicIds }
+        val v = loadAllVersions(context).filterKeys { it in clinicIds }
         prefs(context).edit()
             .putString(KEY_TEMPLATES, gson.toJson(t))
             .putString(KEY_HEADERS, gson.toJson(h))
+            .putString(KEY_VERSIONS, gson.toJson(v))
             .apply()
     }
 
@@ -60,5 +81,12 @@ object ClinicCatalogStorage {
         val raw = prefs(context).getString(KEY_HEADERS, null) ?: return emptyMap()
         val type = object : TypeToken<Map<String, List<DocumentHeader>>>() {}.type
         return gson.fromJson(raw, type) ?: emptyMap()
+    }
+
+    private fun loadAllVersions(context: Context): Map<String, Long> {
+        val raw = prefs(context).getString(KEY_VERSIONS, null) ?: return emptyMap()
+        val type = object : TypeToken<Map<String, Number>>() {}.type
+        val map: Map<String, Number> = gson.fromJson(raw, type) ?: return emptyMap()
+        return map.mapValues { it.value.toLong() }
     }
 }

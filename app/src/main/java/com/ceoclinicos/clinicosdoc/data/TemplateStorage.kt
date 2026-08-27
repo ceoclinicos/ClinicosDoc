@@ -27,7 +27,7 @@ object TemplateStorage {
     suspend fun ensureDefaults(context: Context) {
         val p = prefs(context)
         if (!p.getBoolean(INITIALIZED_KEY, false)) {
-            val defaults = DocumentType.entries.map { type ->
+            val defaults = DocumentType.defaultSeedTypes.map { type ->
                 defaultTemplateFor(type)
             }
             saveAllLocal(context, defaults)
@@ -44,18 +44,19 @@ object TemplateStorage {
 
     /** Deja una sola plantilla por tipo (preferida: la predeterminada). */
     private fun collapseToOnePerType(templates: List<DocumentTemplate>): List<DocumentTemplate> {
-        return DocumentType.entries.mapNotNull { type ->
+        return DocumentType.defaultSeedTypes.mapNotNull { type ->
             val ofType = templates.filter { it.documentType == type }
             ofType.firstOrNull { it.isDefault } ?: ofType.firstOrNull()
         }.map { it.copy(isDefault = true) }
     }
 
     private fun enforceOneTemplatePerType(context: Context) {
-        val all = loadAll(context)
+        val all = loadAll(context).filter { it.documentType != DocumentType.REPOSO }
         val unique = collapseToOnePerType(all).toMutableList()
         var changed = unique.size != all.size ||
-            unique.any { a -> all.none { b -> b.id == a.id && b.isDefault == a.isDefault } }
-        DocumentType.entries.forEach { type ->
+            unique.any { a -> all.none { b -> b.id == a.id && b.isDefault == a.isDefault } } ||
+            loadAll(context).any { it.documentType == DocumentType.REPOSO }
+        DocumentType.defaultSeedTypes.forEach { type ->
             if (unique.none { it.documentType == type }) {
                 unique.add(defaultTemplateFor(type))
                 changed = true
@@ -100,36 +101,6 @@ object TemplateStorage {
                             DocumentType.RECETA,
                             SectionCatalog.defaultsFor(DocumentType.RECETA),
                         ),
-                    )
-                    changed = true
-                }
-            }
-            if (tpl.documentType == DocumentType.REPOSO) {
-                val defaults = SectionCatalog.defaultsFor(DocumentType.REPOSO)
-                val missingCore = defaults.any { d ->
-                    tpl.sections.none { it.equals(d, ignoreCase = true) }
-                }
-                val texts = tpl.sectionDefaultTexts.toMutableMap()
-                val diasKey = texts.keys.firstOrNull { it.equals(SectionCatalog.DIAS_REPOSO, ignoreCase = true) }
-                val diasVal = diasKey?.let { texts[it] }.orEmpty().trim()
-                val needsDiasText = diasVal.isEmpty() ||
-                    diasVal.equals("Días de reposo a indicar según criterio médico.", ignoreCase = true)
-                if (missingCore || needsDiasText) {
-                    if (needsDiasText) {
-                        if (diasKey != null) texts.remove(diasKey)
-                        texts[SectionCatalog.DIAS_REPOSO] = SectionDefaults.DIAS_REPOSO_DEFAULT
-                    }
-                    unique[index] = tpl.copy(
-                        sections = if (missingCore) defaults else tpl.sections,
-                        sectionLayoutOrder = if (missingCore) {
-                            SectionCatalog.initialLayoutOrder(DocumentType.REPOSO, defaults)
-                        } else {
-                            tpl.sectionLayoutOrder
-                        },
-                        sectionDefaultTexts = texts,
-                        enabledPhysicalExamSystemIds = tpl.enabledPhysicalExamSystemIds.ifEmpty {
-                            PhysicalExamDefaults.defaultEnabledIds
-                        },
                     )
                     changed = true
                 }
