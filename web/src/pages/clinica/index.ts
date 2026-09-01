@@ -4,3 +4,4 @@ import "./paciente";
 import "./equipo";
 import "./plantillas";
 import "./encabezados";
+import "./plan";

@@ -19,6 +19,12 @@ const {
   normalizeDeviceId,
   initEntitlementOnRegister,
 } = require("./_lib/entitlements");
+const {
+  touchClinicDeviceOnLogin,
+  buildClinicPublicStatus,
+  readClinicEntitlement,
+  countClinicTeamSize,
+} = require("./_lib/clinic-entitlements");
 
 function normalizeRif(rif) {
   const raw = String(rif || "")
@@ -291,7 +297,7 @@ async function loginMedico(db, admin, cedula, pin, prefer, deviceId) {
   throw Object.assign(new Error("Cédula o PIN incorrectos"), { status: 401 });
 }
 
-async function loginClinica(db, admin, accountOrRif, pin) {
+async function loginClinica(db, admin, accountOrRif, pin, deviceId) {
   assertPinLogin(pin);
   const found = await findClinica(db, accountOrRif);
   if (!found) throw Object.assign(new Error("Nombre de cuenta o PIN incorrectos"), { status: 401 });
@@ -300,6 +306,17 @@ async function loginClinica(db, admin, accountOrRif, pin) {
   if (!c.pinHash || c.pinHash !== expected) {
     throw Object.assign(new Error("Nombre de cuenta o PIN incorrectos"), { status: 401 });
   }
+  const clinicRef = db.collection("clinicosdoc_clinics").doc(found.docId);
+  let ent = readClinicEntitlement(c);
+  if (!c.clinicEntitlement) {
+    const { initClinicEntitlementOnRegister } = require("./_lib/clinic-entitlements");
+    ent = await initClinicEntitlementOnRegister(db, clinicRef);
+  }
+  ent = await touchClinicDeviceOnLogin(db, clinicRef, { ...c, clinicEntitlement: ent }, {
+    deviceId: normalizeDeviceId(deviceId),
+    clinicId: found.docId,
+  });
+  const teamSize = await countClinicTeamSize(db, found.docId);
   const token = await mintToken(admin, found.docId, {
     role: "clinica",
     rif: String(c.rif || ""),
@@ -314,6 +331,7 @@ async function loginClinica(db, admin, accountOrRif, pin) {
     rif: String(c.rif || ""),
     correo: String(c.correo || ""),
     inviteCode: String(c.inviteCode || ""),
+    clinicEntitlement: buildClinicPublicStatus(ent, teamSize),
   };
 }
 
@@ -341,7 +359,13 @@ module.exports = async function handler(req, res) {
     if (tipo === "paciente") {
       result = await loginPaciente(db, admin, cedula, pin);
     } else if (tipo === "clinica" || tipo === "centro" || tipo === "empresa") {
-      result = await loginClinica(db, admin, cedula, pin);
+      result = await loginClinica(
+        db,
+        admin,
+        cedula,
+        pin,
+        normalizeDeviceId(body.deviceId || body.deviceFingerprint),
+      );
     } else if (
       tipo === "profesional" ||
       tipo === "medico-web" ||

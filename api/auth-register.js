@@ -15,6 +15,7 @@ const {
   initEntitlementOnRegister,
   normalizeDeviceId,
 } = require("./_lib/entitlements");
+const { initClinicEntitlementOnRegister } = require("./_lib/clinic-entitlements");
 
 function normalizeRif(rif) {
   const raw = String(rif || "")
@@ -275,6 +276,7 @@ async function registerClinica(db, admin, body) {
     templatesVersion: 1,
     templatesUpdatedAt: now,
   });
+  await initClinicEntitlementOnRegister(db, db.collection("clinicosdoc_clinics").doc(id));
   await db.collection("clinicosdoc_clinic_invites").doc(inviteCode).set({
     clinicId: id,
     nombre,

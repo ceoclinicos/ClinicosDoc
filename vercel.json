@@ -15,6 +15,9 @@
     { "src": "/api/pin-change", "dest": "/api/pin-change.js" },
     { "src": "/api/validar-mpps", "dest": "/api/validar-mpps.js" },
     { "src": "/api/subscription-status", "dest": "/api/subscription-status.js" },
-    { "src": "/api/subscription-activate", "dest": "/api/subscription-activate.js" }
+    { "src": "/api/subscription-activate", "dest": "/api/subscription-activate.js" },
+    { "src": "/api/clinic-subscription-status", "dest": "/api/clinic-subscription-status.js" },
+    { "src": "/api/clinic-subscription-activate", "dest": "/api/clinic-subscription-activate.js" },
+    { "src": "/api/clinic-document-push", "dest": "/api/clinic-document-push.js" }
   ]
 }

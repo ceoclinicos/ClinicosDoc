@@ -10,6 +10,11 @@ const {
   doctorMailboxRef,
 } = require("./_lib/invite-expiry");
 const { requireMedicoAuth } = require("./_lib/require-medico");
+const {
+  canAddTeamMember,
+  countClinicTeamSize,
+  readClinicEntitlement,
+} = require("./_lib/clinic-entitlements");
 
 module.exports = async function handler(req, res) {
   applyCors(res);
@@ -64,7 +69,17 @@ module.exports = async function handler(req, res) {
     if (!clinicDoc.exists) {
       return res.status(404).json({ error: "Centro no encontrado" });
     }
-    const clinicName = String(clinicDoc.data()?.nombre || inv.clinicName || "Centro");
+    const clinicData = clinicDoc.data() || {};
+    const ent = readClinicEntitlement(clinicData);
+    const teamSize = await countClinicTeamSize(db, clinicId);
+    const inviteCheck = canAddTeamMember(ent, teamSize);
+    if (!inviteCheck.ok) {
+      return res.status(402).json({
+        error: inviteCheck.reason,
+        code: "CLINIC_PAYWALL",
+      });
+    }
+    const clinicName = String(clinicData.nombre || inv.clinicName || "Centro");
     const joinedAt = new Date().toISOString();
     const memberCedula = normalizeCedula(inv.doctorCedula || doctorCedula);
 

@@ -2,6 +2,7 @@ import { navigate, registerRoute } from "../../app/router";
 import { getClinicSession } from "../../clinic/session";
 import { listClinicDocumentFeedPage } from "../../clinic/store";
 import type { ClinicDocumentFeedRow } from "../../clinic/models";
+import { fetchClinicSubscriptionStatus } from "../../services/clinic-subscription";
 import { matchesCedula } from "../../services/cedula";
 import { bindNavButtons, emptyState, page } from "../helpers";
 import type { QueryDocumentSnapshot } from "firebase/firestore";
@@ -19,6 +20,7 @@ registerRoute({
     const el = page(
       session?.nombre ?? "Centro de salud",
       `
+      <div id="clinic-sync-banner" class="warn-banner" hidden></div>
       <p class="lead">Informes creados con los moldes de este centro. Los más recientes aparecen arriba.</p>
       <label class="field">
         <span class="field-label">Buscar en lo cargado</span>
@@ -55,6 +57,16 @@ registerRoute({
     const pager = el.querySelector("#clinic-docs-pager") as HTMLElement;
     const pageLabel = el.querySelector("#clinic-docs-page-label") as HTMLElement;
     const btnMore = el.querySelector("#clinic-docs-more") as HTMLButtonElement;
+    const syncBanner = el.querySelector("#clinic-sync-banner") as HTMLElement;
+
+    void fetchClinicSubscriptionStatus()
+      .then((st) => {
+        if (!st.syncActive && st.message) {
+          syncBanner.hidden = false;
+          syncBanner.innerHTML = `${escapeHtml(st.message)} <a href="#/clinica/plan">Ver plan</a>`;
+        }
+      })
+      .catch(() => undefined);
 
     let loadedRows: ClinicDocumentFeedRow[] = [];
     let cursor: QueryDocumentSnapshot | null = null;

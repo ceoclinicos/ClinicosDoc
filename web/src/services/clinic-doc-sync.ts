@@ -1,7 +1,8 @@
 /** Cola local con reintentos para informes que deben llegar a la clínica. */
 import type { ClinicalDocument } from "../shared/models";
-import { pushClinicDocument } from "../clinic/store";
+import { pushClinicDocumentViaApi } from "./clinic-document-push";
 import { loadJson, saveJson } from "./local-store";
+import { getProfessionalSession } from "../registro/session";
 
 const KEY = "clinic_doc_push_queue";
 const KEY_FAILED = "clinic_doc_push_failed_v1";
@@ -107,7 +108,8 @@ export async function flushClinicDocumentQueue(): Promise<void> {
 
     for (const item of ready) {
       try {
-        await pushClinicDocument(item.clinicId, item.document, item.doctorNombre);
+        const cedula = getProfessionalSession()?.cedula;
+        await pushClinicDocumentViaApi(item.clinicId, item.document, item.doctorNombre, cedula);
         saveFailures(loadFailures().filter((f) => f.documentId !== item.document.id));
       } catch (err) {
         console.warn("[clinic-doc-sync]", err);

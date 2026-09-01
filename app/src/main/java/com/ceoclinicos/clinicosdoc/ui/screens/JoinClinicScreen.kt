@@ -47,9 +47,15 @@ fun JoinClinicScreen(onBack: () -> Unit) {
     var memberships by remember { mutableStateOf(ClinicMembershipStorage.load(context)) }
     var invitations by remember { mutableStateOf<List<ClinicDoctorInvitation>>(emptyList()) }
 
-    fun reload() {
+    fun reload(afterLeave: Boolean = false) {
         scope.launch {
-            runCatching { ClinicService.refreshMemberships(context) }
+            runCatching {
+                ClinicService.refreshMemberships(
+                    context,
+                    allowEmptyOverwrite = afterLeave,
+                    forceNetwork = afterLeave,
+                )
+            }
                 .onSuccess { memberships = it }
             runCatching { ClinicService.listPendingInvitations(context) }
                 .onSuccess { invitations = it }
@@ -232,7 +238,7 @@ fun JoinClinicScreen(onBack: () -> Unit) {
                                             "Desvinculado de ${m.clinicName}",
                                             Toast.LENGTH_SHORT,
                                         ).show()
-                                        reload()
+                                        reload(afterLeave = true)
                                     } catch (e: Exception) {
                                         Toast.makeText(
                                             context,

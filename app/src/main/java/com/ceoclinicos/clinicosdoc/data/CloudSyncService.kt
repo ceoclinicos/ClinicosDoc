@@ -135,7 +135,12 @@ object CloudSyncService {
             var lastError: Exception? = null
             repeat(5) { attempt ->
                 try {
-                    ClinicService.pushClinicDocument(clinicId, document, doctorNombre)
+                    ClinicService.pushClinicDocument(
+                        clinicId,
+                        document,
+                        doctorNombre,
+                        profile?.cedula.orEmpty(),
+                    )
                     lastError = null
                     return@repeat
                 } catch (e: Exception) {

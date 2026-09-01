@@ -91,6 +91,13 @@ object ClinicMembershipStorage {
         prefs(context).edit().putString(KEY_PENDING_NOTICES, gson.toJson(rest)).apply()
     }
 
+    fun purgePendingNoticesForClinic(context: Context, clinicName: String) {
+        val name = clinicName.trim()
+        if (name.isEmpty()) return
+        val pending = loadPendingNotices(context).filterNot { it.contains("«$name»") }
+        prefs(context).edit().putString(KEY_PENDING_NOTICES, gson.toJson(pending)).apply()
+    }
+
     fun clear(context: Context) {
         prefs(context).edit()
             .remove(KEY)
@@ -106,7 +113,8 @@ object ClinicMembershipStorage {
         removePendingInvite(context, membership.clinicId)
     }
 
+    /** Quita afiliación sin avisos (acción voluntaria del médico). */
     fun remove(context: Context, clinicId: String) {
-        saveDetectingChanges(context, load(context).filterNot { it.clinicId == clinicId })
+        save(context, load(context).filterNot { it.clinicId == clinicId })
     }
 }

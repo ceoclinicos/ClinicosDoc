@@ -44,6 +44,7 @@ object ClinicService {
     private const val MEMBERSHIPS_URL = "https://clinicos-doc.vercel.app/api/clinic-memberships"
     private const val LEAVE_CLINIC_URL = "https://clinicos-doc.vercel.app/api/clinic-leave"
     private const val TEMPLATES_URL = "https://clinicos-doc.vercel.app/api/clinic-templates"
+    private const val DOCUMENT_PUSH_URL = "https://clinicos-doc.vercel.app/api/clinic-document-push"
 
     @Volatile
     private var lastAffiliationSyncAtMs: Long = 0L
@@ -484,6 +485,7 @@ object ClinicService {
         val profile = DoctorStorage.loadProfile(context)
             ?: throw IllegalStateException("Sin sesión de médico")
         val doctorCedula = CedulaNormalizer.normalize(profile.cedula)
+        val clinicName = ClinicMembershipStorage.load(context).find { it.clinicId == clinicId }?.clinicName.orEmpty()
 
         // Intenta remoto; si la clínica ya no existe o hay fallo de red, igual limpia local.
         try {
@@ -518,6 +520,9 @@ object ClinicService {
         }
 
         ClinicMembershipStorage.remove(context, clinicId)
+        if (clinicName.isNotBlank()) {
+            ClinicMembershipStorage.purgePendingNoticesForClinic(context, clinicName)
+        }
         ClinicCatalogStorage.removeClinic(context, clinicId)
         lastAffiliationSyncAtMs = 0L
     }
@@ -808,50 +813,74 @@ object ClinicService {
         clinicId: String,
         document: ClinicalDocument,
         doctorNombre: String,
+        doctorCedula: String = "",
     ) {
-        val payload = hashMapOf<String, Any?>(
-            "id" to document.id,
-            "patientId" to document.patientId,
-            "patientNombre" to document.patientNombre,
-            "patientCedula" to CedulaNormalizer.normalize(document.patientCedula),
-            "type" to DocumentType.storageName(document.type),
-            "content" to document.content,
-            "rawDictation" to document.rawDictation,
-            "createdAt" to document.createdAt.toString(),
-            "templateId" to document.templateId,
-            "templateName" to document.templateName,
-            "headerId" to document.headerId,
-            "headerSnapshot" to document.headerSnapshot?.let { h ->
-                mapOf(
-                    "id" to h.id,
-                    "name" to h.name,
-                    "logoBase64" to h.logoBase64,
-                    "doctorName" to h.doctorName,
-                    "subtitle" to h.subtitle,
-                    "description" to h.description,
-                    "isDefault" to h.isDefault,
-                )
-            },
-            "membrete" to document.membrete?.let { m ->
-                mapOf(
-                    "nombre" to m.nombre,
-                    "edad" to m.edad,
-                    "cedula" to m.cedula,
-                    "sexo" to m.sexo,
-                    "fechaNacimiento" to m.fechaNacimiento,
-                    "fecha" to m.fecha,
-                    "telefono" to m.telefono,
-                    "direccion" to m.direccion,
-                    "ocupacion" to m.ocupacion,
-                    "acompananteNombre" to m.acompananteNombre,
-                    "acompananteTelefono" to m.acompananteTelefono,
-                )
-            },
-            "sourceDocumentId" to document.sourceDocumentId,
-            "clinicId" to clinicId,
-            "clinicName" to document.clinicName,
-            "doctorNombre" to doctorNombre,
-        )
-        documentsCol(clinicId).document(document.id).set(payload, SetOptions.merge()).await()
+        val token = idTokenOrThrow()
+        val docJson = JSONObject()
+            .put("id", document.id)
+            .put("patientId", document.patientId)
+            .put("patientNombre", document.patientNombre)
+            .put("patientCedula", CedulaNormalizer.normalize(document.patientCedula))
+            .put("type", DocumentType.storageName(document.type))
+            .put("content", document.content)
+            .put("rawDictation", document.rawDictation)
+            .put("createdAt", document.createdAt.toString())
+            .put("templateId", document.templateId)
+            .put("templateName", document.templateName)
+            .put("headerId", document.headerId)
+            .put("sourceDocumentId", document.sourceDocumentId)
+            .put("clinicId", clinicId)
+            .put("clinicName", document.clinicName)
+        document.headerSnapshot?.let { h ->
+            docJson.put(
+                "headerSnapshot",
+                JSONObject()
+                    .put("id", h.id)
+                    .put("name", h.name)
+                    .put("logoBase64", h.logoBase64)
+                    .put("doctorName", h.doctorName)
+                    .put("subtitle", h.subtitle)
+                    .put("description", h.description)
+                    .put("isDefault", h.isDefault),
+            )
+        }
+        document.membrete?.let { m ->
+            docJson.put(
+                "membrete",
+                JSONObject()
+                    .put("nombre", m.nombre)
+                    .put("edad", m.edad)
+                    .put("cedula", m.cedula)
+                    .put("sexo", m.sexo)
+                    .put("fechaNacimiento", m.fechaNacimiento)
+                    .put("fecha", m.fecha)
+                    .put("telefono", m.telefono)
+                    .put("direccion", m.direccion)
+                    .put("ocupacion", m.ocupacion)
+                    .put("acompananteNombre", m.acompananteNombre)
+                    .put("acompananteTelefono", m.acompananteTelefono),
+            )
+        }
+        val bodyJson = JSONObject()
+            .put("clinicId", clinicId)
+            .put("doctorNombre", doctorNombre)
+            .put("document", docJson)
+        if (doctorCedula.isNotBlank()) {
+            bodyJson.put("doctorCedula", CedulaNormalizer.normalize(doctorCedula))
+        }
+        val request = Request.Builder()
+            .url(DOCUMENT_PUSH_URL)
+            .post(bodyJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .header("Accept", "application/json")
+            .header("Authorization", "Bearer $token")
+            .build()
+        httpClient.newCall(request).execute().use { response ->
+            val raw = response.body?.string().orEmpty()
+            val json = runCatching { JSONObject(raw) }.getOrElse { JSONObject() }
+            if (!response.isSuccessful) {
+                val msg = json.optString("error").ifBlank { "No se pudo enviar el informe al centro" }
+                throw IllegalStateException(msg)
+            }
+        }
     }
 }

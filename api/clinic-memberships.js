@@ -118,30 +118,7 @@ async function healFromClinics(db, uid, cedula) {
           break;
         }
       }
-      let acceptedInvite = false;
-      if (!memberSnap) {
-        for (const key of keys) {
-          const inv = await clinicDoc.ref.collection("invitations").doc(key).get();
-          if (inv.exists && String(inv.data()?.status || "") === "accepted") {
-            acceptedInvite = true;
-            break;
-          }
-        }
-      }
-      if (!memberSnap && !acceptedInvite) continue;
-      if (!memberSnap) {
-        await clinicDoc.ref.collection("members").doc(cedula).set(
-          {
-            doctorCedula: cedula,
-            doctorNombre: `Médico C.I. ${cedula}`,
-            cloudUserId: uid,
-            role: "medico",
-            joinedAt: new Date().toISOString(),
-          },
-          { merge: true },
-        );
-        memberSnap = await clinicDoc.ref.collection("members").doc(cedula).get();
-      }
+      if (!memberSnap) continue;
       await recordMember(clinicDoc.ref, memberSnap);
     }
   }

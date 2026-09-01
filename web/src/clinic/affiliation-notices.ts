@@ -23,7 +23,10 @@ export function loadMembershipSnapshot(): ClinicMembershipSnap[] {
   return readJson(KEY_MEMBERSHIPS, []);
 }
 
-export function applyMembershipSnapshot(next: ClinicMembershipSnap[]): string[] {
+export function applyMembershipSnapshot(
+  next: ClinicMembershipSnap[],
+  opts?: { silent?: boolean },
+): string[] {
   const previous = loadMembershipSnapshot();
   const hadBaseline = localStorage.getItem(KEY_BASELINE) === "1";
   writeJson(KEY_MEMBERSHIPS, next);
@@ -31,6 +34,7 @@ export function applyMembershipSnapshot(next: ClinicMembershipSnap[]): string[] 
     localStorage.setItem(KEY_BASELINE, "1");
     return [];
   }
+  if (opts?.silent) return [];
   const prevIds = new Set(previous.map((m) => m.clinicId));
   const nextIds = new Set(next.map((m) => m.clinicId));
   const notices: string[] = [];
@@ -57,6 +61,14 @@ export function loadPendingNotices(): string[] {
 
 export function dismissCurrentNotice(): void {
   writeJson(KEY_PENDING, loadPendingNotices().slice(1));
+}
+
+/** Limpia avisos pendientes de una clínica (p. ej. tras desvincular voluntariamente). */
+export function purgePendingNoticesForClinic(clinicName: string): void {
+  const name = clinicName.trim();
+  if (!name) return;
+  const pending = loadPendingNotices().filter((n) => !n.includes(`«${name}»`));
+  writeJson(KEY_PENDING, pending);
 }
 
 export function clearAffiliationNotices(): void {

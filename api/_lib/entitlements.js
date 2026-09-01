@@ -11,8 +11,6 @@ const TRIAL_AI_LIMIT = 20;
 const MONTHLY_AI_QUOTA = 1000;
 /** Alerta cuando quedan estos usos en el periodo. */
 const ALERT_REMAINING = 100;
-/** Si usó ≤ esto en el mes, 1 mes de cortesía (una vez). */
-const LOW_USAGE_THRESHOLD = 50;
 const PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
 
 function nowIso() {
@@ -74,20 +72,6 @@ function rollPeriodIfNeeded(ent) {
   if (!ent.periodEndAt) return ent;
   const end = Date.parse(ent.periodEndAt);
   if (!Number.isFinite(end) || Date.now() < end) return ent;
-
-  const used = Number(ent.periodAiUses) || 0;
-  if (used <= LOW_USAGE_THRESHOLD && !ent.courtesyUsed) {
-    const start = nowIso();
-    return {
-      ...ent,
-      plan: "courtesy",
-      courtesyUsed: true,
-      periodStartAt: start,
-      periodEndAt: addMs(start, PERIOD_MS),
-      periodAiUses: 0,
-      updatedAt: start,
-    };
-  }
   return {
     ...ent,
     plan: "expired",
@@ -357,7 +341,6 @@ module.exports = {
   TRIAL_AI_LIMIT,
   MONTHLY_AI_QUOTA,
   ALERT_REMAINING,
-  LOW_USAGE_THRESHOLD,
   defaultEntitlement,
   readEntitlement,
   buildPublicStatus,

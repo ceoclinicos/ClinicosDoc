@@ -11,6 +11,11 @@ const {
   clinicInviteRef,
   doctorMailboxRef,
 } = require("./_lib/invite-expiry");
+const {
+  canAddTeamMember,
+  countClinicTeamSize,
+  readClinicEntitlement,
+} = require("./_lib/clinic-entitlements");
 
 async function findAppMedico(db, inputCedula) {
   const keys = cedulaLookupKeys(inputCedula);
@@ -78,6 +83,12 @@ module.exports = async function handler(req, res) {
       throw Object.assign(new Error("Centro no encontrado"), { status: 404 });
     }
     const clinic = clinicSnap.data() || {};
+    const ent = readClinicEntitlement(clinic);
+    const teamSize = await countClinicTeamSize(db, clinicId);
+    const inviteCheck = canAddTeamMember(ent, teamSize);
+    if (!inviteCheck.ok) {
+      throw Object.assign(new Error(inviteCheck.reason), { status: 402, code: "CLINIC_PAYWALL" });
+    }
 
     const doctorCedula = normalizeCedula(body.doctorCedula);
     if (doctorCedula.length < 7) {

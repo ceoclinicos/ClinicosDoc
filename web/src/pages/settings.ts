@@ -4,7 +4,6 @@ import { loadDoctorProfile, saveDoctorProfile } from "../services/doctor-local";
 import { resetRedactarTutorial, isTutorialButtonEnabled } from "../services/onboarding";
 import { openRedactarTutorial } from "../ui/redactar-tutorial";
 import { joinClinicByInvite, listMembershipsForDoctor, listPendingInvitationsForDoctor, acceptDoctorInvitation, rejectDoctorInvitation, leaveClinicAsDoctor } from "../clinic/store";
-import { setCachedMemberships } from "../clinic/membership-cache";
 import { subscribeSyncStatus, flushPendingCloudSync } from "../services/sync-feedback";
 import { bindNavButtons, page } from "./helpers";
 import {
@@ -184,13 +183,6 @@ registerRoute({
             (btn as HTMLButtonElement).disabled = true;
             try {
               await leaveClinicAsDoctor({ clinicId, doctorCedula: cedula });
-              setCachedMemberships(
-                list.filter((m) => m.clinicId !== clinicId).map((m) => ({
-                  clinicId: m.clinicId,
-                  clinicName: m.clinicName,
-                  role: m.role,
-                })),
-              );
               alert(`Desvinculado de ${clinicName}`);
               await refreshMemberships();
             } catch (err) {

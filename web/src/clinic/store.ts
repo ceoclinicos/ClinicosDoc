@@ -588,7 +588,13 @@ export async function leaveClinicAsDoctor(input: {
     console.warn("[leaveClinic]", data.error || raw);
   }
   const { setCachedMemberships, getCachedMemberships } = await import("./membership-cache");
-  setCachedMemberships(getCachedMemberships().filter((m) => m.clinicId !== input.clinicId));
+  const { purgePendingNoticesForClinic } = await import("./affiliation-notices");
+  const removed = getCachedMemberships().find((m) => m.clinicId === input.clinicId);
+  setCachedMemberships(
+    getCachedMemberships().filter((m) => m.clinicId !== input.clinicId),
+    { silent: true },
+  );
+  if (removed?.clinicName) purgePendingNoticesForClinic(removed.clinicName);
 }
 
 export async function acceptDoctorInvitation(input: {

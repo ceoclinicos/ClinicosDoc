@@ -24,9 +24,12 @@ export function getCachedMemberships(): CachedMembership[] {
   return fromSnapshot();
 }
 
-export function setCachedMemberships(list: CachedMembership[]): void {
+export function setCachedMemberships(list: CachedMembership[], opts?: { silent?: boolean }): void {
   memory = list;
-  applyMembershipSnapshot(list.map((m) => ({ clinicId: m.clinicId, clinicName: m.clinicName })));
+  applyMembershipSnapshot(
+    list.map((m) => ({ clinicId: m.clinicId, clinicName: m.clinicName })),
+    opts,
+  );
 }
 
 /**

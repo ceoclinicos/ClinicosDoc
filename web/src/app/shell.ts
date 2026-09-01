@@ -34,7 +34,7 @@ function linksHtml(
 /** Bottom bar tipo app */
 function bottomNavItems() {
   if (isClinicLoggedIn()) {
-    const order = ["/clinica/panel", "/clinica/plantillas", "/clinica/equipo"];
+    const order = ["/clinica/panel", "/clinica/plantillas", "/clinica/equipo", "/clinica/plan"];
     return order
       .map((p) => getNavRoutes().find((r) => r.path === p))
       .filter((r): r is NonNullable<typeof r> => !!r);

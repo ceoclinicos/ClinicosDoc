@@ -1,9 +1,10 @@
 const { getAdmin } = require("./_lib/firebase");
-const { normalizeCedula } = require("./_lib/pin");
+const { normalizeCedula, cedulaLookupKeys } = require("./_lib/pin");
 const { applyCors } = require("./_lib/cors");
 const { parseBody } = require("./_lib/body");
 const { apiError } = require("./_lib/errors");
 const { requireMedicoAuth } = require("./_lib/require-medico");
+const { deleteDoctorInvitation } = require("./_lib/invite-expiry");
 
 module.exports = async function handler(req, res) {
   applyCors(res);
@@ -18,7 +19,9 @@ module.exports = async function handler(req, res) {
     if (!clinicId) return res.status(400).json({ error: "clinicId requerido" });
 
     const doctorCedula = normalizeCedula(body.doctorCedula || decoded.cedula || "");
-    const memberKeys = [...new Set([doctorCedula, doctorCedula.replace(/\D/g, "")].filter(Boolean))];
+    const memberKeys = [
+      ...new Set([doctorCedula, ...cedulaLookupKeys(doctorCedula), doctorCedula.replace(/\D/g, "")].filter(Boolean)),
+    ];
 
     const clinicRef = db.collection("clinicosdoc_clinics").doc(clinicId);
     const clinicSnap = await clinicRef.get().catch(() => null);
@@ -33,9 +36,13 @@ module.exports = async function handler(req, res) {
       .delete()
       .catch(() => {});
 
+    // Buzón e invitaciones (evita que heal lo re-agregue).
+    await deleteDoctorInvitation(db, clinicId, doctorCedula, uid);
+
     if (clinicExists) {
       for (const key of memberKeys) {
         await clinicRef.collection("members").doc(key).delete().catch(() => {});
+        await clinicRef.collection("invitations").doc(key).delete().catch(() => {});
       }
     }
 
