@@ -911,6 +911,25 @@ dialog {
   outline: none;
 }
 
+/* Franja de funciones en la landing pública */
+.landing-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.landing-features span {
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--navy-light);
+  background: color-mix(in srgb, var(--teal) 9%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--teal) 22%, var(--border));
+}
+
 /* Estado vacío con suavidad */
 .home-activity-empty {
   padding: 1.5rem 1rem;

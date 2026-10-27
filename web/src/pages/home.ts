@@ -5,7 +5,7 @@ import {
 } from "../clinic/membership-cache";
 import { showPendingAffiliationNotices } from "../clinic/affiliation-notices";
 import { listPendingInvitationsForDoctor } from "../clinic/store";
-import { getPatientSession, getProfessionalSession } from "../registro/session";
+import { getProfessionalSession } from "../registro/session";
 import {
   hasSeenRedactarTutorial,
   isTutorialButtonEnabled,
@@ -317,14 +317,17 @@ function publicHome(): HTMLElement {
       <span class="hero-title">Soy profesional de salud</span>
       <span class="hero-sub">Buscar paciente · Registrar atención</span>
     </button>
-    <button type="button" class="hero-card hero-card-alt" data-nav="/paciente">
-      <span class="hero-title">Soy paciente</span>
-      <span class="hero-sub">Ficha de emergencia (QR)</span>
-    </button>
     <button type="button" class="hero-card" data-nav="/clinica">
       <span class="hero-title">Modo empresa / centro de salud</span>
       <span class="hero-sub">Plantillas del centro · Pacientes · Equipo médico</span>
     </button>
+    <div class="landing-features">
+      <span>Historias clínicas</span>
+      <span>Informes</span>
+      <span>Recetas</span>
+      <span>PDF e impresión</span>
+      <span>Sincronización app + web</span>
+    </div>
     `,
   );
   bindNavButtons(el);
@@ -338,11 +341,6 @@ registerRoute({
   navLabel: "Inicio",
   render: () => {
     if (isMedicoLoggedIn()) return medicoHome();
-    // Paciente logueado: no mostrar inicio público → portal + ficha
-    if (getPatientSession() && !getProfessionalSession()) {
-      navigate("/paciente");
-      return page("Mi ficha", `<p class="muted">Abriendo su ficha de emergencia…</p>`);
-    }
     return publicHome();
   },
 });
