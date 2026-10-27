@@ -1344,10 +1344,44 @@ dialog {
 
 #membrete-editor {
   background: var(--surface);
+  display: grid;
+  gap: 0.85rem;
+}
+
+#membrete-editor label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  min-width: 0;
 }
 
 #membrete-editor input {
   background: #fff;
+  font: inherit;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  color: var(--text);
+}
+
+#membrete-editor input:focus {
+  outline: none;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 18%, transparent);
+}
+
+#membrete-editor .grid-2 > label {
+  min-width: 0;
+}
+
+/* Nombre y Dirección ocupan toda la fila */
+#membrete-editor .grid-2 > .span-2 {
+  grid-column: 1 / -1;
 }
 
 .vitals-editor {
