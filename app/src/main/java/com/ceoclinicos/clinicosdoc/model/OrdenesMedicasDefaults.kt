@@ -28,12 +28,13 @@ object OrdenesMedicasDefaults {
         4. Omeprazol 40 mg EV OD.
         5. Ketoprofeno 100 mg EV cada 12 horas.
         6. Metoclopramida 10 mg EV SOS náuseas/vómitos.
-        7. Control de signos vitales cada 4 horas.
-        8. Balance hídrico estricto.
-        9. Reposo relativo en cama.
-        10. Solicitar laboratorios: hematología completa, química sanguínea, amilasa/lipasa.
+        7. Balance hídrico estricto.
+        8. Reposo relativo en cama.
+        9. Laboratorio: hematología completa, química sanguínea, amilasa/lipasa.
+        10. Radiografía de tórax PA.
         11. Interconsulta a Medicina Interna.
-        12. Informar al médico de guardia ante deterioro clínico.
+        12. Control de signos vitales cada 4 horas.
+        13. Informar al médico de guardia ante deterioro clínico.
     """.trimIndent()
 
     private fun modeGuidelines(modo: Modo): String = when (modo) {
@@ -63,6 +64,7 @@ object OrdenesMedicasDefaults {
             - Formato: línea [[SECTION:Órdenes]] y debajo SOLO ítems numerados 1. 2. 3. … (sin Motivo de consulta ni otras secciones clínicas del informe).
             - PROHIBIDO usar **. PROHIBIDO títulos de documento (ÓRDENES MÉDICAS lo pone la app).
             - Escribe fármacos concretos: nombre + dosis + vía + intervalo (ej. "Ceftriaxona 1 g EV cada 12 horas").
+            - Si hay fármacos EV y VO: lista primero TODOS los EV (endovenosos) y después los VO (vía oral).
             - PROHIBIDO enunciados genéricos ("Antibioticoterapia según…", "Antipirético/analgésico:", "según esquema institucional").
             - Omite ítems que no apliquen al caso (si no necesita O₂ o protector gástrico, no los inventes).
             - Orden OBLIGATORIO de prioridad (renumerar al final; omite los que no apliquen):
@@ -71,7 +73,15 @@ object OrdenesMedicasDefaults {
               3) Oxígeno (solo si el caso lo requiere)
               4) Hidratación (parenteral solo si hospitalario/emergencia lo requiere)
               5) Protector gástrico (solo si aplica)
-              6) Resto: analgésicos, antieméticos, antibióticos, otros fármacos, controles, labs, interconsultas, alarmas
+              6) Resto de fármacos (si hay EV y VO: primero TODOS los EV, luego los VO)
+              7) Cuidados (balance hídrico, reposo)
+              8) Laboratorio (UN solo ítem agrupado)
+              9) Estudios de imagen (cada estudio en su propio ítem)
+              10) Interconsultas
+              11) Control de signos vitales (PENÚLTIMO ítem)
+              12) Avisar al médico de guardia / signos de alarma (ÚLTIMO ítem)
+            - Laboratorios: UN ítem que empieza "Laboratorio:" con las pruebas separadas por coma (ej. "Laboratorio: hematología completa, urea, creatinina, glicemia.").
+            - Estudios de imagen: ítem propio por cada estudio, nombrado por su modalidad (ej. "Radiografía de tórax PA.", "Tomografía axial computarizada de abdomen y pelvis.", "Resonancia magnética de cráneo.", "Ecografía abdominal.").
             - Adapta servicio, dieta, líquidos, fármacos y labs al diagnóstico/caso (empírico o dirigido).
             - Suele haber ~8–14 ítems; ni demasiado corto ni relleno inventado.
             - Si hay notas/dictado adicionales del médico, priorízalas y completa con estilo del molde.

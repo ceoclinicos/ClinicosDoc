@@ -84,6 +84,10 @@ object DocumentStorage {
         clinicId = clinicId,
         clinicName = clinicName,
         doctorNombre = doctorNombre,
+        incluirSello = incluirSello,
+        selloBase64 = selloBase64,
+        selloOffsetX = selloOffsetX,
+        selloOffsetY = selloOffsetY,
     )
 
     private fun ClinicalDocumentDto.toModel() = ClinicalDocument(
@@ -104,6 +108,10 @@ object DocumentStorage {
         clinicId = clinicId,
         clinicName = clinicName,
         doctorNombre = doctorNombre,
+        incluirSello = incluirSello ?: false,
+        selloBase64 = selloBase64,
+        selloOffsetX = selloOffsetX,
+        selloOffsetY = selloOffsetY,
     )
 
     private fun ClinicalDocumentDto.toMembrete(): PatientMembrete? =

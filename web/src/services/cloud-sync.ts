@@ -48,6 +48,19 @@ export function patientFirestoreId(cedula: string, nombre: string): string {
   return `${cedulaPart}_${nameSlug}`;
 }
 
+/**
+ * Clave del paciente global: con cédula → `{cedula}_{nombre}`; sin cédula →
+ * el ID interno `sc_*` del paciente (paridad PatientFirestoreId.globalKey app).
+ */
+export function patientGlobalKey(patient: {
+  id: string;
+  cedula: string;
+  nombre: string;
+}): string {
+  if (!cedulaKeyAndroid(patient.cedula)) return patient.id;
+  return patientFirestoreId(patient.cedula, patient.nombre);
+}
+
 function asDocType(raw: string): DocumentType {
   if (raw === "historiaClinica" || raw === "HISTORIA_CLINICA") return "historiaClinica";
   if (raw === "reposo" || raw === "REPOSO") return "reposo";
@@ -109,11 +122,11 @@ function parseExam(data: DocumentData, id: string): PhysicalExamSystem | null {
 }
 
 function parsePatient(data: DocumentData, id: string): Patient | null {
-  if (!data.nombre || !data.cedula) return null;
+  if (!data.nombre) return null;
   return {
     id: String(data.id ?? id),
     nombre: String(data.nombre),
-    cedula: String(data.cedula),
+    cedula: String(data.cedula ?? ""),
     edad: Number(data.edad ?? 0),
     sexo: String(data.sexo ?? ""),
     fechaNacimiento: String(data.fechaNacimiento ?? ""),
@@ -172,6 +185,16 @@ function parseDocument(data: DocumentData, id: string): ClinicalDocument | null 
       : undefined,
     membrete,
     sourceDocumentId: data.sourceDocumentId ? String(data.sourceDocumentId) : undefined,
+    incluirSello: data.incluirSello ? true : undefined,
+    selloBase64: data.selloBase64 ? String(data.selloBase64) : undefined,
+    selloOffsetX:
+      data.selloOffsetX != null && Number.isFinite(Number(data.selloOffsetX))
+        ? Number(data.selloOffsetX)
+        : undefined,
+    selloOffsetY:
+      data.selloOffsetY != null && Number.isFinite(Number(data.selloOffsetY))
+        ? Number(data.selloOffsetY)
+        : undefined,
   };
 }
 
@@ -203,11 +226,11 @@ async function fetchAll<T>(
 }
 
 function parseGlobalPatient(data: DocumentData, id: string): Patient | null {
-  if (!data.nombre || !data.cedula) return null;
+  if (!data.nombre) return null;
   return {
     id: String(data.id ?? id),
     nombre: String(data.nombre),
-    cedula: String(data.cedula),
+    cedula: String(data.cedula ?? ""),
     edad: Number(data.edad) || 0,
     sexo: String(data.sexo ?? ""),
     fechaNacimiento: String(data.fechaNacimiento ?? ""),
@@ -391,7 +414,7 @@ export async function pushPatient(p: Patient, userId = userIdOrThrow()): Promise
 }
 
 async function pushGlobalPatient(userId: string, patient: Patient): Promise<void> {
-  const key = patientFirestoreId(patient.cedula, patient.nombre);
+  const key = patientGlobalKey(patient);
   const now = new Date().toISOString();
   await setDoc(
     doc(getDb(), FirestorePaths.GLOBAL_PATIENTS, key),
@@ -445,6 +468,10 @@ export async function pushDocument(d: ClinicalDocument, userId = userIdOrThrow()
     sourceDocumentId: d.sourceDocumentId ?? null,
     clinicId: d.clinicId ?? null,
     clinicName: d.clinicName ?? null,
+    incluirSello: d.incluirSello ?? false,
+    selloBase64: d.selloBase64 ?? null,
+    selloOffsetX: d.selloOffsetX ?? null,
+    selloOffsetY: d.selloOffsetY ?? null,
   };
   await setDoc(doc(sub(userId, FirestorePaths.SUB_DOCUMENTS), d.id), payload);
   await pushGlobalDocument(userId, doctorNombre, d);
@@ -455,7 +482,11 @@ async function pushGlobalDocument(
   doctorNombre: string,
   document: ClinicalDocument,
 ): Promise<void> {
-  const patientKey = patientFirestoreId(document.patientCedula, document.patientNombre);
+  const patientKey = patientGlobalKey({
+    id: document.patientId,
+    cedula: document.patientCedula,
+    nombre: document.patientNombre,
+  });
   await setDoc(
     doc(
       getDb(),
@@ -492,6 +523,10 @@ async function pushGlobalDocument(
       doctorNombre,
       patientFirestoreKey: patientKey,
       sourceDocumentId: document.sourceDocumentId ?? null,
+      incluirSello: document.incluirSello ?? false,
+      selloBase64: document.selloBase64 ?? null,
+      selloOffsetX: document.selloOffsetX ?? null,
+      selloOffsetY: document.selloOffsetY ?? null,
     },
     { merge: true },
   );
@@ -499,14 +534,18 @@ async function pushGlobalDocument(
 
 export async function deleteDocumentCloud(
   id: string,
-  meta?: { patientCedula?: string; patientNombre?: string },
+  meta?: { patientCedula?: string; patientNombre?: string; patientId?: string },
 ): Promise<void> {
   const userId = getProfessionalSession()?.cloudUserId;
   if (!userId) return;
   await deleteDoc(doc(sub(userId, FirestorePaths.SUB_DOCUMENTS), id));
-  if (meta?.patientCedula && meta?.patientNombre) {
+  if (meta?.patientNombre && (meta.patientCedula || meta.patientId)) {
     try {
-      const patientKey = patientFirestoreId(meta.patientCedula, meta.patientNombre);
+      const patientKey = patientGlobalKey({
+        id: meta.patientId ?? "",
+        cedula: meta.patientCedula ?? "",
+        nombre: meta.patientNombre,
+      });
       await deleteDoc(
         doc(
           getDb(),

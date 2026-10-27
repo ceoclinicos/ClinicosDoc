@@ -17,7 +17,7 @@ object TemplateStorage {
     private const val KEY = "document_templates_json"
     private const val INITIALIZED_KEY = "templates_initialized"
     private const val HC_SECTIONS_VERSION_KEY = "hc_template_sections_version"
-    private const val HC_SECTIONS_VERSION = 9
+    private const val HC_SECTIONS_VERSION = 10
     const val MAX_PER_TYPE = 1
     private val gson = Gson()
 
@@ -265,6 +265,21 @@ object TemplateStorage {
     fun ensureAllTypesPresent(context: Context): List<DocumentTemplate> {
         enforceOneTemplatePerType(context)
         return loadAll(context)
+    }
+
+    /** Restablece todas las plantillas a los valores de fábrica (conserva IDs para sobrescribir en la nube). */
+    fun resetToDefaults(context: Context) {
+        val existing = loadAll(context)
+        val defaults = DocumentType.defaultSeedTypes.map { type ->
+            val base = defaultTemplateFor(type)
+            existing.firstOrNull { it.documentType == type }?.let { base.copy(id = it.id) } ?: base
+        }
+        saveAllLocal(context, defaults)
+        prefs(context).edit()
+            .putBoolean(INITIALIZED_KEY, true)
+            .putInt(HC_SECTIONS_VERSION_KEY, HC_SECTIONS_VERSION)
+            .persist()
+        SyncCoordinator.afterTemplatesBulkSaved(context)
     }
 
     /** Devuelve la plantilla del tipo, creándola si falta. */

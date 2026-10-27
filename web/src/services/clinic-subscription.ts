@@ -2,7 +2,7 @@ import { getIdToken } from "./firebase-auth";
 
 const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(/\/$/, "");
 
-export type ClinicTierId = "free" | "tier_50" | "tier_100" | "tier_unlimited";
+export type ClinicTierId = "free" | "tier_10" | "tier_25" | "tier_50" | "tier_250";
 
 export type ClinicSubscriptionStatus = {
   plan: string;

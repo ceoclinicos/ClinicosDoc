@@ -22,8 +22,8 @@ registerRoute({
         ? `
       <p class="lead">Elija un PIN (contraseña) de 6 dígitos${isPassword ? " para la app" : ""}.</p>
       <form class="form" id="form-nuevo-pin">
-        <label>PIN nuevo (contraseña, 6 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" required /></label>
-        <label>Confirmar PIN (contraseña)<input name="pin2" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" required /></label>
+        <label>PIN nuevo (contraseña: 6 dígitos o letra + 6 dígitos)<input name="pin" type="password" pattern="[0-9]{6}|[A-Za-z][0-9]{6}" maxlength="7" minlength="6" required style="text-transform:uppercase" /></label>
+        <label>Confirmar PIN (contraseña)<input name="pin2" type="password" pattern="[0-9]{6}|[A-Za-z][0-9]{6}" maxlength="7" minlength="6" required style="text-transform:uppercase" /></label>
         <button type="submit" class="btn btn-primary">Guardar PIN (contraseña)</button>
       </form>
       <div id="reset-msg"></div>
@@ -37,8 +37,8 @@ registerRoute({
       el.querySelector("#form-nuevo-pin")?.addEventListener("submit", async (e) => {
         e.preventDefault();
         const fd = new FormData(e.target as HTMLFormElement);
-        const pin = String(fd.get("pin"));
-        const pin2 = String(fd.get("pin2"));
+        const pin = String(fd.get("pin")).toUpperCase();
+        const pin2 = String(fd.get("pin2")).toUpperCase();
         const msg = el.querySelector("#reset-msg") as HTMLElement;
         if (pin !== pin2) {
           msg.innerHTML = `<p class="status-badge status-error">Los valores no coinciden</p>`;

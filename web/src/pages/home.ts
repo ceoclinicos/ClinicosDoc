@@ -6,7 +6,6 @@ import {
 import { showPendingAffiliationNotices } from "../clinic/affiliation-notices";
 import { listPendingInvitationsForDoctor } from "../clinic/store";
 import { getPatientSession, getProfessionalSession } from "../registro/session";
-import { loadDrafts } from "../services/clinical-store";
 import {
   hasSeenRedactarTutorial,
   isTutorialButtonEnabled,
@@ -27,7 +26,6 @@ function escapeHtml(s: string): string {
 function medicoHome(): HTMLElement {
   const prof = getProfessionalSession();
   const saludoNombre = tituloProfesional(prof?.sexo);
-  const draftsCount = loadDrafts().length;
   const allRows = buildPatientActivityRows();
   let visible = Math.min(HOME_PAGE_SIZE, allRows.length);
 
@@ -108,9 +106,9 @@ function medicoHome(): HTMLElement {
         <strong>Plantillas</strong>
         <span class="muted">HC, informes, encabezados</span>
       </button>
-      <button type="button" class="tile tile-home" data-nav="/borradores">
-        <strong>Borradores</strong>
-        <span class="muted">${draftsCount ? `${draftsCount} guardado(s)` : "Sin borradores"}</span>
+      <button type="button" class="tile tile-home" data-nav="/pacientes">
+        <strong>Pacientes</strong>
+        <span class="muted">Lista y registro</span>
       </button>
     </div>
 

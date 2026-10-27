@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Approval
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.FactCheck
 import androidx.compose.material.icons.outlined.MedicalServices
@@ -22,6 +23,7 @@ fun PlantillasHubScreen(
     onOpenRecetasTemplates: () -> Unit,
     onOpenHeaders: () -> Unit,
     onOpenPhysicalExamCatalog: () -> Unit,
+    onOpenSello: () -> Unit,
     onBack: () -> Unit = {},
 ) {
     AppScaffold(title = "Plantillas", onBack = onBack) { padding ->
@@ -43,6 +45,13 @@ fun PlantillasHubScreen(
                 title = "Encabezados",
                 subtitle = "Hasta 4: logo, clínica o médico",
                 onClick = onOpenHeaders,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            SettingsTile(
+                icon = Icons.Outlined.Approval,
+                title = "Sello médico",
+                subtitle = "Foto del sello al pie de informes e historias",
+                onClick = onOpenSello,
             )
             Spacer(modifier = Modifier.height(12.dp))
             SettingsTile(

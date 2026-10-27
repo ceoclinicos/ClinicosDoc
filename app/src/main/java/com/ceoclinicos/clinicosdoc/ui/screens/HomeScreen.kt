@@ -72,7 +72,6 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onRedactar: () -> Unit,
     onOpenPlantillas: () -> Unit,
-    onOpenDrafts: () -> Unit,
     onOpenPatientInformes: (cedula: String, patientId: String, nombre: String) -> Unit = { _, _, _ -> },
     tutorialBtnTick: Int = 0,
 ) {
@@ -158,14 +157,6 @@ fun HomeScreen(
                 color = Navy,
                 modifier = Modifier.weight(1f),
                 onClick = onOpenPlantillas,
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            QuickActionCard(
-                icon = Icons.Default.EditNote,
-                label = "Borradores",
-                color = Teal,
-                modifier = Modifier.weight(1f),
-                onClick = onOpenDrafts,
             )
         }
         Spacer(modifier = Modifier.height(24.dp))

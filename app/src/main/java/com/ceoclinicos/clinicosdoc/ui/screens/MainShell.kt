@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Medication
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
@@ -77,11 +79,15 @@ fun MainShell(
     onAddPatient: () -> Unit,
     onEditPatient: (patientId: String) -> Unit,
     onOpenPlantillas: () -> Unit,
-    onOpenDrafts: () -> Unit,
+    onCreateRecipe: () -> Unit,
+    onEditRecipe: (recipeId: String) -> Unit,
+    onUseRecipe: (recipeId: String) -> Unit,
     patientRefreshKey: Int,
     informeRefreshKey: Int,
+    recipesRefreshKey: Int,
     onPatientTabSelected: () -> Unit,
     onInformeTabSelected: () -> Unit,
+    onRecipesTabSelected: () -> Unit,
     onOpenInforme: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -100,6 +106,7 @@ fun MainShell(
         BottomNavItem("Home", Icons.Outlined.Home, Icons.Default.Home),
         BottomNavItem("Paciente", Icons.Outlined.Person, Icons.Default.Person),
         BottomNavItem("Informe", Icons.Outlined.Description, Icons.Default.Description),
+        BottomNavItem("Recipes", Icons.Outlined.Medication, Icons.Default.Medication),
     )
 
     fun openPatientInformes(cedula: String, patientId: String, nombre: String) {
@@ -339,6 +346,7 @@ fun MainShell(
                     currentIndex = index
                     if (index == 1) onPatientTabSelected()
                     if (index == 2) onInformeTabSelected()
+                    if (index == 3) onRecipesTabSelected()
                 },
                 items = items,
             )
@@ -350,7 +358,6 @@ fun MainShell(
                     onOpenSettings = onOpenSettings,
                     onRedactar = onRedactar,
                     onOpenPlantillas = onOpenPlantillas,
-                    onOpenDrafts = onOpenDrafts,
                     onOpenPatientInformes = ::openPatientInformes,
                     tutorialBtnTick = tutorialBtnTick,
                 )
@@ -360,7 +367,13 @@ fun MainShell(
                     onEditPatient = onEditPatient,
                     onOpenPatientInformes = ::openPatientInformes,
                 )
-                else -> InformeScreen(refreshKey = informeRefreshKey, onOpenInforme = onOpenInforme)
+                2 -> InformeScreen(refreshKey = informeRefreshKey, onOpenInforme = onOpenInforme)
+                else -> RecipesScreen(
+                    refreshKey = recipesRefreshKey,
+                    onEdit = onEditRecipe,
+                    onUse = onUseRecipe,
+                    onCreate = onCreateRecipe,
+                )
             }
         }
     }

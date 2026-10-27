@@ -1,8 +1,8 @@
-const { getAdmin } = require("./_lib/firebase");
-const { applyCors } = require("./_lib/cors");
-const { apiError } = require("./_lib/errors");
-const { requireAppAuth } = require("./_lib/require-app-auth");
-const { activateSubscription } = require("./_lib/entitlements");
+const { getAdmin } = require("../firebase");
+const { applyCors } = require("../cors");
+const { apiError } = require("../errors");
+const { requireAppAuth } = require("../require-app-auth");
+const { activateSubscription } = require("../entitlements");
 
 /**
  * Activa 30 días de suscripción.

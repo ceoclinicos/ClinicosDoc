@@ -32,8 +32,8 @@ android {
         applicationId = "com.ceoclinicos.clinicosdoc"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -84,6 +84,9 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.okhttp)
     implementation(libs.coil.compose)
+    implementation(libs.android.image.cropper)
+    implementation(libs.androidx.exifinterface)
+    implementation(libs.mlkit.text.recognition)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.auth)

@@ -16,6 +16,8 @@ import {
   printFromClinicalDocument,
 } from "../services/document-pdf";
 import { parseDocumentSections, serializeDocumentSections } from "../services/document-parser";
+import { createInformeFromCase } from "../services/informe-from-case";
+import { hasSello, loadSello } from "../services/sello-store";
 import {
   applyVitalsToBody,
   bodyWithoutVitals,
@@ -24,6 +26,7 @@ import {
   readVitalsFromForm,
   vitalSignsFieldsHtml,
 } from "../services/vital-signs";
+import { displayCedula } from "../services/cedula";
 import { loadJson } from "../services/local-store";
 import { bindMembreteEditor, membreteEditorHtml, readMembreteFromEditor } from "../ui/membrete-editor";
 import { bindNavButtons, emptyState, page } from "./helpers";
@@ -114,7 +117,7 @@ registerRoute({
     const el = page(
       DocumentReportTitles[doc.type],
       `
-      <p class="muted">${escapeHtml(doc.patientNombre)} · C.I. ${escapeHtml(doc.patientCedula)} · ${formatDocumentDateTime(doc.createdAt)}</p>
+      <p class="muted">${escapeHtml(doc.patientNombre)} · C.I. ${escapeHtml(displayCedula(doc.patientCedula))} · ${formatDocumentDateTime(doc.createdAt)}</p>
 
       <div class="result-actions">
         <button type="button" class="btn btn-primary" id="btn-save">Guardar cambios</button>
@@ -131,6 +134,12 @@ registerRoute({
             .join("")}
         </select>
       </div>
+
+      ${
+        hasSello() || doc.selloBase64
+          ? `<label class="check-row"><input type="checkbox" id="chk-sello" ${doc.incluirSello ? "checked" : ""} /> Incluir sello médico</label>`
+          : ""
+      }
 
       ${membreteEditorHtml(editableMembrete, doc.type)}
 
@@ -156,6 +165,7 @@ registerRoute({
           <button type="button" data-tool="pdf">Guardar PDF</button>
           <button type="button" data-tool="print">Imprimir</button>
           <button type="button" data-tool="share">Compartir</button>
+          ${doc.type === "historiaClinica" ? `<button type="button" data-tool="crear-informe">Crear informe</button>` : ""}
         </div>
       </div>`,
     );
@@ -182,8 +192,61 @@ registerRoute({
         content,
         header: selectedHeader,
         membrete: editableMembrete,
+        incluirSello: doc!.incluirSello,
+        selloBase64: doc!.selloBase64,
+        selloOffsetX: doc!.selloOffsetX,
+        selloOffsetY: doc!.selloOffsetY,
       });
+      bindSelloDrag(box);
       return content;
+    };
+
+    /** Sello arrastrable en la vista previa (paridad app): guarda offset normalizado. */
+    const bindSelloDrag = (box: HTMLElement) => {
+      const img = box.querySelector<HTMLImageElement>(".print-sello");
+      const paper = box.querySelector<HTMLElement>(".print-doc");
+      if (!img || !paper) return;
+      img.addEventListener("pointerdown", (ev) => {
+        ev.preventDefault();
+        const paperRect = paper.getBoundingClientRect();
+        const imgRect = img.getBoundingClientRect();
+        const startX = ev.clientX;
+        const startY = ev.clientY;
+        const startLeft = imgRect.left - paperRect.left;
+        const startTop = imgRect.top - paperRect.top;
+        img.classList.add("print-sello-pos");
+        img.style.position = "absolute";
+        img.style.margin = "0";
+        const move = (e: PointerEvent) => {
+          const left = Math.max(
+            0,
+            Math.min(startLeft + e.clientX - startX, paper.clientWidth - img.clientWidth),
+          );
+          const top = Math.max(
+            0,
+            Math.min(startTop + e.clientY - startY, paper.clientHeight - img.clientHeight),
+          );
+          img.style.left = `${left}px`;
+          img.style.top = `${top}px`;
+        };
+        const up = () => {
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          const left = parseFloat(img.style.left) || 0;
+          const top = parseFloat(img.style.top) || 0;
+          const fx = left / Math.max(1, paper.clientWidth - img.clientWidth);
+          const fy = top / Math.max(1, paper.clientHeight - img.clientHeight);
+          doc = saveDocument({ ...doc!, selloOffsetX: fx, selloOffsetY: fy });
+          refreshPreview();
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+      });
+      // Doble clic/toque: vuelve a la posición por defecto.
+      img.addEventListener("dblclick", () => {
+        doc = saveDocument({ ...doc!, selloOffsetX: undefined, selloOffsetY: undefined });
+        refreshPreview();
+      });
     };
 
     refreshPreview();
@@ -191,6 +254,19 @@ registerRoute({
     el.querySelector("#header-select")?.addEventListener("change", (e) => {
       const hid = (e.target as HTMLSelectElement).value;
       selectedHeader = headers.find((h) => h.id === hid) ?? defaultHeader();
+      refreshPreview();
+    });
+
+    el.querySelector("#chk-sello")?.addEventListener("change", (e) => {
+      const checked = (e.target as HTMLInputElement).checked;
+      // El check se guarda al instante; si el doc no tiene sello propio se usa el actual del médico
+      doc = saveDocument({
+        ...doc!,
+        incluirSello: checked,
+        selloBase64:
+          doc!.selloBase64 ??
+          (checked ? loadSello()?.base64 : undefined),
+      });
       refreshPreview();
     });
 
@@ -256,6 +332,21 @@ registerRoute({
       }
       if (tool === "print") {
         doPrint();
+        return;
+      }
+      if (tool === "crear-informe") {
+        // Guarda primero los cambios en edición y luego crea el informe (copia Motivo/EA/Examen físico…)
+        const content = refreshPreview();
+        editableMembrete = readMembreteFromEditor(el, editableMembrete);
+        doc = saveDocument({
+          ...doc!,
+          content,
+          headerId: selectedHeader?.id,
+          headerSnapshot: selectedHeader ? { ...selectedHeader } : doc!.headerSnapshot,
+          membrete: editableMembrete,
+        });
+        const informe = createInformeFromCase(doc);
+        navigate(`/informes/${informe.id}`);
         return;
       }
       if (tool === "share") {

@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.ceoclinicos.clinicosdoc.data.DocumentStorage
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
 import com.ceoclinicos.clinicosdoc.service.DocumentPdfExporter
 import com.ceoclinicos.clinicosdoc.ui.theme.Navy
@@ -77,9 +78,15 @@ fun DocumentPdfActions(document: ClinicalDocument, modifier: Modifier = Modifier
     }
 
     if (showPreview) {
+        var previewDoc by remember(document) { mutableStateOf(document) }
         DocumentPreviewDialog(
-            document = document,
+            document = previewDoc,
             onDismiss = { showPreview = false },
+            onSelloPositionChanged = { fx, fy ->
+                val updated = previewDoc.copy(selloOffsetX = fx, selloOffsetY = fy)
+                previewDoc = updated
+                DocumentStorage.update(context, updated)
+            },
         )
     }
 }

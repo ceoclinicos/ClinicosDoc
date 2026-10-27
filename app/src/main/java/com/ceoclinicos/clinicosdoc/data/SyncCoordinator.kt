@@ -251,6 +251,12 @@ object SyncCoordinator {
         }
     }
 
+    fun afterSelloSaved(context: Context, sello: SelloMedico?) {
+        scheduleDebounced(context, "sello") { userId, appContext ->
+            CloudSyncService.pushSello(appContext, userId, sello?.base64.orEmpty())
+        }
+    }
+
     fun afterProfileSaved(context: Context, profile: DoctorProfile) {
         scheduleDebounced(context, "profile") { userId, appContext ->
             val latest = DoctorStorage.loadProfile(appContext) ?: profile

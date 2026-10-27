@@ -40,6 +40,12 @@
             </intent-filter>
         </activity>
 
+        <!-- La librería de recorte (CanHub) usa AppCompatActivity; necesita un
+             tema AppCompat porque el tema de la app es Material de plataforma. -->
+        <activity
+            android:name="com.canhub.cropper.CropImageActivity"
+            android:theme="@style/Base.Theme.AppCompat" />
+
         <receiver
             android:name=".receiver.AppointmentReminderReceiver"
             android:exported="false" />

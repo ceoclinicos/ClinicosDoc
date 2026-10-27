@@ -9,6 +9,8 @@ import "./drafts";
 import "./redactar";
 import "./generar-ordenes";
 import "./settings";
+import "./recipes";
 import "./plantillas/hub";
 import "./plantillas/physical-exam";
 import "./plantillas/templates";
+import "./plantillas/sello";

@@ -12,7 +12,7 @@ object PhysicalExamCatalogStorage {
     private const val KEY = "physical_exam_catalog_json"
     private const val INITIALIZED_KEY = "physical_exam_catalog_initialized"
     private const val ORDER_VERSION_KEY = "physical_exam_order_version"
-    private const val ORDER_VERSION = 4
+    private const val ORDER_VERSION = 5
     private val gson = Gson()
 
     private fun prefs(context: Context) =
@@ -35,12 +35,28 @@ object PhysicalExamCatalogStorage {
     private fun migrateSortOrder(context: Context) {
         val p = prefs(context)
         if (p.getInt(ORDER_VERSION_KEY, 1) >= ORDER_VERSION) return
-        val updated = loadAll(context).map { system ->
+        val existing = loadAll(context)
+        val missing = PhysicalExamDefaults.builtIn.filter { b -> existing.none { it.id == b.id } }
+        val updated = (existing + missing).map { system ->
             val order = PhysicalExamDefaults.displayPriority[system.id] ?: system.sortOrder
             system.copy(sortOrder = order)
         }
         saveAllLocal(context, reportDisplayOrder(updated))
         p.edit().putInt(ORDER_VERSION_KEY, ORDER_VERSION).persist()
+        SyncCoordinator.afterPhysicalExamCatalogBulkSaved(context)
+    }
+
+    /** Restablece el catálogo a los sistemas incorporados (borra los personalizados). */
+    fun resetToDefaults(context: Context) {
+        val builtInIds = PhysicalExamDefaults.builtIn.map { it.id }.toSet()
+        loadAll(context)
+            .filter { it.id !in builtInIds }
+            .forEach { SyncCoordinator.afterPhysicalExamSystemDeleted(context, it.id) }
+        saveAllLocal(context, PhysicalExamDefaults.builtIn)
+        prefs(context).edit()
+            .putBoolean(INITIALIZED_KEY, true)
+            .putInt(ORDER_VERSION_KEY, ORDER_VERSION)
+            .persist()
         SyncCoordinator.afterPhysicalExamCatalogBulkSaved(context)
     }
 
@@ -95,6 +111,12 @@ object PhysicalExamCatalogStorage {
             catalog,
         )
         return reportDisplayOrder(catalog.filter { it.id in ids.toSet() })
+    }
+
+    /** Agrega sistemas incorporados ausentes (usado al fusionar catálogo desde la nube). */
+    fun withBuiltIns(systems: List<PhysicalExamSystem>): List<PhysicalExamSystem> {
+        val missing = PhysicalExamDefaults.builtIn.filter { b -> systems.none { it.id == b.id } }
+        return reportDisplayOrder(systems + missing)
     }
 
     /** Orden: sortOrder del usuario (subir/bajar), luego prioridad clínica. */

@@ -24,6 +24,8 @@ object RecetaDefaults {
         "Ungüento",
         "Gel",
         "Inyectable",
+        "Ampollas",
+        "Inhalador",
         "Sobres",
         "Óvulos",
         "Otro",

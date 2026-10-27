@@ -51,6 +51,10 @@ object EnfermedadActualStorage {
         ).persist()
     }
 
+    fun reset(context: Context) {
+        prefs(context).edit().remove(KEY).persist()
+    }
+
     fun resolved(ejemploPlantilla: String, context: Context): String =
         ejemploPlantilla.trim().ifBlank { load(context) }
 }

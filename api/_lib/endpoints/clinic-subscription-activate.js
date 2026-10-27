@@ -1,9 +1,9 @@
-const { getAdmin } = require("./_lib/firebase");
-const { applyCors } = require("./_lib/cors");
-const { parseBody } = require("./_lib/body");
-const { apiError } = require("./_lib/errors");
-const { requireAppAuth } = require("./_lib/require-app-auth");
-const { activateClinicSubscription, TIERS } = require("./_lib/clinic-entitlements");
+const { getAdmin } = require("../firebase");
+const { applyCors } = require("../cors");
+const { parseBody } = require("../body");
+const { apiError } = require("../errors");
+const { requireAppAuth } = require("../require-app-auth");
+const { activateClinicSubscription, TIERS } = require("../clinic-entitlements");
 
 module.exports = async function handler(req, res) {
   applyCors(res);
@@ -23,7 +23,7 @@ module.exports = async function handler(req, res) {
       return res.status(403).json({ error: "Solo cuentas de centro pueden suscribirse" });
     }
     const body = parseBody(req);
-    const tier = String(body.tier || "tier_50").trim();
+    const tier = String(body.tier || "tier_10").trim();
     const status = await activateClinicSubscription(getAdmin().firestore(), auth.uid, tier);
     const label = TIERS[tier]?.label || tier;
     return res.status(200).json({

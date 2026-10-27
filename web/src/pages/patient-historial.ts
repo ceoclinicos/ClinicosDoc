@@ -37,7 +37,7 @@ registerRoute({
       nombre,
       `
       <p class="muted"><a href="#/pacientes">← Pacientes</a></p>
-      <p class="lead">C.I. ${escapeHtml(cedNorm || cedulaRaw || "—")} · ${escapeHtml(String(edad))}</p>
+      <p class="lead">C.I. ${escapeHtml(cedNorm || cedulaRaw || (patientId ? "S/C" : "—"))} · ${escapeHtml(String(edad))}</p>
       ${
         docs.length === 0
           ? emptyState("Sin informes para este paciente.", "Redactar", "/")

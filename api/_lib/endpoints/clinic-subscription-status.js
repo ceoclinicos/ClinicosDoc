@@ -1,8 +1,8 @@
-const { getAdmin } = require("./_lib/firebase");
-const { applyCors } = require("./_lib/cors");
-const { apiError } = require("./_lib/errors");
-const { requireAppAuth } = require("./_lib/require-app-auth");
-const { getClinicStatus } = require("./_lib/clinic-entitlements");
+const { getAdmin } = require("../firebase");
+const { applyCors } = require("../cors");
+const { apiError } = require("../errors");
+const { requireAppAuth } = require("../require-app-auth");
+const { getClinicStatus } = require("../clinic-entitlements");
 
 module.exports = async function handler(req, res) {
   applyCors(res);

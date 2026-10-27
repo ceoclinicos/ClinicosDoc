@@ -7,6 +7,11 @@ import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
 fun DocumentPreviewDialog(
     document: ClinicalDocument,
     onDismiss: () -> Unit,
+    onSelloPositionChanged: ((Float?, Float?) -> Unit)? = null,
 ) {
-    DocumentPdfPreviewDialog(document = document, onDismiss = onDismiss)
+    DocumentPdfPreviewDialog(
+        document = document,
+        onDismiss = onDismiss,
+        onSelloPositionChanged = onSelloPositionChanged,
+    )
 }

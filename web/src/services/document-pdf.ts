@@ -124,12 +124,37 @@ export function renderContentHtml(content: string): string {
     .join("");
 }
 
+/** Sello médico al pie del documento: cuadrado ≈ 1/5 del ancho útil (paridad app). */
+export function renderSelloHtml(options: {
+  incluirSello?: boolean;
+  selloBase64?: string;
+  selloOffsetX?: number;
+  selloOffsetY?: number;
+}): string {
+  if (!options.incluirSello || !options.selloBase64) return "";
+  const src = options.selloBase64.startsWith("data:")
+    ? options.selloBase64
+    : `data:image/jpeg;base64,${options.selloBase64}`;
+  const hasOffset = options.selloOffsetX != null && options.selloOffsetY != null;
+  if (hasOffset) {
+    const x = Math.min(1, Math.max(0, options.selloOffsetX!));
+    const y = Math.min(1, Math.max(0, options.selloOffsetY!));
+    // Offset normalizado vs. (lado disponible − sello), como en la app
+    return `<img class="print-sello print-sello-pos" src="${src}" alt="Sello médico" style="left: calc(${x * 100}% - ${x * 36}mm); top: calc(${y * 100}% - ${y * 36}mm);" />`;
+  }
+  return `<img class="print-sello" src="${src}" alt="Sello médico" />`;
+}
+
 export function buildFullDocumentHtml(options: {
   type: DocumentType;
   content: string;
   header?: DocumentHeader | null;
   membrete?: PatientMembrete | null;
   patientCedula?: string;
+  incluirSello?: boolean;
+  selloBase64?: string;
+  selloOffsetX?: number;
+  selloOffsetY?: number;
 }): string {
   if (options.type === "receta") {
     return buildRecetaLandscapeHtml(options);
@@ -143,6 +168,7 @@ export function buildFullDocumentHtml(options: {
       ${renderMembreteHtml(options.membrete, options.type)}
       <hr class="print-rule" />
       ${renderContentHtml(options.content)}
+      ${renderSelloHtml(options)}
     </div>
   `;
 }
@@ -227,6 +253,10 @@ export function printClinicalDocument(doc: {
   membrete?: PatientMembrete | null;
   patientNombre?: string;
   patientCedula?: string;
+  incluirSello?: boolean;
+  selloBase64?: string;
+  selloOffsetX?: number;
+  selloOffsetY?: number;
 }): void {
   const bodyHtml = buildFullDocumentHtml(doc);
   const isReceta = doc.type === "receta";
@@ -239,7 +269,9 @@ export function printClinicalDocument(doc: {
     @page { size: ${isReceta ? "A4 landscape" : "A4"}; margin: ${isReceta ? "8mm 8mm 9.6mm 8mm" : "12mm 16mm 19.2mm 16mm"}; }
     html, body { background: #fff; }
     body { font-family: "Times New Roman", Times, Georgia, serif; color: #111; margin: 0; line-height: 1.45; }
-    .print-doc { max-width: 180mm; margin: 0 auto; padding: 8mm 14mm 14.4mm 14mm; }
+    .print-doc { max-width: 180mm; margin: 0 auto; padding: 8mm 14mm 14.4mm 14mm; position: relative; }
+    .print-sello { display: block; width: 36mm; height: auto; margin: 10mm auto 0; }
+    .print-sello-pos { position: absolute; margin: 0; }
     .print-doc.print-receta {
       max-width: none;
       padding: 0;
@@ -415,13 +447,19 @@ export function printFromClinicalDocument(doc: ClinicalDocument): void {
     membrete: doc.membrete,
     patientNombre: doc.patientNombre,
     patientCedula: doc.patientCedula,
+    incluirSello: doc.incluirSello,
+    selloBase64: doc.selloBase64,
+    selloOffsetX: doc.selloOffsetX,
+    selloOffsetY: doc.selloOffsetY,
   });
 }
 
 const PRINT_CSS = `
   html, body { background: #fff; margin: 0; }
   body { font-family: "Times New Roman", Times, Georgia, serif; color: #111; line-height: 1.45; }
-  .print-doc { max-width: 180mm; margin: 0 auto; padding: 8mm 14mm 14.4mm 14mm; }
+  .print-doc { max-width: 180mm; margin: 0 auto; padding: 8mm 14mm 14.4mm 14mm; position: relative; }
+  .print-sello { display: block; width: 36mm; height: auto; margin: 10mm auto 0; }
+  .print-sello-pos { position: absolute; margin: 0; }
   .print-doc.print-receta {
     max-width: none; padding: 0; display: flex; flex-direction: row; min-height: 180mm; gap: 0;
   }
@@ -464,6 +502,10 @@ export async function downloadClinicalPdf(doc: {
   membrete?: PatientMembrete | null;
   patientNombre?: string;
   patientCedula?: string;
+  incluirSello?: boolean;
+  selloBase64?: string;
+  selloOffsetX?: number;
+  selloOffsetY?: number;
 }): Promise<void> {
   const html2pdf = (await import("html2pdf.js")).default;
   const isReceta = doc.type === "receta";
@@ -517,5 +559,9 @@ export async function downloadFromClinicalDocument(doc: ClinicalDocument): Promi
     membrete: doc.membrete,
     patientNombre: doc.patientNombre,
     patientCedula: doc.patientCedula,
+    incluirSello: doc.incluirSello,
+    selloBase64: doc.selloBase64,
+    selloOffsetX: doc.selloOffsetX,
+    selloOffsetY: doc.selloOffsetY,
   });
 }

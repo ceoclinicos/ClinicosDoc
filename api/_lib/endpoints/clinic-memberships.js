@@ -1,10 +1,11 @@
-const { getAdmin } = require("./_lib/firebase");
-const { normalizeCedula, cedulaLookupKeys } = require("./_lib/pin");
-const { applyCors } = require("./_lib/cors");
-const { parseBody } = require("./_lib/body");
-const { apiError } = require("./_lib/errors");
-const { isInviteExpired, deleteDoctorInvitation, listDoctorInvitations } = require("./_lib/invite-expiry");
-const { requireMedicoAuth } = require("./_lib/require-medico");
+const { getAdmin } = require("../firebase");
+const { normalizeCedula, cedulaLookupKeys } = require("../pin");
+const { applyCors } = require("../cors");
+const { parseBody } = require("../body");
+const { apiError } = require("../errors");
+const { isInviteExpired, deleteDoctorInvitation, listDoctorInvitations } = require("../invite-expiry");
+const { requireMedicoAuth } = require("../require-medico");
+const { loadLeftClinicIds } = require("../clinic-left");
 
 async function resolveDoctorCedula(db, uid, decoded, body) {
   const fromBody = normalizeCedula(body.doctorCedula || "");
@@ -16,7 +17,7 @@ async function resolveDoctorCedula(db, uid, decoded, body) {
   return normalizeCedula(data.cedulaNormalizada || data.cedula || "");
 }
 
-async function membershipsFromUser(db, uid) {
+async function membershipsFromUser(db, uid, leftIds) {
   const snap = await db
     .collection("clinicosdoc_user")
     .doc(uid)
@@ -27,6 +28,10 @@ async function membershipsFromUser(db, uid) {
     const data = d.data() || {};
     const clinicId = String(data.clinicId || d.id);
     if (!clinicId) continue;
+    if (leftIds.has(clinicId)) {
+      await d.ref.delete().catch(() => {});
+      continue;
+    }
     const clinicSnap = await db.collection("clinicosdoc_clinics").doc(clinicId).get();
     if (!clinicSnap.exists) {
       await d.ref.delete().catch(() => {});
@@ -68,7 +73,7 @@ async function pendingInvitesForDoctor(db, cedula, uid) {
  * Repara clinic_memberships si el médico ya está en members.
  * Preferencia: collectionGroup (rápido). Fallback: escaneo acotado de clínicas.
  */
-async function healFromClinics(db, uid, cedula) {
+async function healFromClinics(db, uid, cedula, leftIds) {
   if (!cedula || cedula.length < 7) return [];
   const keys = cedulaLookupKeys(cedula);
   const out = [];
@@ -77,8 +82,16 @@ async function healFromClinics(db, uid, cedula) {
   async function recordMember(clinicRef, memberSnap) {
     const clinicId = clinicRef.id;
     if (seen.has(clinicId)) return;
+    if (leftIds.has(clinicId)) {
+      // Médico ya salió: limpiar resto huérfano y no re-agregar.
+      await memberSnap.ref.delete().catch(() => {});
+      return;
+    }
     const clinicSnap = await clinicRef.get();
-    if (!clinicSnap.exists) return;
+    if (!clinicSnap.exists) {
+      await memberSnap.ref.delete().catch(() => {});
+      return;
+    }
     seen.add(clinicId);
     const clinicName = String(clinicSnap.data()?.nombre || "Centro");
     const role = String(memberSnap?.data()?.role || "medico");
@@ -109,7 +122,7 @@ async function healFromClinics(db, uid, cedula) {
   if (!out.length) {
     const clinicsSnap = await db.collection("clinicosdoc_clinics").limit(300).get();
     for (const clinicDoc of clinicsSnap.docs) {
-      if (seen.has(clinicDoc.id)) continue;
+      if (seen.has(clinicDoc.id) || leftIds.has(clinicDoc.id)) continue;
       let memberSnap = null;
       for (const key of keys) {
         const snap = await clinicDoc.ref.collection("members").doc(key).get();
@@ -151,10 +164,11 @@ module.exports = async function handler(req, res) {
     const forceHeal = Boolean(body.forceHeal);
     const cedula = await resolveDoctorCedula(db, uid, decoded, body);
 
-    let memberships = await membershipsFromUser(db, uid);
+    const leftIds = await loadLeftClinicIds(db, uid);
+    let memberships = await membershipsFromUser(db, uid, leftIds);
     if (!memberships.length || forceHeal) {
-      const healed = await healFromClinics(db, uid, cedula);
-      memberships = mergeMemberships(memberships, healed);
+      const healed = await healFromClinics(db, uid, cedula, leftIds);
+      memberships = mergeMemberships(memberships, healed).filter((m) => !leftIds.has(m.clinicId));
     }
 
     const pendingInvitations = await pendingInvitesForDoctor(db, cedula, uid);

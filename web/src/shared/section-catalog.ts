@@ -19,6 +19,7 @@ export const SectionCatalog = {
   INDICACIONES: "Indicaciones",
   ORDENES: "Órdenes",
   RECIPE: "Recipe",
+  NOTA: "Nota",
 } as const;
 
 export function catalogFor(type: DocumentType): string[] {
@@ -47,6 +48,7 @@ export function catalogFor(type: DocumentType): string[] {
         SectionCatalog.DIAGNOSTICO,
         SectionCatalog.CONCLUSIONES,
         SectionCatalog.PLAN,
+        SectionCatalog.NOTA,
       ];
     case "reposo":
       return [
@@ -71,13 +73,14 @@ export function catalogFor(type: DocumentType): string[] {
 export function defaultSectionsFor(type: DocumentType): string[] {
   switch (type) {
     case "informe":
-      // Primera vez: solo núcleo clínico (Conclusiones/Plan desmarcados)
+      // Primera vez: solo núcleo clínico + Nota (Conclusiones/Plan desmarcados)
       return [
         SectionCatalog.DATOS_PACIENTE,
         SectionCatalog.MOTIVO_CONSULTA,
         SectionCatalog.ENFERMEDAD_ACTUAL,
         SectionCatalog.EXAMEN_FISICO,
         SectionCatalog.DIAGNOSTICO,
+        SectionCatalog.NOTA,
       ];
     case "reposo":
       // Igual al informe + días de reposo
@@ -114,8 +117,23 @@ const INFORME_LEGACY_FULL = [
   "Recomendaciones",
 ];
 
+/** Catálogo completo anterior (con "Plan", antes de agregar "Nota"). */
+const INFORME_LEGACY_FULL_PLAN = [
+  SectionCatalog.DATOS_PACIENTE,
+  SectionCatalog.MOTIVO_CONSULTA,
+  SectionCatalog.ENFERMEDAD_ACTUAL,
+  SectionCatalog.EXAMEN_FISICO,
+  SectionCatalog.DIAGNOSTICO,
+  SectionCatalog.CONCLUSIONES,
+  SectionCatalog.PLAN,
+];
+
 export function isLegacyInformeAllChecked(sections: string[]): boolean {
-  return sameSections(sections, INFORME_FULL_CATALOG) || sameSections(sections, INFORME_LEGACY_FULL);
+  return (
+    sameSections(sections, INFORME_FULL_CATALOG) ||
+    sameSections(sections, INFORME_LEGACY_FULL) ||
+    sameSections(sections, INFORME_LEGACY_FULL_PLAN)
+  );
 }
 
 export function normalizeTemplateSections(type: DocumentType, sections: string[]): string[] {

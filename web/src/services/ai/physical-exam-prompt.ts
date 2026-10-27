@@ -1,11 +1,16 @@
-import { PhysicalExamDefaults, displayPriority, PathologicalStyleExamples } from "../../shared/physical-exam-defaults";
+import {
+  PhysicalExamDefaults,
+  DefaultEnabledExamIds,
+  displayPriority,
+  PathologicalStyleExamples,
+} from "../../shared/physical-exam-defaults";
 import type { DocumentTemplate, PhysicalExamSystem } from "../../shared/models";
 import { loadJson } from "../local-store";
-import { clinicalOrder, orderEnabledByCatalog } from "../exam-catalog";
+import { clinicalOrder, orderEnabledByCatalog, withBuiltIns } from "../exam-catalog";
 
 function loadCatalog(): PhysicalExamSystem[] {
   const stored = loadJson<PhysicalExamSystem[]>("physical_exam", []);
-  return stored.length ? clinicalOrder(stored) : PhysicalExamDefaults;
+  return stored.length ? clinicalOrder(withBuiltIns(stored)) : PhysicalExamDefaults;
 }
 
 function reportDisplayOrder(systems: PhysicalExamSystem[]): PhysicalExamSystem[] {
@@ -31,7 +36,7 @@ export function resolveSystemsForReport(
   const ids = orderEnabledByCatalog(
     template.enabledPhysicalExamSystemIds?.length
       ? template.enabledPhysicalExamSystemIds
-      : PhysicalExamDefaults.map((s) => s.id),
+      : DefaultEnabledExamIds,
     catalog,
   );
   return reportDisplayOrder(

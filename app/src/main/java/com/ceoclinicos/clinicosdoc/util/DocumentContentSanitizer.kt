@@ -11,7 +11,7 @@ private val DOCUMENT_TITLE_LINE = Regex(
 )
 private val EXAMEN_FISICO_SECTION = Regex("""(?i)^examen\s+f[ií]sico$""")
 private val SYSTEM_LINE_START = Regex(
-    """(?i)^(signos\s+vitales|general|piel|cabeza(\s+y\s+|\s*/\s*)?cuello|cardiopulmonar|abdomen|extremidades|neurol[oó]gico)\s*[:\-]?\s*""",
+    """(?i)^(signos\s+vitales|general|piel|cabeza(\s+y\s+|\s*/\s*)?cuello|ojos|o[ií]dos|nariz|boca(\s+y\s+faringe)?|cardiopulmonar|abdomen|extremidades|neurol[oó]gico)\s*[:\-]?\s*""",
 )
 
 fun sanitizeDocumentContent(
@@ -58,6 +58,10 @@ private fun normalizeSystemKey(name: String): String {
         n.startsWith("general") -> "general"
         n.startsWith("piel") -> "piel"
         n.startsWith("cabeza") -> "cabeza"
+        n.startsWith("ojos") -> "ojos"
+        n.startsWith("oídos") || n.startsWith("oidos") -> "oidos"
+        n.startsWith("nariz") -> "nariz"
+        n.startsWith("boca") || n.startsWith("faringe") -> "boca_faringe"
         n.startsWith("cardiopulmonar") || n.startsWith("cardio") -> "cardio"
         n.startsWith("abdomen") -> "abdomen"
         n.startsWith("extremidades") -> "extremidades"

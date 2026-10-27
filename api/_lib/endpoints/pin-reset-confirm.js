@@ -1,8 +1,8 @@
-const { getAdmin } = require("./_lib/firebase");
-const { hashPin, assertPin6, hashPassword } = require("./_lib/pin");
-const { applyCors } = require("./_lib/cors");
-const { parseBody } = require("./_lib/body");
-const { apiError } = require("./_lib/errors");
+const { getAdmin } = require("../firebase");
+const { hashPin, assertPin6, hashPassword } = require("../pin");
+const { applyCors } = require("../cors");
+const { parseBody } = require("../body");
+const { apiError } = require("../errors");
 
 module.exports = async function handler(req, res) {
   applyCors(res);

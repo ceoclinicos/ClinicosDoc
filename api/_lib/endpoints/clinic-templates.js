@@ -1,10 +1,11 @@
-const { getAdmin } = require("./_lib/firebase");
-const { normalizeCedula } = require("./_lib/pin");
-const { applyCors } = require("./_lib/cors");
-const { parseBody } = require("./_lib/body");
-const { apiError } = require("./_lib/errors");
-const { requireMedicoAuth } = require("./_lib/require-medico");
-const { ensureClinicDefaultCatalog } = require("./_lib/clinic-defaults");
+const { getAdmin } = require("../firebase");
+const { normalizeCedula } = require("../pin");
+const { applyCors } = require("../cors");
+const { parseBody } = require("../body");
+const { apiError } = require("../errors");
+const { requireMedicoAuth } = require("../require-medico");
+const { ensureClinicDefaultCatalog } = require("../clinic-defaults");
+const { getClinicStatus } = require("../clinic-entitlements");
 
 async function assertClinicAccess(db, uid, clinicId, cedula) {
   const memberSnap = await db
@@ -75,8 +76,9 @@ module.exports = async function handler(req, res) {
     const headers = ensured.headers;
     const clinicAfter = await db.collection("clinicosdoc_clinics").doc(clinicId).get();
     const templatesVersion = Number(clinicAfter.data()?.templatesVersion || 0) || 0;
+    const subscription = await getClinicStatus(db, clinicId).catch(() => null);
 
-    return res.status(200).json({ templates, headers, templatesVersion });
+    return res.status(200).json({ templates, headers, templatesVersion, subscription });
   } catch (err) {
     const status = err?.status || (err?.code === "auth/id-token-expired" ? 401 : 500);
     if (status < 500) {

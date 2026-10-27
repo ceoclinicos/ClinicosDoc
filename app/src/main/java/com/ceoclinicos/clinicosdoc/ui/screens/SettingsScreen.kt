@@ -9,13 +9,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.LocalHospital
+import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.ViewList
 import androidx.compose.material.icons.outlined.WorkspacePremium
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,7 +29,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.ceoclinicos.clinicosdoc.data.EnfermedadActualStorage
 import com.ceoclinicos.clinicosdoc.data.OnboardingStorage
+import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
+import com.ceoclinicos.clinicosdoc.data.SelloStorage
+import com.ceoclinicos.clinicosdoc.data.TemplateStorage
 import com.ceoclinicos.clinicosdoc.service.EntitlementStatus
 import com.ceoclinicos.clinicosdoc.service.SubscriptionService
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
@@ -47,6 +54,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showTutorial by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
     var plan by remember { mutableStateOf<EntitlementStatus?>(null) }
     var planLoading by remember { mutableStateOf(true) }
     var activating by remember { mutableStateOf(false) }
@@ -55,6 +63,39 @@ fun SettingsScreen(
         planLoading = true
         plan = SubscriptionService.fetchStatus().getOrNull()
         planLoading = false
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text("Restablecer configuración") },
+            text = {
+                Text(
+                    "Volverán a los valores de fábrica: plantillas de documento, catálogo de examen " +
+                        "físico, sello médico y ejemplo de enfermedad actual.\n\n" +
+                        "NO se borran: encabezados, informes, historias, pacientes, citas ni borradores.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showResetDialog = false
+                        TemplateStorage.resetToDefaults(context)
+                        PhysicalExamCatalogStorage.resetToDefaults(context)
+                        SelloStorage.clear(context)
+                        EnfermedadActualStorage.reset(context)
+                        Toast.makeText(context, "Configuración restablecida", Toast.LENGTH_SHORT).show()
+                    },
+                ) {
+                    Text("Restablecer")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancelar")
+                }
+            },
+        )
     }
 
     if (showTutorial) {
@@ -150,6 +191,13 @@ fun SettingsScreen(
                 "Encabezados para PDF",
                 "Logo, datos del médico y líneas personalizables",
                 onClick = onHeaders,
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            SettingsTile(
+                Icons.Outlined.RestartAlt,
+                "Restablecer configuración",
+                "Vuelve plantillas, examen físico y sello a fábrica (sin borrar datos)",
+                onClick = { showResetDialog = true },
             )
         }
     }

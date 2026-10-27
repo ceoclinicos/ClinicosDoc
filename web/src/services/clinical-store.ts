@@ -1,6 +1,11 @@
 /** Persistencia local de plantillas, encabezados y documentos (paridad con la app). */
 import { DocumentTypeLabels, type ClinicalDocument, type ClinicalDraft, type DocumentHeader, type DocumentTemplate, type DocumentType } from "../shared/models";
-import { defaultSectionsFor, isLegacyInformeAllChecked, normalizeTemplateSections } from "../shared/section-catalog";
+import {
+  SectionCatalog,
+  defaultSectionsFor,
+  isLegacyInformeAllChecked,
+  normalizeTemplateSections,
+} from "../shared/section-catalog";
 import { ENFERMEDAD_ACTUAL_EJEMPLO_DEFAULT } from "../shared/enfermedad-actual";
 import { ORDENES_MOLDE_EJEMPLO, ORDENES_SECTION } from "../shared/ordenes-medicas";
 import {
@@ -9,7 +14,7 @@ import {
   RECETA_MOLDE_RECIPE,
   RECIPE_SECTION,
 } from "../shared/receta";
-import { PhysicalExamDefaults } from "../shared/physical-exam-defaults";
+import { DefaultEnabledExamIds } from "../shared/physical-exam-defaults";
 import { loadExamCatalog, orderEnabledByCatalog } from "./exam-catalog";
 import { loadJson, saveJson } from "./local-store";
 import {
@@ -39,10 +44,7 @@ const DOC_TYPES: DocumentType[] = [
 ];
 
 function defaultExamSystemIds(): string[] {
-  return orderEnabledByCatalog(
-    PhysicalExamDefaults.map((s) => s.id),
-    loadExamCatalog(),
-  );
+  return orderEnabledByCatalog(DefaultEnabledExamIds, loadExamCatalog());
 }
 
 function makeDefaultTemplates(): DocumentTemplate[] {
@@ -67,6 +69,10 @@ function makeDefaultTemplates(): DocumentTemplate[] {
   }));
 }
 
+const KEY_TPL_VERSION = "templates_sections_version";
+/** Versión actual de secciones predeterminadas (paridad HC_SECTIONS_VERSION app). */
+const TPL_SECTIONS_VERSION = 1;
+
 export function loadTemplates(): DocumentTemplate[] {
   let list = loadJson<DocumentTemplate[]>(KEY_TEMPLATES, []).filter(
     (t) => t.documentType !== "reposo",
@@ -74,9 +80,23 @@ export function loadTemplates(): DocumentTemplate[] {
   if (list.length === 0) {
     list = makeDefaultTemplates();
     saveJson(KEY_TEMPLATES, list);
+    saveJson(KEY_TPL_VERSION, TPL_SECTIONS_VERSION);
     return list;
   }
   let changed = false;
+
+  // Migración: plantillas de informe sin "Nota" reciben la sección (una sola vez).
+  const tplVersion = loadJson<number>(KEY_TPL_VERSION, 0);
+  if (tplVersion < TPL_SECTIONS_VERSION) {
+    list = list.map((t) =>
+      t.documentType === "informe" && !t.sections.includes(SectionCatalog.NOTA)
+        ? { ...t, sections: [...t.sections, SectionCatalog.NOTA] }
+        : t,
+    );
+    saveJson(KEY_TPL_VERSION, TPL_SECTIONS_VERSION);
+    changed = true;
+  }
+
   const ensured = DOC_TYPES.map((type) => {
     const ofType = list.filter((t) => t.documentType === type);
     let tpl =
@@ -173,6 +193,21 @@ export function upsertTemplate(template: DocumentTemplate): DocumentTemplate {
     );
   }
   return normalized;
+}
+
+/** Restablece las plantillas a fábrica conservando IDs para sobrescribir en la nube. */
+export function resetTemplatesToDefaults(): DocumentTemplate[] {
+  const existing = loadTemplates();
+  const defaults = makeDefaultTemplates().map((t) => {
+    const same = existing.find((e) => e.documentType === t.documentType);
+    return same ? { ...t, id: same.id } : t;
+  });
+  saveJson(KEY_TEMPLATES, defaults);
+  saveJson(KEY_TPL_VERSION, TPL_SECTIONS_VERSION);
+  if (canSync()) {
+    defaults.forEach((t) => syncQuiet(() => pushTemplate(t)));
+  }
+  return defaults;
 }
 
 export function templateForType(type: DocumentType): DocumentTemplate {
@@ -303,6 +338,7 @@ export function deleteDocument(id: string): void {
       deleteDocumentCloud(id, {
         patientCedula: existing?.patientCedula,
         patientNombre: existing?.patientNombre,
+        patientId: existing?.patientId,
       }),
     );
   }

@@ -123,8 +123,10 @@ object HeaderStorage {
 
     fun delete(context: Context, id: String) {
         val all = loadAll(context)
-        all.firstOrNull { it.id == id }?.logoPath?.let { path ->
-            File(path).takeIf { it.exists() }?.delete()
+        all.firstOrNull { it.id == id }?.let { header ->
+            header.logoPath?.let { File(it).takeIf { f -> f.exists() }?.delete() }
+            File(File(context.filesDir, "header_logos"), "${id}_sello.jpg")
+                .takeIf { it.exists() }?.delete()
         }
         saveAllLocal(context, all.filterNot { it.id == id })
         SyncCoordinator.afterHeaderDeleted(context, id)
@@ -133,9 +135,19 @@ object HeaderStorage {
     /**
      * Acepta la imagen completa (cuadrada o rectangular).
      * Si es rectangular, crea un cuadrado del lado mayor y rellena el resto en blanco.
-     * El lado del cuadrado final queda entre 256 y 1024 px (escala si hace falta).
+     * El lado del cuadrado final queda entre [minSide] y 1024 px (escala si hace falta).
      */
-    fun persistLogo(context: Context, uri: Uri, headerId: String): LogoPersistResult {
+    fun persistLogo(context: Context, uri: Uri, headerId: String): LogoPersistResult =
+        persistImage(context, uri, destFileName = "$headerId.jpg")
+
+    fun persistImage(
+        context: Context,
+        uri: Uri,
+        destFileName: String,
+        minSide: Int = MIN_LOGO_SIDE,
+        /** Si es true, centra la imagen en un cuadrado blanco; si no, guarda el tamaño exacto. */
+        padToSquare: Boolean = true,
+    ): LogoPersistResult {
         val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
             BitmapFactory.decodeStream(input)
         } ?: error("No se pudo decodificar la imagen")
@@ -145,11 +157,11 @@ object HeaderStorage {
             if (w < 1 || h < 1) error("No se pudo leer la imagen")
 
             val longest = maxOf(w, h)
-            if (longest < MIN_LOGO_SIDE) {
-                error("La imagen es demasiado pequeña (mínimo ${MIN_LOGO_SIDE} px en el lado mayor)")
+            if (longest < minSide) {
+                error("La imagen es demasiado pequeña (mínimo $minSide px en el lado mayor)")
             }
 
-            // Escala para que el cuadrado final no pase de 1024
+            // Escala para que el lado mayor no pase de 1024
             val scale = if (longest > MAX_LOGO_SIDE) {
                 MAX_LOGO_SIDE.toFloat() / longest
             } else {
@@ -157,32 +169,37 @@ object HeaderStorage {
             }
             val drawW = (w * scale).toInt().coerceAtLeast(1)
             val drawH = (h * scale).toInt().coerceAtLeast(1)
-            val side = maxOf(drawW, drawH).coerceIn(MIN_LOGO_SIDE, MAX_LOGO_SIDE)
 
-            val square = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
-            val canvas = android.graphics.Canvas(square)
-            canvas.drawColor(android.graphics.Color.WHITE)
-            val left = (side - drawW) / 2f
-            val top = (side - drawH) / 2f
-            val src = android.graphics.Rect(0, 0, w, h)
-            val dst = android.graphics.RectF(left, top, left + drawW, top + drawH)
-            val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
-            canvas.drawBitmap(bitmap, src, dst, paint)
+            val output: Bitmap = if (padToSquare) {
+                val side = maxOf(drawW, drawH).coerceIn(minSide, MAX_LOGO_SIDE)
+                Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888).also { square ->
+                    val canvas = android.graphics.Canvas(square)
+                    canvas.drawColor(android.graphics.Color.WHITE)
+                    val left = (side - drawW) / 2f
+                    val top = (side - drawH) / 2f
+                    val src = android.graphics.Rect(0, 0, w, h)
+                    val dst = android.graphics.RectF(left, top, left + drawW, top + drawH)
+                    val paint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
+                    canvas.drawBitmap(bitmap, src, dst, paint)
+                }
+            } else {
+                Bitmap.createScaledBitmap(bitmap, drawW, drawH, true)
+            }
 
             try {
                 val bytes = ByteArrayOutputStream().use { out ->
-                    if (!square.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
-                        error("No se pudo comprimir el logo")
+                    if (!output.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)) {
+                        error("No se pudo comprimir la imagen")
                     }
                     out.toByteArray()
                 }
                 val logosDir = File(context.filesDir, "header_logos").apply { mkdirs() }
-                val dest = File(logosDir, "$headerId.jpg")
+                val dest = File(logosDir, destFileName)
                 dest.writeBytes(bytes)
                 val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                 return LogoPersistResult(path = dest.absolutePath, base64 = base64)
             } finally {
-                square.recycle()
+                output.recycle()
             }
         } finally {
             bitmap.recycle()
@@ -190,31 +207,49 @@ object HeaderStorage {
     }
 
     /** Escribe logo desde base64 de Firestore a archivo local. */
-    fun materializeLogo(context: Context, headerId: String, base64: String?): String? {
+    fun materializeLogo(context: Context, headerId: String, base64: String?): String? =
+        materializeImage(context, "$headerId.jpg", base64)
+
+    private fun materializeImage(context: Context, fileName: String, base64: String?): String? {
         if (base64.isNullOrBlank()) return null
         return runCatching {
             val bytes = Base64.decode(base64, Base64.DEFAULT)
             val logosDir = File(context.filesDir, "header_logos").apply { mkdirs() }
-            val dest = File(logosDir, "$headerId.jpg")
+            val dest = File(logosDir, fileName)
             dest.writeBytes(bytes)
             dest.absolutePath
         }.getOrNull()
     }
 
-    fun withMaterializedLogo(context: Context, header: DocumentHeader): DocumentHeader {
-        val path = materializeLogo(context, header.id, header.logoBase64)
+    fun withMaterializedImages(context: Context, header: DocumentHeader): DocumentHeader {
+        val logoPath = materializeLogo(context, header.id, header.logoBase64)
             ?: header.logoPath?.takeIf { File(it).exists() }
-        return header.copy(logoPath = path)
+        return header.copy(logoPath = logoPath)
     }
 
     /** Si hay archivo local y falta base64, lo codifica para el sync. */
-    fun ensureLogoBase64(header: DocumentHeader): DocumentHeader {
+    fun ensureImageBase64(header: DocumentHeader): DocumentHeader {
         if (!header.logoBase64.isNullOrBlank()) return header
         val path = header.logoPath?.takeIf { File(it).exists() } ?: return header
         return runCatching {
-            val bytes = File(path).readBytes()
-            header.copy(logoBase64 = Base64.encodeToString(bytes, Base64.NO_WRAP))
+            header.copy(logoBase64 = Base64.encodeToString(File(path).readBytes(), Base64.NO_WRAP))
         }.getOrDefault(header)
+    }
+
+    /**
+     * Sello guardado en un encabezado (modelo anterior): se usa solo para migrarlo
+     * a [SelloStorage]. Devuelve (path, base64) del primer encabezado que lo tenga.
+     */
+    fun legacySello(context: Context): Pair<String?, String?>? {
+        val raw = prefs(context).getString(KEY, null) ?: return null
+        val type = object : TypeToken<List<DocumentHeaderDto>>() {}.type
+        val dtos = runCatching {
+            gson.fromJson<List<DocumentHeaderDto>>(raw, type)
+        }.getOrNull() ?: return null
+        val dto = dtos.firstOrNull {
+            !it.selloBase64.isNullOrBlank() || !it.selloPath.isNullOrBlank()
+        } ?: return null
+        return dto.selloPath to dto.selloBase64
     }
 
     fun createClinic(): DocumentHeader = DocumentHeader(

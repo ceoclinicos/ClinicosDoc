@@ -23,6 +23,12 @@
 body {
   margin: 0;
   min-height: 100dvh;
+  background:
+    radial-gradient(1100px 460px at 90% -10%, color-mix(in srgb, var(--teal) 14%, transparent), transparent 62%),
+    radial-gradient(900px 400px at -8% 22%, color-mix(in srgb, var(--navy) 9%, transparent), transparent 58%),
+    radial-gradient(700px 500px at 50% 115%, color-mix(in srgb, var(--teal) 8%, transparent), transparent 60%),
+    var(--surface);
+  background-attachment: fixed;
 }
 
 a {
@@ -522,6 +528,41 @@ a {
   max-width: none;
 }
 
+.password-picker {
+  display: flex;
+  gap: 0.45rem;
+  align-items: stretch;
+  width: 100%;
+}
+
+.password-picker select,
+.password-picker .pin-letter,
+.form .password-picker select,
+.form .password-picker .pin-letter {
+  width: 3.4rem;
+  min-width: 3.4rem;
+  max-width: 3.4rem;
+  flex: 0 0 3.4rem;
+  font-weight: 700;
+  text-align: center;
+  text-align-last: center;
+  padding: 0.75rem 0.15rem;
+  padding-right: 1.15rem;
+  background-position: right 0.2rem center;
+  background-size: 0.7rem;
+  appearance: none;
+}
+
+.password-picker input,
+.password-picker .pin-digits,
+.form .password-picker input,
+.form .password-picker .pin-digits {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+}
+
 .form input,
 .form textarea,
 .form select {
@@ -728,6 +769,137 @@ dialog {
   margin-top: 1.25rem;
 }
 
+/* ── Detalles visuales del inicio ─────────────────────────── */
+
+.home-redactar-hero,
+.hero-card {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+/* Brillo decorativo en la esquina del hero/tarjetas */
+.home-redactar-hero::after,
+.hero-card::after {
+  content: "";
+  position: absolute;
+  top: -70px;
+  right: -70px;
+  width: 210px;
+  height: 210px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 65%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Línea de acento inferior en el hero */
+.home-redactar-hero::before,
+.hero-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--teal-light), rgba(255, 255, 255, 0.35));
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.home-redactar-hero:hover,
+.hero-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px rgba(11, 31, 51, 0.18);
+}
+
+.home-redactar-hero:active,
+.hero-card:active {
+  transform: translateY(0);
+}
+
+.hero-card-alt {
+  position: relative;
+}
+
+/* Marca en el home */
+.home-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.home-brand::before {
+  content: "";
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--teal), var(--teal-light));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 18%, transparent);
+}
+
+/* Títulos de sección con acento */
+.home-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.home-section-title::before {
+  content: "";
+  width: 4px;
+  height: 1em;
+  border-radius: 2px;
+  background: linear-gradient(var(--teal), var(--teal-light));
+  flex-shrink: 0;
+}
+
+/* Tiles con elevación suave */
+.tile {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.tile:hover:not(:disabled):not(.tile-muted) {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--teal) 45%, var(--border));
+  box-shadow: var(--shadow);
+}
+
+.tile-home strong {
+  color: var(--navy);
+}
+
+/* Botón de engranaje */
+.icon-gear {
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.icon-gear:hover {
+  transform: rotate(30deg);
+  border-color: var(--teal);
+}
+
+/* Filas de pacientes recientes */
+.home-patient-row {
+  transition: background 0.12s ease;
+}
+
+.home-patient-row:hover,
+.home-patient-row:focus-visible {
+  background: color-mix(in srgb, var(--teal) 7%, transparent);
+  outline: none;
+}
+
+/* Estado vacío con suavidad */
+.home-activity-empty {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--teal) 4%, transparent);
+}
+
 .home-activity-empty {
   padding: 0.5rem 0;
 }
@@ -747,6 +919,82 @@ dialog {
 
 .sheet-dialog::backdrop {
   background: rgba(11, 31, 51, 0.45);
+}
+
+.farmaco-sheet {
+  margin: 0;
+  margin-top: auto;
+  max-width: 100%;
+  width: 100%;
+  border-radius: 16px 16px 0 0;
+  max-height: 92vh;
+  border: none;
+  padding: 0;
+}
+
+.farmaco-sheet::backdrop {
+  background: rgba(11, 31, 51, 0.45);
+}
+
+.farmaco-sheet-body {
+  max-height: 92vh;
+  overflow: auto;
+  padding-bottom: 1.5rem;
+}
+
+.farmaco-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.farmaco-sheet-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.farmaco-sheet-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 50vh;
+  overflow: auto;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+}
+
+.farmaco-sheet-list .farmaco-suggest-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 0.9rem;
+  border: none;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  background: transparent;
+  cursor: pointer;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  border: 1px solid var(--border, #cbd5e1);
+  background: #fff;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.chip-active {
+  border-color: var(--navy, #0b1f33);
+  background: var(--navy, #0b1f33);
+  color: #fff;
 }
 
 .sheet-body {
@@ -882,6 +1130,17 @@ dialog {
   margin: 0;
   background: #fff;
   color: #111;
+}
+
+.doc-live-preview .print-doc {
+  position: relative;
+}
+
+.doc-live-preview .print-sello {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .doc-paper-wrap {
@@ -1240,6 +1499,68 @@ p.warn {
 .btn-block {
   width: 100%;
   margin-top: 1rem;
+}
+
+.recipe-preview {
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  margin: 0;
+  padding: 0.5rem 0;
+}
+
+.farmaco-picker {
+  margin: 0.35rem 0 0.75rem;
+}
+
+.farmaco-picker-hint {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+}
+
+.farmaco-suggest {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-height: 240px;
+  overflow: auto;
+  background: var(--card);
+  -webkit-overflow-scrolling: touch;
+}
+
+.farmaco-suggest-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.farmaco-suggest-empty {
+  padding: 0.75rem;
+}
+
+.farmaco-suggest-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.farmaco-suggest-item:hover,
+.farmaco-suggest-item:focus {
+  background: rgba(0, 120, 140, 0.08);
+}
+
+.farmaco-selected {
+  margin: 0.35rem 0 0.75rem;
 }
 
 .plantilla-step-form {

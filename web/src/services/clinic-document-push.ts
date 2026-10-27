@@ -40,6 +40,10 @@ export async function pushClinicDocumentViaApi(
         sourceDocumentId: document.sourceDocumentId,
         clinicId: document.clinicId,
         clinicName: document.clinicName,
+        incluirSello: document.incluirSello,
+        selloBase64: document.selloBase64,
+        selloOffsetX: document.selloOffsetX,
+        selloOffsetY: document.selloOffsetY,
       },
     }),
   });

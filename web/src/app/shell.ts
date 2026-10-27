@@ -47,7 +47,7 @@ function bottomNavItems() {
     return getNavRoutes().filter((r) => !r.medicoOnly && !r.clinicOnly);
   }
   const all = getNavRoutes();
-  const order = ["/", "/pacientes", "/informes"];
+  const order = ["/", "/pacientes", "/informes", "/recipes"];
   return order
     .map((p) => all.find((r) => r.path === p))
     .filter((r): r is NonNullable<typeof r> => !!r);
@@ -156,7 +156,11 @@ export function mountShell(root: HTMLElement, renderPage: (el: HTMLElement) => v
       activePath = "/paciente";
     }
     root.querySelectorAll(".nav-link[data-path]").forEach((a) => {
-      a.classList.toggle("active", a.getAttribute("data-path") === activePath);
+      const path = a.getAttribute("data-path") || "";
+      const active =
+        path === activePath ||
+        (path !== "/" && (activePath === path || activePath.startsWith(`${path}/`)));
+      a.classList.toggle("active", active);
     });
   }
 

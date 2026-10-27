@@ -185,7 +185,11 @@ service cloud.firestore {
       match /members/{memberId} {
         allow read: if isClinicAdmin(clinicId) || isClinicMember(clinicId);
         allow create: if isClinicAdmin(clinicId) || memberSelfCreate(clinicId);
-        allow update, delete: if isClinicAdmin(clinicId);
+        // Admin o el propio médico (desvincularse; el id suele ser la cédula).
+        allow update, delete: if isClinicAdmin(clinicId)
+          || (isMedico() && resource.data.cloudUserId == request.auth.uid)
+          || cedulaClaimMatches(memberId)
+          || (isMedico() && cedulaClaimMatches(resource.data.doctorCedula));
       }
 
       match /invitations/{doctorCedula} {

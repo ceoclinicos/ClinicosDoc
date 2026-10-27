@@ -8,7 +8,7 @@ import {
 import type { DocumentTemplate, DocumentType } from "../../shared/models";
 import { DocumentTypeLabels } from "../../shared/models";
 import { defaultSectionsFor } from "../../shared/section-catalog";
-import { PhysicalExamDefaults } from "../../shared/physical-exam-defaults";
+import { DefaultEnabledExamIds } from "../../shared/physical-exam-defaults";
 import { bindSectionsEditor } from "../../services/section-editor";
 import { bindNavButtons, page } from "../helpers";
 
@@ -150,7 +150,7 @@ registerRoute({
           documentType: "historiaClinica",
           sections: defaultSectionsFor("historiaClinica"),
           isDefault: templates.length === 0,
-          enabledPhysicalExamSystemIds: PhysicalExamDefaults.map((s) => s.id),
+          enabledPhysicalExamSystemIds: [...DefaultEnabledExamIds],
         },
         true,
       );
@@ -179,7 +179,7 @@ registerRoute({
         documentType: type,
         sections: draftSections.length ? draftSections : defaultSectionsFor(type),
         isDefault: (form.elements.namedItem("isDefault") as HTMLInputElement).checked,
-        enabledPhysicalExamSystemIds: PhysicalExamDefaults.map((s) => s.id),
+        enabledPhysicalExamSystemIds: [...DefaultEnabledExamIds],
         sectionDefaultTexts: Object.keys(draftSectionTexts).length ? draftSectionTexts : undefined,
       };
       try {

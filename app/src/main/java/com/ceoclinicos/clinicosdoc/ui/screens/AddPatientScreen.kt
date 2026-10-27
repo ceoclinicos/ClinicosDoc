@@ -1,7 +1,9 @@
 package com.ceoclinicos.clinicosdoc.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,6 +18,8 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -36,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -74,6 +79,7 @@ fun AddPatientScreen(
     }
     var nombre by remember { mutableStateOf("") }
     var cedula by remember { mutableStateOf("") }
+    var sinCedula by remember { mutableStateOf(false) }
     var edad by remember { mutableStateOf("") }
     var whatsapp by remember { mutableStateOf("") }
     var sexo by remember { mutableStateOf<String?>(null) }
@@ -94,6 +100,7 @@ fun AddPatientScreen(
         existingCreatedAt = patient.createdAt
         nombre = patient.nombre
         cedula = patient.cedula
+        sinCedula = patient.cedula.isBlank()
         edad = patient.edad.toString()
         whatsapp = patient.whatsapp
         sexo = patient.sexo.takeIf { it.isNotBlank() }
@@ -103,12 +110,28 @@ fun AddPatientScreen(
 
     fun validationError(): String? = when {
         nombre.isBlank() -> "Ingresa el nombre completo"
-        cedula.isBlank() -> "Ingresa la cédula"
+        !sinCedula && cedula.isBlank() -> "Ingresa la cédula"
         fechaNacimiento == null -> "Selecciona la fecha de nacimiento"
         sexo == null -> "Selecciona el sexo"
         whatsapp.isBlank() -> "Ingresa el número de WhatsApp"
         whatsapp.length < 10 -> "El WhatsApp debe tener al menos 10 dígitos"
         else -> null
+    }
+
+    fun setSinCedula(checked: Boolean) {
+        sinCedula = checked
+        if (checked) {
+            cedula = ""
+            searchMessage = null
+            foundPatients = emptyList()
+            step = AddPatientStep.FORMULARIO
+            if (!editing) {
+                existingId = null
+                existingCreatedAt = null
+            }
+        } else if (!editing) {
+            step = AddPatientStep.CEDULA
+        }
     }
 
     fun adoptPatient(patient: Patient) {
@@ -182,7 +205,7 @@ fun AddPatientScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             PremiumTextField(
-                label = "Cédula *",
+                label = if (sinCedula) "Cédula" else "Cédula *",
                 value = cedula,
                 onValueChange = {
                     cedula = it
@@ -194,10 +217,28 @@ fun AddPatientScreen(
                 },
                 hint = "Ej. V-12345678",
                 prefixIcon = Icons.Outlined.Badge,
-                isError = cedula.isBlank(),
-                errorMessage = if (cedula.isBlank()) "Requerido" else null,
+                readOnly = sinCedula,
+                isError = !sinCedula && cedula.isBlank(),
+                errorMessage = if (!sinCedula && cedula.isBlank()) "Requerido" else null,
             )
-            if (!editing) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { setSinCedula(!sinCedula) },
+            ) {
+                Checkbox(
+                    checked = sinCedula,
+                    onCheckedChange = { setSinCedula(it) },
+                    colors = CheckboxDefaults.colors(checkedColor = Teal),
+                )
+                Text(
+                    "El paciente no tiene cédula (bebé o menor sin documento)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                )
+            }
+            if (!editing && !sinCedula) {
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedButton(
                 onClick = { searchByCedula() },
@@ -340,9 +381,11 @@ fun AddPatientScreen(
                             val birth = fechaNacimiento!!
                             val age = edad.toIntOrNull() ?: PatientUtils.calcAge(birth)
                             val patient = Patient(
-                                id = existingId ?: PatientFirestoreId.from(cedula.trim(), nombre.trim()),
+                                id = existingId
+                                    ?: if (sinCedula) PatientFirestoreId.forSinCedula(nombre.trim())
+                                    else PatientFirestoreId.from(cedula.trim(), nombre.trim()),
                                 nombre = nombre.trim(),
-                                cedula = cedula.trim(),
+                                cedula = if (sinCedula) "" else cedula.trim(),
                                 edad = age,
                                 fechaNacimiento = birth,
                                 createdAt = existingCreatedAt ?: Instant.now(),

@@ -1,36 +1,36 @@
-const { getAdmin } = require("./_lib/firebase");
+const { getAdmin } = require("../firebase");
 const {
   assertPinLogin,
   cedulaLookupKeys,
   hashPin,
   hashPassword,
   normalizeCedula,
-} = require("./_lib/pin");
-const { applyCors } = require("./_lib/cors");
-const { parseBody } = require("./_lib/body");
-const { apiError } = require("./_lib/errors");
-const { mintAuthToken } = require("./_lib/mint-token");
-const { healDoctorInviteMailbox } = require("./_lib/invite-expiry");
-const { makeDoctorUserId } = require("./_lib/doctor-user-id");
+} = require("../pin");
+const { applyCors } = require("../cors");
+const { parseBody } = require("../body");
+const { apiError } = require("../errors");
+const { mintAuthToken } = require("../mint-token");
+const { healDoctorInviteMailbox } = require("../invite-expiry");
+const { makeDoctorUserId } = require("../doctor-user-id");
 const {
   touchDeviceOnLogin,
   buildPublicStatus,
   readEntitlement,
   normalizeDeviceId,
   initEntitlementOnRegister,
-} = require("./_lib/entitlements");
+} = require("../entitlements");
 const {
   touchClinicDeviceOnLogin,
   buildClinicPublicStatus,
   readClinicEntitlement,
   countClinicTeamSize,
-} = require("./_lib/clinic-entitlements");
+} = require("../clinic-entitlements");
 
 function normalizeRif(rif) {
   const raw = String(rif || "")
     .trim()
     .toUpperCase()
-    .replace(/[\s.-]/g, "");
+    .replace(/[^A-Z0-9]/g, "");
   const digits = raw.replace(/\D/g, "");
   if (/^\d{5,12}$/.test(raw)) return `J${raw}`;
   if (/^J\d{5,12}$/.test(raw)) return raw;
@@ -309,7 +309,7 @@ async function loginClinica(db, admin, accountOrRif, pin, deviceId) {
   const clinicRef = db.collection("clinicosdoc_clinics").doc(found.docId);
   let ent = readClinicEntitlement(c);
   if (!c.clinicEntitlement) {
-    const { initClinicEntitlementOnRegister } = require("./_lib/clinic-entitlements");
+    const { initClinicEntitlementOnRegister } = require("../clinic-entitlements");
     ent = await initClinicEntitlementOnRegister(db, clinicRef);
   }
   ent = await touchClinicDeviceOnLogin(db, clinicRef, { ...c, clinicEntitlement: ent }, {

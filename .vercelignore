@@ -1,0 +1,15 @@
+# Evitar subir el monstruo Android al deploy de APIs/web
+app/
+.gradle/
+.idea/
+.kotlin/
+build/
+captures/
+*.iml
+local.properties
+web/node_modules/
+web/dist/
+.git/
+*.keystore
+serviceAccount*.json
+**/*.salive

@@ -3,6 +3,7 @@ package com.ceoclinicos.clinicosdoc.ui.screens
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,12 +14,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.SaveAlt
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenu
@@ -51,8 +54,10 @@ import com.ceoclinicos.clinicosdoc.data.DoctorStorage
 import com.ceoclinicos.clinicosdoc.data.DocumentStorage
 import com.ceoclinicos.clinicosdoc.data.HeaderStorage
 import com.ceoclinicos.clinicosdoc.data.PatientStorage
+import com.ceoclinicos.clinicosdoc.data.SelloStorage
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
+import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
 import com.ceoclinicos.clinicosdoc.service.DocumentPdfExporter
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
@@ -63,6 +68,7 @@ import com.ceoclinicos.clinicosdoc.ui.components.DocumentReportDateEditor
 import com.ceoclinicos.clinicosdoc.ui.components.DocumentReportLayout
 import com.ceoclinicos.clinicosdoc.ui.components.PatientMembreteEditor
 import com.ceoclinicos.clinicosdoc.ui.theme.DividerColor
+import com.ceoclinicos.clinicosdoc.util.InformeFromCase
 import com.ceoclinicos.clinicosdoc.util.sanitizeDocumentContent
 import com.ceoclinicos.clinicosdoc.ui.components.PremiumPrimaryButton
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
@@ -75,12 +81,17 @@ fun InformeDetailScreen(
     docId: String,
     onBack: () -> Unit,
     onEditHeader: (headerId: String, isNew: Boolean) -> Unit = { _, _ -> },
+    onOpenDocument: (docId: String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var doc by remember { mutableStateOf<ClinicalDocument?>(null) }
     var editableContent by remember(docId) { mutableStateOf("") }
     var editableMembrete by remember(docId) { mutableStateOf(PatientMembrete()) }
+    var editableIncluirSello by remember(docId) { mutableStateOf(false) }
+    /** Sello global del médico; el documento también puede traer su propio snapshot. */
+    val selloGlobal = remember { SelloStorage.load(context) }
+    val selloDisponible = selloGlobal != null || doc?.selloBase64 != null
     var selectedHeaderId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedHeader by remember { mutableStateOf<DocumentHeader?>(null) }
     var availableHeaders by remember { mutableStateOf(emptyList<DocumentHeader>()) }
@@ -115,6 +126,7 @@ fun InformeDetailScreen(
         editableContent = sanitizeDocumentContent(document.content)
         val patient = PatientStorage.loadAll(context).firstOrNull { it.id == document.patientId }
         editableMembrete = PatientMembrete.forDocument(document, patient)
+        editableIncluirSello = document.incluirSello
         selectedHeaderId = document.headerId ?: document.headerSnapshot?.id
         refreshHeaders()
     }
@@ -142,6 +154,8 @@ fun InformeDetailScreen(
                 headerId = selectedHeader?.id,
                 headerSnapshot = selectedHeader,
                 membrete = editableMembrete,
+                incluirSello = editableIncluirSello,
+                                    selloBase64 = doc?.selloBase64 ?: selloGlobal?.base64,
             )
             DocumentStorage.update(context, updated)
             doc = updated
@@ -218,6 +232,8 @@ fun InformeDetailScreen(
                                     headerId = selectedHeader?.id,
                                     headerSnapshot = selectedHeader,
                                     membrete = editableMembrete,
+                                    incluirSello = editableIncluirSello,
+                                    selloBase64 = doc?.selloBase64 ?: selloGlobal?.base64,
                                 )
                                 val path = DocumentPdfExporter.savePdfToDownloads(context, current)
                                 Toast.makeText(context, "Guardado en $path", Toast.LENGTH_LONG).show()
@@ -237,6 +253,8 @@ fun InformeDetailScreen(
                                     headerId = selectedHeader?.id,
                                     headerSnapshot = selectedHeader,
                                     membrete = editableMembrete,
+                                    incluirSello = editableIncluirSello,
+                                    selloBase64 = doc?.selloBase64 ?: selloGlobal?.base64,
                                 )
                                 val file = DocumentPdfExporter.generate(context, current)
                                 DocumentPdfExporter.sharePdf(context, file)
@@ -256,6 +274,8 @@ fun InformeDetailScreen(
                                     headerId = selectedHeader?.id,
                                     headerSnapshot = selectedHeader,
                                     membrete = editableMembrete,
+                                    incluirSello = editableIncluirSello,
+                                    selloBase64 = doc?.selloBase64 ?: selloGlobal?.base64,
                                 )
                                 val file = DocumentPdfExporter.generate(context, current)
                                 DocumentPdfExporter.printPdf(context, file, doc!!.typeLabel)
@@ -264,6 +284,30 @@ fun InformeDetailScreen(
                             }
                         },
                     )
+                    if (doc?.type == DocumentType.HISTORIA_CLINICA) {
+                        DropdownMenuItem(
+                            text = { Text("Crear informe") },
+                            leadingIcon = { Icon(Icons.Outlined.Description, contentDescription = null) },
+                            onClick = {
+                                menuExpanded = false
+                                val current = doc!!.copy(
+                                    content = editableContent,
+                                    headerId = selectedHeader?.id,
+                                    headerSnapshot = selectedHeader,
+                                    membrete = editableMembrete,
+                                    incluirSello = editableIncluirSello,
+                                    selloBase64 = doc?.selloBase64 ?: selloGlobal?.base64,
+                                )
+                                val informe = InformeFromCase.create(context, current)
+                                Toast.makeText(
+                                    context,
+                                    "Informe creado con los datos de la historia",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
+                                onOpenDocument(informe.id)
+                            },
+                        )
+                    }
                 }
             }
         },
@@ -342,6 +386,16 @@ fun InformeDetailScreen(
                     onOpenEditConsumed = { openEditHeaderId = null },
                     canCreateNew = HeaderStorage.canAdd(context),
                 )
+                if (selloDisponible) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = editableIncluirSello,
+                            onCheckedChange = { editableIncluirSello = it },
+                        )
+                        Text("Incluir sello médico al final del documento")
+                    }
+                }
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(modifier = Modifier.fillMaxWidth(), color = DividerColor)
                 Spacer(modifier = Modifier.height(24.dp))
@@ -371,6 +425,26 @@ fun InformeDetailScreen(
                     onClick = { saveDocument { editing = false } },
                 )
             } else {
+                if (selloDisponible) {
+                    Row(
+                        modifier = Modifier.padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = editableIncluirSello,
+                            onCheckedChange = { checked ->
+                                editableIncluirSello = checked
+                                val updated = document.copy(
+                                    incluirSello = checked,
+                                    selloBase64 = document.selloBase64 ?: selloGlobal?.base64,
+                                )
+                                DocumentStorage.update(context, updated)
+                                doc = updated
+                            },
+                        )
+                        Text("Incluir sello médico")
+                    }
+                }
                 DocumentReportLayout(
                     documentType = document.type,
                     header = selectedHeader,
@@ -400,7 +474,7 @@ fun InformeDetailScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { showLeaveEditDialog = false }) {
-                        Text("Seguir editando")
+                        Text("Continuar")
                     }
                 },
             )
@@ -412,10 +486,17 @@ fun InformeDetailScreen(
                 headerId = selectedHeader?.id,
                 headerSnapshot = selectedHeader,
                 membrete = editableMembrete,
+                incluirSello = editableIncluirSello,
+                                    selloBase64 = doc?.selloBase64 ?: selloGlobal?.base64,
             )
             DocumentPreviewDialog(
                 document = current,
                 onDismiss = { showPreview = false },
+                onSelloPositionChanged = { fx, fy ->
+                    val updated = document.copy(selloOffsetX = fx, selloOffsetY = fy)
+                    DocumentStorage.update(context, updated)
+                    doc = updated
+                },
             )
         }
     }

@@ -113,6 +113,12 @@ export interface ClinicalDocument {
   clinicId?: string;
   clinicName?: string;
   doctorNombre?: string;
+  /** Sello médico: incluir al pie y snapshot base64 (estable aunque el médico lo cambie). */
+  incluirSello?: boolean;
+  selloBase64?: string;
+  /** Posición normalizada del sello (0..1); ausente = centrado al pie. */
+  selloOffsetX?: number;
+  selloOffsetY?: number;
 }
 
 export const DocumentReportTitles: Record<DocumentType, string> = {

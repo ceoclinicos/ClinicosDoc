@@ -7,7 +7,12 @@ export const MAX_LOGO_SIDE = 1024;
  * y rellena el resto en blanco (ej. 600×800 → 800×800 con bandas blancas).
  * Si el lado mayor supera 1024, escala proporcionalmente.
  */
-export function fileToLogoBase64(file: File): Promise<string> {
+export function fileToLogoBase64(
+  file: File,
+  minSide: number = MIN_LOGO_SIDE,
+  /** Si es true, centra en un cuadrado blanco; si no, conserva el tamaño exacto del recorte. */
+  padToSquare: boolean = true,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -20,10 +25,10 @@ export function fileToLogoBase64(file: File): Promise<string> {
           return;
         }
         const longest = Math.max(w, h);
-        if (longest < MIN_LOGO_SIDE) {
+        if (longest < minSide) {
           reject(
             new Error(
-              `La imagen es demasiado pequeña (mínimo ${MIN_LOGO_SIDE} px en el lado mayor)`,
+              `La imagen es demasiado pequeña (mínimo ${minSide} px en el lado mayor)`,
             ),
           );
           return;
@@ -34,22 +39,28 @@ export function fileToLogoBase64(file: File): Promise<string> {
         const drawH = Math.max(1, Math.round(h * scale));
         const side = Math.min(
           MAX_LOGO_SIDE,
-          Math.max(MIN_LOGO_SIDE, Math.max(drawW, drawH)),
+          Math.max(minSide, Math.max(drawW, drawH)),
         );
 
         const canvas = document.createElement("canvas");
-        canvas.width = side;
-        canvas.height = side;
         const ctx = canvas.getContext("2d");
         if (!ctx) {
           reject(new Error("No se pudo procesar la imagen"));
           return;
         }
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, side, side);
-        const left = Math.floor((side - drawW) / 2);
-        const top = Math.floor((side - drawH) / 2);
-        ctx.drawImage(img, 0, 0, w, h, left, top, drawW, drawH);
+        if (padToSquare) {
+          canvas.width = side;
+          canvas.height = side;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, side, side);
+          const left = Math.floor((side - drawW) / 2);
+          const top = Math.floor((side - drawH) / 2);
+          ctx.drawImage(img, 0, 0, w, h, left, top, drawW, drawH);
+        } else {
+          canvas.width = drawW;
+          canvas.height = drawH;
+          ctx.drawImage(img, 0, 0, w, h, 0, 0, drawW, drawH);
+        }
 
         const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
         const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, "");

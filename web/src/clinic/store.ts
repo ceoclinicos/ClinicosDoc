@@ -8,6 +8,7 @@ import {
   updateDoc,
   increment,
   query,
+  where,
   orderBy,
   limit,
   startAfter,
@@ -24,6 +25,7 @@ import {
   makeDefaultClinicHeader,
   makeDefaultClinicTemplates,
 } from "./default-catalog";
+import { clearClinicLeftLocal, filterOutLeftClinics, markClinicLeftLocal } from "./left-clinics";
 import type {
   ClinicDoctorInvitation,
   ClinicDocumentFeedRow,
@@ -43,7 +45,7 @@ function assertPinLogin(pin: string): void {
 }
 
 function normalizeRif(rif: string): string {
-  const raw = rif.trim().toUpperCase().replace(/[\s.-]/g, "");
+  const raw = rif.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
   const digits = raw.replace(/\D/g, "");
   if (/^\d{5,12}$/.test(raw)) return `J${raw}`;
   if (/^J\d{5,12}$/.test(raw)) return raw;
@@ -134,6 +136,11 @@ async function writeClinicMembership(input: {
         joinedAt: member.joinedAt,
       } as DocumentData,
     );
+    // Si había salido antes, permitir volver a unirse.
+    clearClinicLeftLocal(input.clinicId);
+    await deleteDoc(
+      doc(getDb(), FirestorePaths.USERS, input.cloudUserId, "clinic_left", input.clinicId),
+    ).catch(() => undefined);
   }
   return member;
 }
@@ -552,12 +559,32 @@ export async function listPendingInvitationsForDoctor(
 export async function leaveClinicAsDoctor(input: {
   clinicId: string;
   doctorCedula: string;
+  clinicName?: string;
 }): Promise<void> {
-  const { getIdToken } = await import("../services/firebase-auth");
+  markClinicLeftLocal(input.clinicId);
+
+  const { getIdToken, currentAuthUid } = await import("../services/firebase-auth");
   const token = await getIdToken(true);
   if (!token) {
     throw new Error("Sesión vencida. Vuelva a iniciar sesión.");
   }
+  const uid = currentAuthUid();
+  // Bloqueo remoto + limpieza membership (cliente).
+  if (uid) {
+    await setDoc(
+      doc(getDb(), FirestorePaths.USERS, uid, "clinic_left", input.clinicId),
+      {
+        clinicId: input.clinicId,
+        clinicName: input.clinicName || "",
+        leftAt: new Date().toISOString(),
+      },
+      { merge: true },
+    ).catch(() => undefined);
+    await deleteDoc(
+      doc(getDb(), FirestorePaths.USERS, uid, "clinic_memberships", input.clinicId),
+    ).catch(() => undefined);
+  }
+
   const API_BASE = (import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(
     /\/$/,
     "",
@@ -571,6 +598,7 @@ export async function leaveClinicAsDoctor(input: {
     body: JSON.stringify({
       clinicId: input.clinicId,
       doctorCedula: input.doctorCedula,
+      clinicName: input.clinicName || undefined,
     }),
   });
   const raw = await res.text();
@@ -581,15 +609,32 @@ export async function leaveClinicAsDoctor(input: {
     data = {};
   }
   if (!res.ok && res.status !== 404) {
-    // Igual que la app: si falla por clínica inexistente / red, igual limpiamos caché local abajo
     if (res.status === 401 || res.status === 403) {
       throw new Error(data.error || "Sesión inválida");
     }
     console.warn("[leaveClinic]", data.error || raw);
   }
+
+  // Intento de borrar members (rules: self-delete).
+  try {
+    const ced = normalizeCedula(input.doctorCedula);
+    await deleteDoc(doc(membersCol(input.clinicId), ced)).catch(() => undefined);
+    if (uid) {
+      const q = query(membersCol(input.clinicId), where("cloudUserId", "==", uid));
+      const snap = await getDocs(q);
+      await Promise.all(snap.docs.map((d) => deleteDoc(d.ref).catch(() => undefined)));
+    }
+  } catch {
+    /* silencioso */
+  }
+
   const { setCachedMemberships, getCachedMemberships } = await import("./membership-cache");
   const { purgePendingNoticesForClinic } = await import("./affiliation-notices");
-  const removed = getCachedMemberships().find((m) => m.clinicId === input.clinicId);
+  const removed =
+    getCachedMemberships().find((m) => m.clinicId === input.clinicId) ||
+    (input.clinicName
+      ? { clinicId: input.clinicId, clinicName: input.clinicName, role: "medico" }
+      : null);
   setCachedMemberships(
     getCachedMemberships().filter((m) => m.clinicId !== input.clinicId),
     { silent: true },
@@ -633,6 +678,7 @@ export async function acceptDoctorInvitation(input: {
     data = {};
   }
   if (!res.ok) throw new Error(data.error || "No se pudo aceptar la invitación");
+  clearClinicLeftLocal(input.clinicId);
   return {
     clinicId: data.clinicId || input.clinicId,
     clinicName: data.clinicName || "Centro",
@@ -719,13 +765,15 @@ export async function listMembershipsForDoctor(
         const data = (await res.json()) as {
           memberships?: Array<{ clinicId: string; clinicName: string; role?: string }>;
         };
-        return (data.memberships || [])
-          .map((m) => ({
-            clinicId: m.clinicId,
-            clinicName: m.clinicName,
-            role: (m.role as ClinicMemberRole) || "medico",
-          }))
-          .sort((a, b) => a.clinicName.localeCompare(b.clinicName));
+        return filterOutLeftClinics(
+          (data.memberships || [])
+            .map((m) => ({
+              clinicId: m.clinicId,
+              clinicName: m.clinicName,
+              role: (m.role as ClinicMemberRole) || "medico",
+            }))
+            .sort((a, b) => a.clinicName.localeCompare(b.clinicName)),
+        );
       }
     }
   } catch {
@@ -737,16 +785,18 @@ export async function listMembershipsForDoctor(
       collection(getDb(), FirestorePaths.USERS, cloudUserId, "clinic_memberships"),
     );
     if (!snap.empty) {
-      return snap.docs
-        .map((d) => {
-          const data = d.data();
-          return {
-            clinicId: String(data.clinicId ?? d.id),
-            clinicName: String(data.clinicName ?? "Centro"),
-            role: (data.role as ClinicMemberRole) || "medico",
-          };
-        })
-        .sort((a, b) => a.clinicName.localeCompare(b.clinicName));
+      return filterOutLeftClinics(
+        snap.docs
+          .map((d) => {
+            const data = d.data();
+            return {
+              clinicId: String(data.clinicId ?? d.id),
+              clinicName: String(data.clinicName ?? "Centro"),
+              role: (data.role as ClinicMemberRole) || "medico",
+            };
+          })
+          .sort((a, b) => a.clinicName.localeCompare(b.clinicName)),
+      );
     }
   }
 
@@ -767,9 +817,58 @@ export async function listMembershipsForDoctor(
         inviteCode: clinic.inviteCode,
       });
     }
-    return out.sort((a, b) => a.clinicName.localeCompare(b.clinicName));
+    return filterOutLeftClinics(out.sort((a, b) => a.clinicName.localeCompare(b.clinicName)));
   } catch {
     return [];
+  }
+}
+
+const CLINIC_FREE_MAX_DOCTORS = 5;
+/** Incluye tiers antiguos (tier_100, tier_unlimited) mapeados al tope actual. */
+const CLINIC_TIER_MAX_DOCTORS: Record<string, number> = {
+  tier_10: 10,
+  tier_25: 25,
+  tier_50: 50,
+  tier_250: 250,
+  tier_100: 250,
+  tier_unlimited: 250,
+};
+
+/**
+ * La suscripción del centro habilita moldes + registro de informes
+ * (la IA la paga cada médico). Se verifica ANTES de usar los moldes.
+ * @returns motivo de bloqueo o null si puede usar los moldes del centro.
+ */
+export async function clinicMoldBlockReason(clinicId: string): Promise<string | null> {
+  try {
+    const snap = await getDoc(clinicDoc(clinicId));
+    if (!snap.exists()) return "Centro no encontrado";
+    const ent = (snap.data()?.clinicEntitlement ?? {}) as Record<string, unknown>;
+
+    const [membersSnap, invitesSnap] = await Promise.all([
+      getDocs(membersCol(clinicId)),
+      getDocs(invitationsCol(clinicId)),
+    ]);
+    const pending = invitesSnap.docs.filter(
+      (d) => String(d.data()?.status || "") === "pending",
+    ).length;
+    const teamSize = membersSnap.size + pending;
+
+    const endMs = Date.parse(String(ent.periodEndAt || ""));
+    const paidActive = ent.plan === "subscribed" && Number.isFinite(endMs) && endMs > Date.now();
+
+    if (paidActive) {
+      const max = CLINIC_TIER_MAX_DOCTORS[String(ent.tier)] ?? CLINIC_FREE_MAX_DOCTORS;
+      return teamSize > max
+        ? `El centro tiene ${teamSize} médicos y su plan cubre ${max}. Debe actualizar la suscripción.`
+        : null;
+    }
+    return teamSize > CLINIC_FREE_MAX_DOCTORS
+      ? "La suscripción del centro no está activa. Los moldes institucionales se habilitan cuando el centro renueva su plan."
+      : null;
+  } catch {
+    // Sin conexión o sin permisos: no bloquear; el push al centro igual valida en el servidor.
+    return null;
   }
 }
 

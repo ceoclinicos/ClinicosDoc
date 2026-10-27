@@ -1,27 +1,27 @@
-const { getAdmin } = require("./_lib/firebase");
+const { getAdmin } = require("../firebase");
 const {
   assertPin6,
   cedulaLookupKeys,
   hashPin,
   hashPassword,
   normalizeCedula,
-} = require("./_lib/pin");
-const { applyCors } = require("./_lib/cors");
-const { parseBody } = require("./_lib/body");
-const { apiError } = require("./_lib/errors");
-const { mintAuthToken } = require("./_lib/mint-token");
-const { makeDoctorUserId } = require("./_lib/doctor-user-id");
+} = require("../pin");
+const { applyCors } = require("../cors");
+const { parseBody } = require("../body");
+const { apiError } = require("../errors");
+const { mintAuthToken } = require("../mint-token");
+const { makeDoctorUserId } = require("../doctor-user-id");
 const {
   initEntitlementOnRegister,
   normalizeDeviceId,
-} = require("./_lib/entitlements");
-const { initClinicEntitlementOnRegister } = require("./_lib/clinic-entitlements");
+} = require("../entitlements");
+const { initClinicEntitlementOnRegister } = require("../clinic-entitlements");
 
 function normalizeRif(rif) {
   const raw = String(rif || "")
     .trim()
     .toUpperCase()
-    .replace(/[\s.-]/g, "");
+    .replace(/[^A-Z0-9]/g, "");
   const digits = raw.replace(/\D/g, "");
   if (/^\d{5,12}$/.test(raw)) return `J${raw}`;
   if (/^J\d{5,12}$/.test(raw)) return raw;
@@ -284,7 +284,7 @@ async function registerClinica(db, admin, body) {
   });
 
   // Plantillas + encabezado iguales a los del médico (el centro luego edita)
-  const { ensureClinicDefaultCatalog } = require("./_lib/clinic-defaults");
+  const { ensureClinicDefaultCatalog } = require("../clinic-defaults");
   await ensureClinicDefaultCatalog(db, id, nombre);
 
   const token = await mintAuthToken(admin, id, { role: "clinica", rif });

@@ -13,16 +13,16 @@ export function membreteEditorHtml(membrete: PatientMembrete, documentType?: Doc
         <label>Teléfono
           <input type="tel" name="mTelefono" class="m-telefono" value="${escapeHtml(membrete.telefono || "")}" />
         </label>
-        <label>Dirección
-          <input type="text" name="mDireccion" class="m-direccion" value="${escapeHtml(membrete.direccion || "")}" />
+        <label>Ocupación
+          <input type="text" name="mOcupacion" class="m-ocupacion" value="${escapeHtml(membrete.ocupacion || "")}" />
         </label>
       </div>
-      <label>Ocupación
-        <input type="text" name="mOcupacion" class="m-ocupacion" value="${escapeHtml(membrete.ocupacion || "")}" />
+      <label>Dirección
+        <input type="text" name="mDireccion" class="m-direccion" value="${escapeHtml(membrete.direccion || "")}" />
       </label>
       <p class="muted" style="margin:0.75rem 0 0.35rem"><strong>Acompañante</strong></p>
       <div class="grid-2">
-        <label>Nombre
+        <label class="span-2">Nombre
           <input type="text" name="mAcompNombre" class="m-acomp-nombre" value="${escapeHtml(membrete.acompananteNombre || "")}" />
         </label>
         <label>Teléfono
@@ -34,17 +34,17 @@ export function membreteEditorHtml(membrete: PatientMembrete, documentType?: Doc
     <fieldset class="card-panel" id="membrete-editor">
       <legend><strong>Identificación del paciente</strong></legend>
       <p class="muted">La fecha del informe va arriba a la derecha, encima del encabezado.</p>
-      <label>Fecha del informe
-        <input type="text" name="mFecha" class="m-fecha" value="${escapeHtml(membrete.fecha)}" placeholder="dd/MM/yyyy" />
-      </label>
       <div class="grid-2">
-        <label>Nombre
-          <input type="text" name="mNombre" class="m-nombre" value="${escapeHtml(membrete.nombre)}" />
+        <label>Fecha del informe
+          <input type="text" name="mFecha" class="m-fecha" value="${escapeHtml(membrete.fecha)}" placeholder="dd/MM/yyyy" />
         </label>
-        <label>Edad
-          <input type="text" name="mEdad" class="m-edad" value="${escapeHtml(membrete.edad)}" />
+        <label>F. nacimiento
+          <input type="text" name="mNac" class="m-nac" value="${escapeHtml(membrete.fechaNacimiento)}" placeholder="dd/MM/yyyy" />
         </label>
       </div>
+      <label>Nombre
+        <input type="text" name="mNombre" class="m-nombre" value="${escapeHtml(membrete.nombre)}" />
+      </label>
       <div class="grid-2">
         <label>Cédula
           <input type="text" name="mCedula" class="m-cedula" value="${escapeHtml(membrete.cedula || "")}" />
@@ -52,10 +52,11 @@ export function membreteEditorHtml(membrete: PatientMembrete, documentType?: Doc
         <label>Sexo
           <input type="text" name="mSexo" class="m-sexo" value="${escapeHtml(membrete.sexo)}" />
         </label>
+        <label>Edad
+          <input type="text" name="mEdad" class="m-edad" value="${escapeHtml(membrete.edad)}" />
+        </label>
+        <span></span>
       </div>
-      <label>F. nacimiento
-        <input type="text" name="mNac" class="m-nac" value="${escapeHtml(membrete.fechaNacimiento)}" placeholder="dd/MM/yyyy" />
-      </label>
       ${historiaFields}
     </fieldset>`;
 }

@@ -56,8 +56,8 @@ export function setClinicSession(session: ClinicSession): void {
   notifySessionChange();
 }
 
-export function clearClinicSession(): void {
+export function clearClinicSession(signOut = true): void {
   localStorage.removeItem(CLINIC_KEY);
-  void signOutFirebase();
+  if (signOut) void signOutFirebase();
   notifySessionChange();
 }

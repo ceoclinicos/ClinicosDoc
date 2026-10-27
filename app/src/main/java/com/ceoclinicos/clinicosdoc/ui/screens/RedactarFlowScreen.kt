@@ -1,6 +1,9 @@
 package com.ceoclinicos.clinicosdoc.ui.screens
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -31,12 +34,15 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -76,6 +82,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import com.ceoclinicos.clinicosdoc.data.ClinicCatalogStorage
 import com.ceoclinicos.clinicosdoc.data.ClinicMembershipStorage
 import com.ceoclinicos.clinicosdoc.data.ClinicService
@@ -87,6 +94,7 @@ import com.ceoclinicos.clinicosdoc.data.EnfermedadActualStorage
 import com.ceoclinicos.clinicosdoc.data.HeaderStorage
 import com.ceoclinicos.clinicosdoc.data.PhysicalExamCatalogStorage
 import com.ceoclinicos.clinicosdoc.data.PatientStorage
+import com.ceoclinicos.clinicosdoc.data.SelloStorage
 import com.ceoclinicos.clinicosdoc.data.TemplateStorage
 import com.ceoclinicos.clinicosdoc.model.ClinicMembership
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
@@ -103,9 +111,11 @@ import com.ceoclinicos.clinicosdoc.model.PhysicalExamSystem
 import com.ceoclinicos.clinicosdoc.model.RecetaDefaults
 import com.ceoclinicos.clinicosdoc.model.ReportSessionConfig
 import com.ceoclinicos.clinicosdoc.service.DocumentAiService
+import com.ceoclinicos.clinicosdoc.service.DocumentOcrService
+import com.google.mlkit.common.MlKitException
 import com.ceoclinicos.clinicosdoc.service.DocumentPdfExporter
 import com.ceoclinicos.clinicosdoc.service.SpeechService
-import com.ceoclinicos.clinicosdoc.ui.components.AddFarmacoRecetaDialog
+import com.ceoclinicos.clinicosdoc.ui.components.AddFarmacoSheet
 import com.ceoclinicos.clinicosdoc.ui.components.AppScaffold
 import com.ceoclinicos.clinicosdoc.ui.components.DocumentHeaderSelector
 import com.ceoclinicos.clinicosdoc.ui.components.DocumentPreviewDialog
@@ -119,9 +129,11 @@ import com.ceoclinicos.clinicosdoc.ui.theme.NavyLight
 import com.ceoclinicos.clinicosdoc.ui.theme.Teal
 import com.ceoclinicos.clinicosdoc.ui.theme.TextSecondary
 import com.ceoclinicos.clinicosdoc.util.CedulaNormalizer
+import com.ceoclinicos.clinicosdoc.util.InformeFromCase
 import com.ceoclinicos.clinicosdoc.util.PermissionHelper
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
 import java.time.Instant
 import java.util.UUID
 
@@ -203,6 +215,7 @@ fun RedactarFlowScreen(
     onAddPatient: () -> Unit,
     onEditHeader: (headerId: String, isNew: Boolean) -> Unit,
     onEditTemplate: (templateId: String, isNew: Boolean) -> Unit,
+    onOpenDocument: (docId: String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -227,9 +240,16 @@ fun RedactarFlowScreen(
     /** Si ya se guardó el documento en esta sesión, regenerar/guardar actualiza el mismo (no crea otro). */
     var savedDocumentId by rememberSaveable { mutableStateOf<String?>(null) }
     var membrete by rememberSaveable(stateSaver = PatientMembreteSaver) { mutableStateOf(PatientMembrete()) }
+    var incluirSello by rememberSaveable { mutableStateOf(true) }
+    /** Sello global del médico (plantilla propia, no del encabezado). */
+    val selloMedico = remember { SelloStorage.load(context) }
+    /** Posición del sello movida con el dedo en la vista previa (null = por defecto). */
+    var selloOffsetX by rememberSaveable { mutableStateOf<Float?>(null) }
+    var selloOffsetY by rememberSaveable { mutableStateOf<Float?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var showToolsMenu by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(false) }
+    var showExitDialog by remember { mutableStateOf(false) }
     var openEditHeaderId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedTemplateId by rememberSaveable { mutableStateOf(templateId) }
     var showTemplatePicker by remember { mutableStateOf(false) }
@@ -263,12 +283,17 @@ fun RedactarFlowScreen(
     var showAddFarmaco by remember { mutableStateOf(false) }
     var addingFarmaco by remember { mutableStateOf(false) }
     var originApplied by rememberSaveable { mutableStateOf(false) }
+    /** OCR: adjuntar foto/PDF cuyo texto entra al dictado. */
+    var ocrProcessing by remember { mutableStateOf(false) }
+    var showOcrDialog by remember { mutableStateOf(false) }
+    var pendingCameraUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    var pendingCameraPath by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun navigateBackInFlow() {
         speechService.stopListening()
         listening = false
         when (step) {
-            RedactarStep.RESULTADO -> step = RedactarStep.DICTADO
+            RedactarStep.RESULTADO -> showExitDialog = true
             RedactarStep.DICTADO -> step = RedactarStep.PLANTILLA
             RedactarStep.PLANTILLA -> step = RedactarStep.PACIENTE
             RedactarStep.MOLDE -> step = RedactarStep.ORIGEN
@@ -306,6 +331,62 @@ fun RedactarFlowScreen(
             }
         } else {
             Toast.makeText(context, "Activa el permiso de micrófono en ajustes del teléfono", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun runOcr(uri: Uri, filePath: String? = null) {
+        if (ocrProcessing) return
+        scope.launch {
+            ocrProcessing = true
+            error = null
+            try {
+                val text = DocumentOcrService.extractText(context, uri, filePath)
+                val merged = if (dictation.isBlank()) text else dictation.trimEnd() + "\n\n" + text
+                dictation = merged
+                dictationField = TextFieldValue(merged, TextRange(merged.length))
+                Toast.makeText(context, "Texto del documento agregado al dictado", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                error = when {
+                    e is MlKitException ->
+                        "El lector de texto (OCR) no está disponible todavía. " +
+                            "Conecta el teléfono a internet una vez para descargarlo y reintenta."
+                    else -> e.message ?: "No se pudo leer el documento"
+                }
+            } finally {
+                ocrProcessing = false
+            }
+        }
+    }
+
+    val ocrFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { runOcr(it) }
+    }
+    val ocrCamera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val uri = pendingCameraUri
+        val path = pendingCameraPath
+        pendingCameraUri = null
+        pendingCameraPath = null
+        if (!ok || uri == null) return@rememberLauncherForActivityResult
+        val size = path?.let { File(it).length() }
+            ?: runCatching {
+                context.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize } ?: -1L
+            }.getOrDefault(-1L)
+        if (size <= 0L) {
+            error = "La cámara no guardó la foto. Reintenta o usa «Elegir foto o PDF»."
+        } else {
+            runOcr(uri, path)
+        }
+    }
+
+    // Algunas cámaras no escriben en el archivo sin permiso explícito.
+    fun grantCameraWritePermission(uri: Uri) {
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        context.packageManager.queryIntentActivities(intent, 0).forEach { info ->
+            context.grantUriPermission(
+                info.activityInfo.packageName,
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
         }
     }
 
@@ -428,6 +509,10 @@ fun RedactarFlowScreen(
             headerId = header?.id,
             headerSnapshot = header,
             membrete = membrete,
+            incluirSello = incluirSello && selloMedico != null,
+            selloBase64 = selloMedico?.base64,
+            selloOffsetX = selloOffsetX,
+            selloOffsetY = selloOffsetY,
         )
     }
 
@@ -478,6 +563,12 @@ fun RedactarFlowScreen(
             try {
                 clinicId = membership.clinicId
                 clinicName = membership.clinicName
+                ClinicService.clinicMoldBlockReason(membership.clinicId)?.let { reason ->
+                    showMsg(reason)
+                    clinicId = null
+                    clinicName = null
+                    return@launch
+                }
                 val tpls = ClinicCatalogStorage.loadTemplates(context, membership.clinicId, documentType)
                     .ifEmpty { ClinicService.listTemplates(context, membership.clinicId, documentType) }
                 val hdrs = ClinicCatalogStorage.loadHeaders(context, membership.clinicId)
@@ -524,6 +615,16 @@ fun RedactarFlowScreen(
         clinicName = initialClinicName
         origenLoading = true
         try {
+            ClinicService.clinicMoldBlockReason(cid)?.let { reason ->
+                showMsg(reason)
+                clinicId = null
+                clinicName = null
+                reloadTemplate()
+                template?.let { applyTemplateConfig(it) }
+                refreshHeaders()
+                step = RedactarStep.PACIENTE
+                return
+            }
             val tpls = ClinicCatalogStorage.loadTemplates(context, cid, documentType)
                 .ifEmpty {
                     withTimeoutOrNull(12_000L) {
@@ -566,7 +667,7 @@ fun RedactarFlowScreen(
 
     fun persistGeneratedDocument(content: String, showToast: Boolean = true): Boolean {
         val patient = selectedPatient ?: return false
-        val tpl = template ?: return false
+        val tpl = template
         val id = savedDocumentId ?: UUID.randomUUID().toString()
         val existing = savedDocumentId?.let { sid ->
             DocumentStorage.loadAll(context).firstOrNull { it.id == sid }
@@ -580,8 +681,8 @@ fun RedactarFlowScreen(
             content = content,
             rawDictation = dictation.trim(),
             createdAt = existing?.createdAt ?: Instant.now(),
-            templateId = tpl.id,
-            templateName = tpl.name,
+            templateId = tpl?.id,
+            templateName = tpl?.name,
             headerId = header?.id,
             headerSnapshot = header,
             membrete = membrete,
@@ -594,6 +695,10 @@ fun RedactarFlowScreen(
             clinicId = clinicId,
             clinicName = clinicName,
             doctorNombre = doctor?.nombre,
+            incluirSello = incluirSello && selloMedico != null,
+            selloBase64 = selloMedico?.base64 ?: existing?.selloBase64,
+            selloOffsetX = selloOffsetX ?: existing?.selloOffsetX,
+            selloOffsetY = selloOffsetY ?: existing?.selloOffsetY,
         )
         if (existing != null) {
             DocumentStorage.update(context, doc)
@@ -751,6 +856,25 @@ fun RedactarFlowScreen(
                             }
                         },
                     )
+                    if (documentType == DocumentType.HISTORIA_CLINICA) {
+                        DropdownMenuItem(
+                            text = { Text("Crear informe") },
+                            leadingIcon = { Icon(Icons.Outlined.Description, contentDescription = null) },
+                            enabled = previewDocumentOrNull() != null,
+                            onClick = {
+                                showToolsMenu = false
+                                val content = generatedContent ?: return@DropdownMenuItem
+                                if (!persistGeneratedDocument(content, showToast = false)) {
+                                    showMsg("Guarda el documento primero")
+                                    return@DropdownMenuItem
+                                }
+                                val source = previewDocumentOrNull() ?: return@DropdownMenuItem
+                                val informe = InformeFromCase.create(context, source)
+                                showMsg("Informe creado con los datos de la historia")
+                                onOpenDocument(informe.id)
+                            },
+                        )
+                    }
                 }
             }
         },
@@ -1251,6 +1375,22 @@ fun RedactarFlowScreen(
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedButton(
+                        onClick = { showOcrDialog = true },
+                        enabled = !ocrProcessing && !processing && !listening,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (ocrProcessing) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Outlined.DocumentScanner, contentDescription = null)
+                        }
+                        Text(
+                            if (ocrProcessing) "Leyendo documento…" else "Adjuntar foto o PDF",
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
                 }
 
                 if (isOrdenes) {
@@ -1371,8 +1511,10 @@ fun RedactarFlowScreen(
                                 membrete = PatientMembrete.fromPatient(selectedPatient!!)
                                 step = RedactarStep.RESULTADO
                                 val newContent = generatedContent
-                                if (savedDocumentId != null && !newContent.isNullOrBlank()) {
-                                    persistGeneratedDocument(newContent, showToast = true)
+                                // El documento se guarda automáticamente la primera vez
+                                // que la IA lo genera; luego se actualiza el mismo registro.
+                                if (!newContent.isNullOrBlank()) {
+                                    persistGeneratedDocument(newContent, showToast = savedDocumentId != null)
                                 } else {
                                     saveDraft(showToast = false)
                                 }
@@ -1447,6 +1589,16 @@ fun RedactarFlowScreen(
                         onOpenEditConsumed = { openEditHeaderId = null },
                         canCreateNew = HeaderStorage.canAdd(context),
                     )
+                    if (selloMedico != null) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = incluirSello,
+                                onCheckedChange = { incluirSello = it },
+                            )
+                            Text("Incluir sello médico al final del documento")
+                        }
+                    }
                     Spacer(modifier = Modifier.height(12.dp))
                     HorizontalDivider(modifier = Modifier.fillMaxWidth())
                     Spacer(modifier = Modifier.height(24.dp))
@@ -1511,20 +1663,108 @@ fun RedactarFlowScreen(
         }
     }
 
+    if (showOcrDialog) {
+        AlertDialog(
+            onDismissRequest = { showOcrDialog = false },
+            title = { Text("Adjuntar documento") },
+            text = {
+                Text(
+                    "Toma una foto de la hoja o elige un archivo (foto o PDF). " +
+                        "El texto se extrae en el teléfono y se agrega al dictado.",
+                )
+            },
+            confirmButton = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    TextButton(
+                        onClick = {
+                            showOcrDialog = false
+                            val dir = File(context.cacheDir, "ocr_capture").apply { mkdirs() }
+                            val file = File(dir, "ocr_${System.currentTimeMillis()}.jpg").apply {
+                                // La cámara abre el archivo en modo escritura (sin O_CREAT):
+                                // debe existir antes o queda vacío y el OCR falla.
+                                createNewFile()
+                            }
+                            val uri = FileProvider.getUriForFile(
+                                context,
+                                "${context.packageName}.fileprovider",
+                                file,
+                            )
+                            pendingCameraUri = uri
+                            pendingCameraPath = file.absolutePath
+                            grantCameraWritePermission(uri)
+                            ocrCamera.launch(uri)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("TOMAR FOTO")
+                    }
+                    TextButton(
+                        onClick = {
+                            showOcrDialog = false
+                            ocrFilePicker.launch(arrayOf("image/*", "application/pdf"))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("ELEGIR FOTO O PDF")
+                    }
+                    TextButton(
+                        onClick = { showOcrDialog = false },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("CANCELAR")
+                    }
+                }
+            },
+        )
+    }
+
+    if (showExitDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitDialog = false },
+            title = { Text("Salir") },
+            text = {
+                Text("El documento ya quedó guardado. ¿Seguro que quieres salir al inicio?")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showExitDialog = false
+                        onBack()
+                    },
+                ) {
+                    Text("Salir al inicio")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitDialog = false }) {
+                    Text("Continuar")
+                }
+            },
+        )
+    }
+
     if (showPreview) {
-        previewDocumentOrNull()?.let { doc ->
+        previewDocumentOrNull()?.let { previewDoc ->
             DocumentPreviewDialog(
-                document = doc,
+                document = previewDoc,
                 onDismiss = { showPreview = false },
+                onSelloPositionChanged = { fx, fy ->
+                    selloOffsetX = fx
+                    selloOffsetY = fy
+                    savedDocumentId?.let { id ->
+                        DocumentStorage.loadAll(context).firstOrNull { it.id == id }
+                            ?.copy(selloOffsetX = fx, selloOffsetY = fy)
+                            ?.let { DocumentStorage.update(context, it) }
+                    }
+                },
             )
         }
     }
 
     if (showAddFarmaco) {
-        AddFarmacoRecetaDialog(
-            loading = addingFarmaco,
+        AddFarmacoSheet(
             onDismiss = { if (!addingFarmaco) showAddFarmaco = false },
-            onConfirm = { principio, presentacion, concentracion ->
+            onSave = { result ->
                 val current = generatedContent.orEmpty()
                 addingFarmaco = true
                 scope.launch {
@@ -1532,9 +1772,11 @@ fun RedactarFlowScreen(
                         generatedContent = DocumentAiService.appendFarmacoToReceta(
                             context = context,
                             currentContent = current,
-                            principioActivo = principio,
-                            presentacion = presentacion,
-                            concentracion = concentracion,
+                            principioActivo = result.principioActivo,
+                            presentacion = result.presentacion,
+                            concentracion = result.concentracion,
+                            dosis = result.disponase,
+                            indicacion = result.indicaciones,
                             patient = selectedPatient,
                         )
                         showMsg("Fármaco agregado")

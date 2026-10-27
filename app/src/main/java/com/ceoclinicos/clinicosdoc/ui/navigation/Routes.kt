@@ -9,6 +9,7 @@ object Routes {
     const val TEMPLATES_RECETAS = "templates_recetas"
     const val PLANTILLAS_HUB = "plantillas_hub"
     const val PHYSICAL_EXAM_CATALOG = "physical_exam_catalog"
+    const val SELLO = "sello"
     const val TEMPLATE_EDIT = "template_edit/{templateId}/{isNew}"
     const val HEADERS = "headers"
     const val HEADER_EDIT = "header_edit/{headerId}/{isNew}"
@@ -22,7 +23,12 @@ object Routes {
 
     fun informeDetail(docId: String) = "informe_detail/$docId"
     const val DRAFTS = "drafts"
+    const val RECIPE_EDIT = "recipe_edit/{recipeId}"
+    const val RECIPE_USE = "recipe_use/{recipeId}"
     const val REDACTAR = "redactar/{docType}/{templateId}/{headerId}/{draftId}"
+
+    fun recipeEdit(recipeId: String = "_new_") = "recipe_edit/$recipeId"
+    fun recipeUse(recipeId: String) = "recipe_use/$recipeId"
 
     fun templateEdit(templateId: String, isNew: Boolean) =
         "template_edit/$templateId/$isNew"

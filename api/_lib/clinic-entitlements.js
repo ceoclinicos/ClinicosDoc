@@ -8,10 +8,23 @@ const PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
 
 const TIERS = {
   free: { maxDoctors: 5, label: "Gratis (hasta 5 médicos)", priceUsd: 0 },
-  tier_50: { maxDoctors: 50, label: "Hasta 50 médicos — $30/mes", priceUsd: 30 },
-  tier_100: { maxDoctors: 100, label: "Hasta 100 médicos — $60/mes", priceUsd: 60 },
-  tier_unlimited: { maxDoctors: 999999, label: "Más de 100 médicos — $100/mes", priceUsd: 100 },
+  tier_10: { maxDoctors: 10, label: "Hasta 10 médicos — $25/mes", priceUsd: 25 },
+  tier_25: { maxDoctors: 25, label: "Hasta 25 médicos — $50/mes", priceUsd: 50 },
+  tier_50: { maxDoctors: 50, label: "Hasta 50 médicos — $100/mes", priceUsd: 100 },
+  tier_250: { maxDoctors: 250, label: "Hasta 250 médicos — $500/mes", priceUsd: 500 },
 };
+
+/** Suscripciones creadas con el esquema de tiers anterior. */
+const LEGACY_TIER_MAP = {
+  tier_100: "tier_250",
+  tier_unlimited: "tier_250",
+};
+
+function normalizeTierId(tier) {
+  const t = String(tier || "free");
+  if (TIERS[t]) return t;
+  return LEGACY_TIER_MAP[t] || "free";
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -59,14 +72,15 @@ function rollClinicPeriodIfNeeded(ent) {
 
 function tierForTeamSize(size) {
   if (size <= 5) return "free";
+  if (size <= 10) return "tier_10";
+  if (size <= 25) return "tier_25";
   if (size <= 50) return "tier_50";
-  if (size <= 100) return "tier_100";
-  return "tier_unlimited";
+  return "tier_250";
 }
 
 function tierRank(tier) {
-  const order = ["free", "tier_50", "tier_100", "tier_unlimited"];
-  const i = order.indexOf(tier);
+  const order = ["free", "tier_10", "tier_25", "tier_50", "tier_250"];
+  const i = order.indexOf(normalizeTierId(tier));
   return i >= 0 ? i : 0;
 }
 
@@ -85,7 +99,7 @@ function isClinicSyncActive(ent, teamSize) {
   if (needed === "free") return teamSize <= TIERS.free.maxDoctors;
 
   if (!paidSubscriptionActive(ent)) return false;
-  const tier = ent.tier || "free";
+  const tier = normalizeTierId(ent.tier);
   if (tier === "free") return false;
   return tierRank(tier) >= tierRank(needed) && teamSize <= (TIERS[tier]?.maxDoctors ?? 0);
 }
@@ -93,7 +107,7 @@ function isClinicSyncActive(ent, teamSize) {
 function maxDoctorsForEntitlement(ent) {
   const rolled = rollClinicPeriodIfNeeded(ent);
   if (rolled.plan === "subscribed" && paidSubscriptionActive(rolled)) {
-    return TIERS[rolled.tier]?.maxDoctors ?? TIERS.free.maxDoctors;
+    return TIERS[normalizeTierId(rolled.tier)]?.maxDoctors ?? TIERS.free.maxDoctors;
   }
   return TIERS.free.maxDoctors;
 }
@@ -148,7 +162,7 @@ function buildClinicPublicStatus(ent, teamSize) {
 
   return {
     plan: rolled.plan,
-    tier: rolled.tier || "free",
+    tier: normalizeTierId(rolled.tier),
     neededTier: needed,
     teamSize,
     maxDoctors,
@@ -289,7 +303,7 @@ async function consumeClinicAiUse(db, clinicId) {
 }
 
 async function activateClinicSubscription(db, clinicId, tier) {
-  const tierKey = String(tier || "").trim();
+  const tierKey = normalizeTierId(tier);
   if (!TIERS[tierKey] || tierKey === "free") {
     throw Object.assign(new Error("Plan de clínica no válido"), { status: 400 });
   }

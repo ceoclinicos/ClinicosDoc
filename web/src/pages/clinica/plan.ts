@@ -1,5 +1,4 @@
 import { registerRoute } from "../../app/router";
-import { getClinicSession } from "../../clinic/session";
 import {
   activateClinicSubscription,
   fetchClinicSubscriptionStatus,
@@ -15,7 +14,6 @@ registerRoute({
   nav: true,
   navLabel: "Plan",
   render: () => {
-    const session = getClinicSession()!;
     const el = page(
       "Plan del centro",
       `
@@ -104,9 +102,10 @@ registerRoute({
 function labelForTier(tier: string): string {
   const map: Record<string, string> = {
     free: "Gratis (≤5 médicos)",
-    tier_50: "Hasta 50 médicos",
-    tier_100: "Hasta 100 médicos",
-    tier_unlimited: "Más de 100 médicos",
+    tier_10: "Hasta 10 médicos — $25/mes",
+    tier_25: "Hasta 25 médicos — $50/mes",
+    tier_50: "Hasta 50 médicos — $100/mes",
+    tier_250: "Hasta 250 médicos — $500/mes",
   };
   return map[tier] || tier;
 }

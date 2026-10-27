@@ -184,7 +184,7 @@ fun PacienteScreen(
             Text(it, style = MaterialTheme.typography.bodySmall, color = Teal, modifier = Modifier.padding(top = 6.dp))
         }
         Text(
-            "Usa «Ver informes» para el historial clínico. «Ficha» abre la ficha de emergencia.",
+            "El lápiz edita, el ojo abre el historial y la cruz la ficha de emergencia.",
             style = MaterialTheme.typography.bodySmall,
             color = TextSecondary,
             modifier = Modifier.padding(top = 8.dp),
@@ -200,55 +200,71 @@ fun PacienteScreen(
                 Text("No se encontró paciente con esa cédula", color = TextSecondary)
             }
             else -> {
-                LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+                LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
                     items(displayedPatients, key = { it.id }) { patient ->
                         Card(
                             colors = CardDefaults.cardColors(),
                         ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier.size(40.dp).background(Teal.copy(alpha = 0.1f), CircleShape),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Text(patient.nombre.firstOrNull()?.uppercaseChar()?.toString() ?: "?", color = Teal)
-                                    }
-                                    Spacer(modifier = Modifier.padding(horizontal = 6.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(patient.nombre, style = MaterialTheme.typography.titleMedium)
-                                        Text(
-                                            buildString {
-                                                append("C.I. ${patient.cedula} · ${patient.edad} años")
-                                                if (patient.whatsapp.isNotBlank()) append(" · WA ${patient.whatsapp}")
-                                                append(" · Nac. ${dateFormatter.format(patient.fechaNacimiento)}")
-                                            },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = TextSecondary,
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(12.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(36.dp).background(Teal.copy(alpha = 0.1f), CircleShape),
+                                    contentAlignment = Alignment.Center,
                                 ) {
-                                    OutlinedButton(onClick = { onEditPatient(patient.id) }) {
-                                        Icon(Icons.Outlined.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-                                        Text("Editar")
-                                    }
-                                    FilledTonalButton(
-                                        onClick = {
-                                            onOpenPatientInformes(patient.cedula, patient.id, patient.nombre)
+                                    Text(
+                                        patient.nombre.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                                        color = Teal,
+                                    )
+                                }
+                                Spacer(modifier = Modifier.padding(horizontal = 5.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(patient.nombre, style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        buildString {
+                                            append("C.I. ${patient.cedula.ifBlank { "S/C" }} · ${patient.edad} años")
+                                            if (patient.whatsapp.isNotBlank()) append(" · WA ${patient.whatsapp}")
+                                            append(" · Nac. ${dateFormatter.format(patient.fechaNacimiento)}")
                                         },
-                                    ) {
-                                        Icon(Icons.Outlined.Visibility, contentDescription = "Ver informes", modifier = Modifier.size(18.dp))
-                                    }
-                                    OutlinedButton(onClick = { openFicha(patient) }) {
-                                        Icon(Icons.Outlined.MedicalInformation, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.padding(horizontal = 2.dp))
-                                        Text("Ficha")
-                                    }
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary,
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { onEditPatient(patient.id) },
+                                    modifier = Modifier.size(40.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Edit,
+                                        contentDescription = "Editar",
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
+                                        onOpenPatientInformes(patient.cedula, patient.id, patient.nombre)
+                                    },
+                                    modifier = Modifier.size(40.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Visibility,
+                                        contentDescription = "Ver informes",
+                                        tint = Teal,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { openFicha(patient) },
+                                    modifier = Modifier.size(40.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.MedicalInformation,
+                                        contentDescription = "Ficha de emergencia",
+                                        modifier = Modifier.size(20.dp),
+                                    )
                                 }
                             }
                         }

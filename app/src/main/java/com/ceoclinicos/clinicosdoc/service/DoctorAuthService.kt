@@ -22,7 +22,7 @@ object DoctorAuthService {
 
     fun hashPassword(password: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        return digest.digest(password.toByteArray(Charsets.UTF_8))
+        return digest.digest(password.uppercase().toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
     }
 
@@ -38,13 +38,14 @@ object DoctorAuthService {
         if (!isConfigured(context)) {
             return Result.failure(IllegalStateException("Sin conexión a Firebase"))
         }
-        if (!password.matches(Regex("^\\d{4}$|^\\d{6}$"))) {
-            return Result.failure(IllegalStateException("El PIN debe tener 4 o 6 dígitos"))
+        if (!password.matches(Regex("^\\d{4}$|^\\d{6}$|^[A-Za-z]\\d{6}$"))) {
+            return Result.failure(IllegalStateException("El PIN debe tener 4/6 dígitos o una letra + 6 dígitos"))
         }
+        val pin = password.uppercase()
         return runCatching {
             val auth = AuthLoginService.login(
                 cedulaInput,
-                password,
+                pin,
                 "app",
                 DeviceId.get(context),
             ).getOrThrow()
@@ -79,8 +80,8 @@ object DoctorAuthService {
         if (profile.correo.isBlank() || !profile.correo.contains("@")) {
             return Result.failure(IllegalStateException("Correo electrónico requerido"))
         }
-        if (!password.matches(Regex("^\\d{6}$"))) {
-            return Result.failure(IllegalStateException("El PIN debe tener exactamente 6 dígitos"))
+        if (!password.matches(Regex("^\\d{6}$|^[A-Za-z]\\d{6}$"))) {
+            return Result.failure(IllegalStateException("La contraseña debe ser 6 dígitos o una letra + 6 dígitos"))
         }
         if (profile.sexo !in listOf("Masculino", "Femenino")) {
             return Result.failure(IllegalStateException("Seleccione el sexo"))
@@ -115,7 +116,7 @@ object DoctorAuthService {
         return runCatching {
             val auth = AuthLoginService.register(
                 cedula = profileValidated.cedula,
-                pin = password,
+                pin = password.uppercase(),
                 nombre = profileValidated.nombre,
                 correo = profileValidated.correo,
                 sexo = profileValidated.sexo,

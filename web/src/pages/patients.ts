@@ -5,7 +5,13 @@ import {
   parseBirthFromForm,
   sexOptionsHtml,
 } from "../services/birth-date";
-import { findPatientByCedula, matchesCedula, normalizeCedula } from "../services/cedula";
+import {
+  displayCedula,
+  findPatientByCedula,
+  makeSinCedulaId,
+  matchesCedula,
+  normalizeCedula,
+} from "../services/cedula";
 import { getFichaByCedula, renderFichaHtml } from "../services/emergency-ficha";
 import { loadJson, saveJson } from "../services/local-store";
 import { canSync, findGlobalByCedula, pushPatient, syncQuiet } from "../services/cloud-sync";
@@ -31,8 +37,12 @@ function formatNac(iso: string): string {
 
 function upsertLocalPatient(patient: Patient): Patient {
   const all = loadPatients();
+  // Sin cédula: solo dedup por id (dos sin cédula no deben colisionar por "" == "")
   const idx = all.findIndex(
-    (p) => p.id === patient.id || normalizeCedula(p.cedula) === normalizeCedula(patient.cedula),
+    (p) =>
+      p.id === patient.id ||
+      (patient.cedula.trim() !== "" &&
+        normalizeCedula(p.cedula) === normalizeCedula(patient.cedula)),
   );
   let saved = patient;
   if (idx >= 0) {
@@ -77,15 +87,19 @@ function renderPatientList(patients: Patient[], highlightCedula?: string): strin
       return `<li class="list-item patient-card${isMatch ? " list-item-highlight" : ""}" data-cedula="${escapeAttr(p.cedula)}">
         <div class="patient-card-main">
           <strong>${escapeHtml(p.nombre)}</strong>
-          <span>C.I. ${escapeHtml(p.cedula)} · ${p.edad} años · ${escapeHtml(p.sexo || "—")} · Nac. ${escapeHtml(formatNac(p.fechaNacimiento))}</span>
+          <span>C.I. ${escapeHtml(displayCedula(p.cedula))} · ${p.edad} años · ${escapeHtml(p.sexo || "—")} · Nac. ${escapeHtml(formatNac(p.fechaNacimiento))}</span>
         </div>
         <div class="patient-row-actions">
-          <button type="button" class="btn btn-ghost btn-sm btn-edit-patient" data-edit-id="${escapeAttr(p.id)}">Editar</button>
+          <button type="button" class="btn btn-ghost btn-sm btn-edit-patient" title="Editar" aria-label="Editar" data-edit-id="${escapeAttr(p.id)}">
+            <span aria-hidden="true">✏️</span>
+          </button>
           <button type="button" class="btn btn-secondary btn-sm btn-ver-informes" title="Ver informes" aria-label="Ver informes"
             data-cedula="${escapeAttr(p.cedula)}" data-id="${escapeAttr(p.id)}">
             <span class="btn-icon-eye" aria-hidden="true">👁</span>
           </button>
-          <button type="button" class="btn btn-ghost btn-sm btn-ficha-patient" data-cedula="${escapeAttr(p.cedula)}">Ficha</button>
+          <button type="button" class="btn btn-ghost btn-sm btn-ficha-patient" title="Ficha de emergencia" aria-label="Ficha de emergencia" data-cedula="${escapeAttr(p.cedula)}" ${p.cedula.trim() ? "" : "disabled"}>
+            <span aria-hidden="true">✚</span>
+          </button>
         </div>
       </li>`;
     })
@@ -248,6 +262,7 @@ registerRoute({
     let foundPatients: Patient[] = [];
     let searchMessage = "";
     let prefilledCedula = "";
+    let sinCedula = false;
 
     const el = page("Nuevo paciente", `<div id="nuevo-root"></div>`);
     const root = el.querySelector("#nuevo-root") as HTMLElement;
@@ -262,9 +277,23 @@ registerRoute({
             </label>
             <button type="button" class="btn btn-primary" id="nuevo-buscar">Buscar en base de datos</button>
           </div>
+          <label class="check-row" style="margin:0.5rem 0">
+            <input type="checkbox" id="nuevo-sin-cedula" ${sinCedula ? "checked" : ""} />
+            <span>El paciente no tiene cédula (bebé o menor sin documento)</span>
+          </label>
           <p class="muted" id="nuevo-msg">${escapeHtml(searchMessage)}</p>
           <div id="nuevo-found"></div>
           <button type="button" class="btn btn-ghost" data-nav="/pacientes">Volver</button>`;
+
+        root.querySelector("#nuevo-sin-cedula")?.addEventListener("change", (e) => {
+          sinCedula = (e.target as HTMLInputElement).checked;
+          if (sinCedula) {
+            prefilledCedula = "";
+            foundPatients = [];
+            step = "formulario";
+          }
+          renderStep();
+        });
 
         const foundBox = root.querySelector("#nuevo-found") as HTMLElement;
         if (foundPatients.length) {
@@ -298,8 +327,12 @@ registerRoute({
         root.innerHTML = `
           <p class="muted">Completa los datos del paciente nuevo.</p>
           <form class="form" id="patient-form">
+            <label class="check-row">
+              <input type="checkbox" id="form-sin-cedula" ${sinCedula ? "checked" : ""} />
+              <span>El paciente no tiene cédula (bebé o menor sin documento)</span>
+            </label>
             <label>Nombre<input name="nombre" required /></label>
-            <label>Cédula<input name="cedula" required value="${escapeAttr(prefilledCedula)}" /></label>
+            <label id="cedula-label">Cédula<input name="cedula" ${sinCedula ? "" : "required"} value="${escapeAttr(prefilledCedula)}" ${sinCedula ? "disabled" : ""} /></label>
             <label>Sexo
               <select name="sexo" required>${sexOptionsHtml()}</select>
             </label>
@@ -309,6 +342,15 @@ registerRoute({
             <button type="button" class="btn btn-ghost" id="nuevo-back">Volver a búsqueda</button>
           </form>`;
         bindBirthDateSelects(root, "nac");
+        const cedulaInput = root.querySelector('input[name="cedula"]') as HTMLInputElement | null;
+        root.querySelector("#form-sin-cedula")?.addEventListener("change", (e) => {
+          sinCedula = (e.target as HTMLInputElement).checked;
+          if (cedulaInput) {
+            cedulaInput.disabled = sinCedula;
+            cedulaInput.required = !sinCedula;
+            if (sinCedula) cedulaInput.value = "";
+          }
+        });
         root.querySelector("#nuevo-back")?.addEventListener("click", () => {
           step = "cedula";
           renderStep();
@@ -323,10 +365,13 @@ registerRoute({
               throw new Error("Seleccione el sexo");
             }
             const birth = parseBirthFromForm(fd, "nac");
+            const nombre = String(fd.get("nombre")).trim();
+            const cedula = sinCedula ? "" : String(fd.get("cedula")).trim();
             const patient: Patient = {
-              id: crypto.randomUUID(),
-              nombre: String(fd.get("nombre")).trim(),
-              cedula: String(fd.get("cedula")).trim(),
+              // Sin cédula: ID interno `sc_*` como en la app (se usa como clave global)
+              id: sinCedula ? makeSinCedulaId(nombre) : crypto.randomUUID(),
+              nombre,
+              cedula,
               edad: birth.age,
               sexo,
               fechaNacimiento: birth.iso,
@@ -407,13 +452,18 @@ registerRoute({
     }
 
     const birthIso = existing.fechaNacimiento;
+    let sinCedula = existing.cedula.trim() === "";
     const el = page(
       "Editar paciente",
       `
       <p class="muted">Modifica los datos y guarda los cambios.</p>
       <form class="form" id="edit-patient-form">
+        <label class="check-row">
+          <input type="checkbox" id="edit-sin-cedula" ${sinCedula ? "checked" : ""} />
+          <span>El paciente no tiene cédula (bebé o menor sin documento)</span>
+        </label>
         <label>Nombre<input name="nombre" required value="${escapeAttr(existing.nombre)}" /></label>
-        <label>Cédula<input name="cedula" required value="${escapeAttr(existing.cedula)}" /></label>
+        <label>Cédula<input name="cedula" ${sinCedula ? "" : "required"} value="${escapeAttr(existing.cedula)}" ${sinCedula ? "disabled" : ""} /></label>
         <label>Sexo
           <select name="sexo" required>${sexOptionsHtml(existing.sexo)}</select>
         </label>
@@ -428,6 +478,15 @@ registerRoute({
     );
 
     bindBirthDateSelects(el, "nac");
+    const cedulaInput = el.querySelector('input[name="cedula"]') as HTMLInputElement | null;
+    el.querySelector("#edit-sin-cedula")?.addEventListener("change", (e) => {
+      sinCedula = (e.target as HTMLInputElement).checked;
+      if (cedulaInput) {
+        cedulaInput.disabled = sinCedula;
+        cedulaInput.required = !sinCedula;
+        if (sinCedula) cedulaInput.value = "";
+      }
+    });
     el.querySelector("#edit-patient-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
       const fd = new FormData(e.target as HTMLFormElement);
@@ -438,10 +497,12 @@ registerRoute({
         }
         const birth = parseBirthFromForm(fd, "nac");
         const whatsapp = String(fd.get("whatsapp") ?? "").replace(/\D/g, "");
+        const nombre = String(fd.get("nombre")).trim();
+        const cedula = sinCedula ? "" : String(fd.get("cedula")).trim();
         upsertLocalPatient({
           ...existing,
-          nombre: String(fd.get("nombre")).trim(),
-          cedula: String(fd.get("cedula")).trim(),
+          nombre,
+          cedula,
           edad: birth.age,
           sexo,
           fechaNacimiento: birth.iso,

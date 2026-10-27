@@ -42,8 +42,9 @@ object PatientStorage {
         val digits = CedulaNormalizer.digitsOnly(patient.cedula)
         val idx = all.indexOfFirst {
             it.id == patient.id ||
-                CedulaNormalizer.normalize(it.cedula) == cedulaKey ||
-                CedulaNormalizer.digitsOnly(it.cedula) == digits
+                (cedulaKey.isNotBlank() &&
+                    (CedulaNormalizer.normalize(it.cedula) == cedulaKey ||
+                        CedulaNormalizer.digitsOnly(it.cedula) == digits))
         }
         val saved = if (idx >= 0) {
             val keepId = all[idx].id

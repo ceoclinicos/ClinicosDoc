@@ -5,6 +5,9 @@ import { resetRedactarTutorial, isTutorialButtonEnabled } from "../services/onbo
 import { openRedactarTutorial } from "../ui/redactar-tutorial";
 import { joinClinicByInvite, listMembershipsForDoctor, listPendingInvitationsForDoctor, acceptDoctorInvitation, rejectDoctorInvitation, leaveClinicAsDoctor } from "../clinic/store";
 import { subscribeSyncStatus, flushPendingCloudSync } from "../services/sync-feedback";
+import { resetTemplatesToDefaults } from "../services/clinical-store";
+import { resetExamCatalogToDefaults } from "../services/exam-catalog";
+import { clearSello } from "../services/sello-store";
 import { bindNavButtons, page } from "./helpers";
 import {
   activateSubscription,
@@ -61,6 +64,7 @@ registerRoute({
         <button type="button" class="tile tile-full" data-nav="/plantillas/recetas">Órdenes y recetas</button>
         <button type="button" class="tile tile-full" data-nav="/plantillas/encabezados">Encabezados PDF</button>
         <button type="button" class="tile tile-full" data-nav="/plantillas/examen-fisico">Catálogo examen físico</button>
+        <button type="button" class="tile tile-full" id="btn-reset-config">Restablecer configuración</button>
 
         <h2 class="home-section-title">Datos del médico (consultorio)</h2>
         <form class="form card-panel" id="doctor-form">
@@ -182,7 +186,11 @@ registerRoute({
             if (!confirm(`¿Desvincularse de «${clinicName}»?`)) return;
             (btn as HTMLButtonElement).disabled = true;
             try {
-              await leaveClinicAsDoctor({ clinicId, doctorCedula: cedula });
+              await leaveClinicAsDoctor({
+                clinicId,
+                doctorCedula: cedula,
+                clinicName,
+              });
               alert(`Desvinculado de ${clinicName}`);
               await refreshMemberships();
             } catch (err) {
@@ -249,6 +257,23 @@ registerRoute({
         mpps: String(fd.get("mpps")),
       });
       alert("Perfil guardado");
+    });
+
+    el.querySelector("#btn-reset-config")?.addEventListener("click", () => {
+      if (
+        !confirm(
+          "Volverán a los valores de fábrica: plantillas de documento, catálogo de examen " +
+            "físico, sello médico y ejemplo de enfermedad actual.\n\n" +
+            "NO se borran: encabezados, informes, historias, pacientes, citas ni borradores.\n\n" +
+            "¿Continuar?",
+        )
+      ) {
+        return;
+      }
+      resetTemplatesToDefaults();
+      resetExamCatalogToDefaults();
+      clearSello();
+      alert("Configuración restablecida.");
     });
 
     el.querySelector("#btn-logout")?.addEventListener("click", () => {

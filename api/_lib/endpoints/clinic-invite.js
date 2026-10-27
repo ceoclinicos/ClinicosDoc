@@ -1,8 +1,8 @@
-const { getAdmin } = require("./_lib/firebase");
-const { cedulaLookupKeys, normalizeCedula } = require("./_lib/pin");
-const { applyCors } = require("./_lib/cors");
-const { parseBody } = require("./_lib/body");
-const { apiError } = require("./_lib/errors");
+const { getAdmin } = require("../firebase");
+const { cedulaLookupKeys, normalizeCedula } = require("../pin");
+const { applyCors } = require("../cors");
+const { parseBody } = require("../body");
+const { apiError } = require("../errors");
 const {
   expiresAtIso,
   INVITE_TTL_DAYS,
@@ -10,12 +10,12 @@ const {
   deleteDoctorInvitation,
   clinicInviteRef,
   doctorMailboxRef,
-} = require("./_lib/invite-expiry");
+} = require("../invite-expiry");
 const {
   canAddTeamMember,
   countClinicTeamSize,
   readClinicEntitlement,
-} = require("./_lib/clinic-entitlements");
+} = require("../clinic-entitlements");
 
 async function findAppMedico(db, inputCedula) {
   const keys = cedulaLookupKeys(inputCedula);

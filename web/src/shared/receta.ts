@@ -15,6 +15,8 @@ export const RECETA_PRESENTACIONES = [
   "Ungüento",
   "Gel",
   "Inyectable",
+  "Ampollas",
+  "Inhalador",
   "Sobres",
   "Óvulos",
   "Otro",

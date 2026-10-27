@@ -28,6 +28,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 object ClinicService {
@@ -45,6 +46,17 @@ object ClinicService {
     private const val LEAVE_CLINIC_URL = "https://clinicos-doc.vercel.app/api/clinic-leave"
     private const val TEMPLATES_URL = "https://clinicos-doc.vercel.app/api/clinic-templates"
     private const val DOCUMENT_PUSH_URL = "https://clinicos-doc.vercel.app/api/clinic-document-push"
+
+    private const val CLINIC_FREE_MAX_DOCTORS = 5
+    /** Incluye tiers antiguos (tier_100, tier_unlimited) mapeados al tope actual. */
+    private val CLINIC_TIER_MAX_DOCTORS = mapOf(
+        "tier_10" to 10,
+        "tier_25" to 25,
+        "tier_50" to 50,
+        "tier_250" to 250,
+        "tier_100" to 250,
+        "tier_unlimited" to 250,
+    )
 
     @Volatile
     private var lastAffiliationSyncAtMs: Long = 0L
@@ -112,7 +124,9 @@ object ClinicService {
             refreshMemberships(
                 context,
                 allowEmptyOverwrite = force,
-                forceHeal = force || ClinicMembershipStorage.load(context).isEmpty(),
+                // No forzar heal solo por lista vacía: tras desvincular eso
+                // re-agregaba clínicas huérfanas. El servidor respeta clinic_left.
+                forceHeal = force,
                 forceNetwork = force,
             )
         }.getOrElse { ClinicMembershipStorage.load(context) }
@@ -127,6 +141,44 @@ object ClinicService {
         }
         lastAffiliationSyncAtMs = System.currentTimeMillis()
         return memberships
+    }
+
+    /**
+     * La suscripción del centro habilita moldes + registro de informes
+     * (la IA la paga cada médico). Se verifica ANTES de usar los moldes.
+     * @return motivo de bloqueo o null si puede usar los moldes del centro.
+     */
+    suspend fun clinicMoldBlockReason(clinicId: String): String? {
+        return runCatching {
+            val snap = clinicRef(clinicId).get().await()
+            if (!snap.exists()) return@runCatching "Centro no encontrado"
+            val ent = (snap.get("clinicEntitlement") as? Map<*, *>).orEmpty()
+            val members = membersCol(clinicId).get().await().size()
+            val pendingInvites = clinicRef(clinicId)
+                .collection(FirestorePaths.SUB_INVITATIONS)
+                .whereEqualTo("status", "pending")
+                .get().await().size()
+            val teamSize = members + pendingInvites
+
+            val endMs = (ent["periodEndAt"] as? String)
+                ?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
+                ?: 0L
+            val paidActive = ent["plan"] == "subscribed" && endMs > System.currentTimeMillis()
+
+            if (paidActive) {
+                val max = CLINIC_TIER_MAX_DOCTORS[ent["tier"] as? String] ?: CLINIC_FREE_MAX_DOCTORS
+                if (teamSize > max) {
+                    "El centro tiene $teamSize médicos y su plan cubre $max. Debe actualizar la suscripción."
+                } else {
+                    null
+                }
+            } else if (teamSize > CLINIC_FREE_MAX_DOCTORS) {
+                "La suscripción del centro no está activa. Los moldes institucionales " +
+                    "se habilitan cuando el centro renueva su plan."
+            } else {
+                null
+            }
+        }.getOrNull()
     }
 
     /** Lee templatesVersion del documento de la clínica (ligero). */
@@ -314,6 +366,12 @@ object ClinicService {
                 "joinedAt" to joinedAt,
             ),
         ).await()
+        // Si había salido antes, permitir volver a unirse.
+        runCatching {
+            db().collection(FirestorePaths.USERS).document(userId)
+                .collection("clinic_left").document(clinicId)
+                .delete().await()
+        }
         val membership = ClinicMembership(clinicId = clinicId, clinicName = clinicName, role = "medico")
         ClinicMembershipStorage.upsert(context, membership)
         return membership
@@ -486,18 +544,45 @@ object ClinicService {
             ?: throw IllegalStateException("Sin sesión de médico")
         val doctorCedula = CedulaNormalizer.normalize(profile.cedula)
         val clinicName = ClinicMembershipStorage.load(context).find { it.clinicId == clinicId }?.clinicName.orEmpty()
+        val userId = resolveUserId(context)
 
-        // Intenta remoto; si la clínica ya no existe o hay fallo de red, igual limpia local.
+        // Bloqueo local inmediato: el sync no debe re-agregar ni mostrar "te ha agregado".
+        ClinicMembershipStorage.markClinicLeft(context, clinicId)
+        ClinicMembershipStorage.remove(context, clinicId)
+        if (clinicName.isNotBlank()) {
+            ClinicMembershipStorage.purgePendingNoticesForClinic(context, clinicName)
+        }
+
+        // Marca remota clinic_left + limpia membership (cliente; rules permiten owner).
+        if (!userId.isNullOrBlank()) {
+            runCatching {
+                db().collection(FirestorePaths.USERS).document(userId)
+                    .collection("clinic_left").document(clinicId)
+                    .set(
+                        mapOf(
+                            "clinicId" to clinicId,
+                            "clinicName" to clinicName,
+                            "leftAt" to java.time.Instant.now().toString(),
+                        ),
+                        SetOptions.merge(),
+                    ).await()
+            }
+            runCatching {
+                membershipsCol(userId).document(clinicId).delete().await()
+            }
+        }
+
+        // Intenta remoto; si falla la red, el bloqueo local/clinic_left ya evita el heal.
         try {
             val idToken = idTokenOrThrow()
             withContext(Dispatchers.IO) {
                 val bodyJson = JSONObject()
                     .put("clinicId", clinicId)
                     .put("doctorCedula", doctorCedula)
-                    .toString()
+                if (clinicName.isNotBlank()) bodyJson.put("clinicName", clinicName)
                 val request = Request.Builder()
                     .url(LEAVE_CLINIC_URL)
-                    .post(bodyJson.toRequestBody("application/json; charset=utf-8".toMediaType()))
+                    .post(bodyJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
                     .header("Accept", "application/json")
                     .header("Authorization", "Bearer $idToken")
                     .build()
@@ -507,6 +592,9 @@ object ClinicService {
                         val json = runCatching { JSONObject(raw) }.getOrNull()
                         error(json?.optString("error").orEmpty().ifBlank { "Sesión inválida" })
                     }
+                    if (!response.isSuccessful && response.code != 404) {
+                        Log.w(TAG, "clinic-leave HTTP ${response.code}")
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -514,15 +602,26 @@ object ClinicService {
             val isAuth =
                 msg.contains("sesión", ignoreCase = true) ||
                     msg.contains("token", ignoreCase = true) ||
-                    msg.contains("Firebase no configurado", ignoreCase = true)
+                    msg.contains("Firebase no configurado", ignoreCase = true) ||
+                    msg.contains("Sesión inválida", ignoreCase = true)
             if (isAuth) throw e
-            // Clínica inexistente / red: continuar con limpieza local
+            Log.w(TAG, "clinic-leave remoto: ${e.message}")
         }
 
-        ClinicMembershipStorage.remove(context, clinicId)
-        if (clinicName.isNotBlank()) {
-            ClinicMembershipStorage.purgePendingNoticesForClinic(context, clinicName)
+        // Limpieza de members en la clínica (rules: self-delete).
+        runCatching {
+            val keys = CedulaNormalizer.lookupKeys(doctorCedula).ifEmpty { listOf(doctorCedula) }
+            for (key in keys) {
+                runCatching { membersCol(clinicId).document(key).delete().await() }
+            }
+            if (!userId.isNullOrBlank()) {
+                val snap = membersCol(clinicId).whereEqualTo("cloudUserId", userId).get().await()
+                for (d in snap.documents) {
+                    runCatching { d.reference.delete().await() }
+                }
+            }
         }
+
         ClinicCatalogStorage.removeClinic(context, clinicId)
         lastAffiliationSyncAtMs = 0L
     }
@@ -589,12 +688,15 @@ object ClinicService {
                         val pending = parsePendingInvitationsJson(pendingArr)
                         ClinicMembershipStorage.savePendingInvites(context, pending)
                     }
-                    if (list.isEmpty() && local.isNotEmpty() && !allowEmptyOverwrite) {
-                        return@use local
+                    val filtered = ClinicMembershipStorage.filterOutLeft(context, list)
+                    if (filtered.isEmpty() && local.isNotEmpty() && !allowEmptyOverwrite) {
+                        // Si local solo tenía clínicas "left", sí permitir vacío.
+                        val localAlive = ClinicMembershipStorage.filterOutLeft(context, local)
+                        if (localAlive.isNotEmpty()) return@use localAlive
                     }
-                    ClinicMembershipStorage.saveDetectingChanges(context, list)
+                    ClinicMembershipStorage.saveDetectingChanges(context, filtered)
                     lastAffiliationSyncAtMs = System.currentTimeMillis()
-                    list
+                    filtered
                 }
             }
         }.getOrElse { apiError ->
@@ -611,15 +713,24 @@ object ClinicService {
                         role = doc.getString("role") ?: "medico",
                     )
                 }.sortedBy { it.clinicName }
-                if (list.isNotEmpty()) {
-                    ClinicMembershipStorage.saveDetectingChanges(context, list)
+                val filtered = ClinicMembershipStorage.filterOutLeft(context, list)
+                // Limpia memberships remotas de clínicas dejadas.
+                val left = ClinicMembershipStorage.loadLeftClinicIds(context)
+                for (m in list) {
+                    if (m.clinicId in left) {
+                        runCatching { membershipsCol(userId).document(m.clinicId).delete().await() }
+                    }
+                }
+                if (filtered.isNotEmpty() || allowEmptyOverwrite || local.isEmpty()) {
+                    ClinicMembershipStorage.saveDetectingChanges(context, filtered)
                     lastAffiliationSyncAtMs = System.currentTimeMillis()
-                    list
+                    filtered
                 } else {
                     throw apiError
                 }
             }.getOrElse {
-                if (local.isNotEmpty()) local
+                val localAlive = ClinicMembershipStorage.filterOutLeft(context, local)
+                if (localAlive.isNotEmpty()) localAlive
                 else throw (apiError as? Exception ?: IllegalStateException(apiError.message))
             }
         }
@@ -831,6 +942,10 @@ object ClinicService {
             .put("sourceDocumentId", document.sourceDocumentId)
             .put("clinicId", clinicId)
             .put("clinicName", document.clinicName)
+            .put("incluirSello", document.incluirSello)
+            .put("selloBase64", document.selloBase64)
+            .put("selloOffsetX", document.selloOffsetX)
+            .put("selloOffsetY", document.selloOffsetY)
         document.headerSnapshot?.let { h ->
             docJson.put(
                 "headerSnapshot",

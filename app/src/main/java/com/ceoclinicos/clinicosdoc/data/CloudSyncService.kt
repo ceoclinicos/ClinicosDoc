@@ -62,6 +62,8 @@ object CloudSyncService {
         val physicalExam = fetchPhysicalExamSystems(userId)
         val drafts = fetchDrafts(userId)
 
+        runCatching { pullSello(context, userId) }
+
         val hasCloudData = patients.isNotEmpty() ||
             documents.isNotEmpty() ||
             templates.isNotEmpty() ||
@@ -84,7 +86,12 @@ object CloudSyncService {
                 HeaderStorage.saveAllLocal(context, mergeHeaderLogos(context, headers))
             }
             if (appointments.isNotEmpty()) AppointmentStorage.saveAllLocal(context, appointments)
-            if (physicalExam.isNotEmpty()) PhysicalExamCatalogStorage.saveAllLocal(context, physicalExam)
+            if (physicalExam.isNotEmpty()) {
+                PhysicalExamCatalogStorage.saveAllLocal(
+                    context,
+                    PhysicalExamCatalogStorage.withBuiltIns(physicalExam),
+                )
+            }
             if (drafts.isNotEmpty()) DraftStorage.saveAllLocal(context, drafts)
         }
         return true
@@ -98,6 +105,7 @@ object CloudSyncService {
         AppointmentStorage.loadAll(context).forEach { pushAppointment(context, userId, it) }
         PhysicalExamCatalogStorage.loadAll(context).forEach { pushPhysicalExamSystem(context, userId, it) }
         DraftStorage.loadAll(context).forEach { pushDraft(context, userId, it) }
+        SelloStorage.load(context)?.base64?.let { pushSello(context, userId, it) }
     }
 
     suspend fun pushPatient(context: Context, userId: String, patient: Patient) {
@@ -107,7 +115,7 @@ object CloudSyncService {
     }
 
     private suspend fun pushGlobalPatient(userId: String, patient: Patient) {
-        val key = PatientFirestoreId.from(patient)
+        val key = PatientFirestoreId.globalKey(patient)
         val now = Instant.now().toString()
         val payload = patient.toDto().toMap().toMutableMap().apply {
             put("firestoreKey", key)
@@ -171,7 +179,11 @@ object CloudSyncService {
     }
 
     private suspend fun pushGlobalDocument(userId: String, doctorNombre: String, document: ClinicalDocument) {
-        val patientKey = PatientFirestoreId.from(document.patientCedula, document.patientNombre)
+        val patientKey = PatientFirestoreId.globalKey(
+            document.patientCedula,
+            document.patientNombre,
+            document.patientId,
+        )
         val dto = document.toSyncDto(
             doctorId = userId,
             doctorNombre = doctorNombre,
@@ -188,7 +200,7 @@ object CloudSyncService {
         val local = DocumentStorage.loadAll(context).firstOrNull { it.id == documentId }
         documentsRef(userId).document(documentId).delete().await()
         local?.let {
-            val key = PatientFirestoreId.from(it.patientCedula, it.patientNombre)
+            val key = PatientFirestoreId.globalKey(it.patientCedula, it.patientNombre, it.patientId)
             globalPatientDocumentsRef(key).document(documentId).delete().await()
         }
     }
@@ -325,7 +337,7 @@ object CloudSyncService {
 
     suspend fun pushHeader(context: Context, userId: String, header: DocumentHeader) {
         if (!DoctorAuthService.isConfigured(context)) return
-        val ready = HeaderStorage.ensureLogoBase64(header)
+        val ready = HeaderStorage.ensureImageBase64(header)
         headersRef(userId).document(header.id)
             .set(ready.toSyncDto().toMap())
             .await()
@@ -389,6 +401,26 @@ object CloudSyncService {
             .await()
     }
 
+    suspend fun pushSello(context: Context, userId: String, selloBase64: String) {
+        if (!DoctorAuthService.isConfigured(context)) return
+        FirebaseFirestore.getInstance()
+            .collection(FirestorePaths.USERS)
+            .document(userId)
+            .set(mapOf("selloBase64" to selloBase64), SetOptions.merge())
+            .await()
+    }
+
+    /** Restaura el sello del médico guardado en su documento de usuario. */
+    private suspend fun pullSello(context: Context, userId: String) {
+        val snap = FirebaseFirestore.getInstance()
+            .collection(FirestorePaths.USERS)
+            .document(userId)
+            .get()
+            .await()
+        val b64 = snap.getString("selloBase64")
+        if (!b64.isNullOrBlank()) SelloStorage.saveRemote(context, b64)
+    }
+
     private suspend fun fetchPatients(userId: String): List<Patient> =
         patientsRef(userId).get().await().documents.mapNotNull { it.toPatient() }
 
@@ -446,13 +478,12 @@ object CloudSyncService {
     private fun mergeHeaderLogos(context: Context, cloudHeaders: List<DocumentHeader>): List<DocumentHeader> {
         val localById = HeaderStorage.loadAll(context).associateBy { it.id }
         return cloudHeaders.map { cloud ->
-            val withFile = HeaderStorage.withMaterializedLogo(context, cloud)
-            if (withFile.logoPath != null) return@map withFile
-            val localLogo = localById[cloud.id]?.logoPath?.takeIf { path -> File(path).exists() }
-            val localB64 = localById[cloud.id]?.logoBase64
+            val local = localById[cloud.id]
+            val withFile = HeaderStorage.withMaterializedImages(context, cloud)
             cloud.copy(
-                logoPath = localLogo,
-                logoBase64 = cloud.logoBase64 ?: localB64,
+                logoPath = withFile.logoPath
+                    ?: local?.logoPath?.takeIf { path -> File(path).exists() },
+                logoBase64 = cloud.logoBase64 ?: local?.logoBase64,
             )
         }
     }
@@ -577,6 +608,10 @@ object CloudSyncService {
             clinicId = dto.clinicId,
             clinicName = dto.clinicName,
             doctorNombre = dto.doctorNombre,
+            incluirSello = dto.incluirSello ?: false,
+            selloBase64 = dto.selloBase64,
+            selloOffsetX = dto.selloOffsetX,
+            selloOffsetY = dto.selloOffsetY,
         )
     }
 
@@ -708,6 +743,10 @@ object CloudSyncService {
         sourceDocumentId = sourceDocumentId,
         clinicId = clinicId,
         clinicName = clinicName,
+        incluirSello = incluirSello,
+        selloBase64 = selloBase64,
+        selloOffsetX = selloOffsetX,
+        selloOffsetY = selloOffsetY,
     )
 
     private fun DocumentHeader.toSyncDto() = DocumentHeaderDto(

@@ -15,17 +15,24 @@ object SectionDefaults {
 
     /** Diagnóstico clínico con nomenclatura estándar (CIE-10), sin códigos. */
     const val DIAGNOSTICO_STYLE =
-        "- Diagnóstico / Impresión diagnóstica: usa nomenclatura clínica estándar al estilo CIE-10 " +
-            "(términos nosológicos o sindromáticos reconocidos). " +
+        "- Diagnóstico / Impresión diagnóstica: SOLO enfermedades reales de la clasificación CIE-10 " +
+            "(entidades nosológicas o síndromes reconocidos como diagnóstico). " +
             "Redacta el diagnóstico según síntomas, signos y evolución del dictado " +
-            "(ej. \"Gastritis aguda\", \"Gastroenteritis aguda infecciosa\", \"Faringoamigdalitis aguda\"). " +
+            "(ej. \"Gastritis aguda\", \"Gastroenteritis aguda infecciosa\", \"Neumonía adquirida en la comunidad\"). " +
+            "PROHIBIDO listar signos o síntomas como diagnóstico " +
+            "(\"Fiebre\", \"Dolor abdominal\", \"Tos\", \"Vómito\", \"Cefalea\", etc. NO son diagnósticos: " +
+            "son motivo de consulta o parte de la enfermedad actual). " +
             "Lista numerada 1. 2. 3. si hay varios; el principal primero. " +
-            "NO incluyas códigos CIE-10 ni abreviaturas entre paréntesis; solo el nombre del diagnóstico. " +
+            "NO incluyas códigos CIE-10 ni abreviaturas entre paréntesis; solo el nombre de la enfermedad. " +
             "PROHIBIDO dejar solo \"Evaluación clínica\" o frases vacías si el dictado permite un diagnóstico razonable. " +
             "No inventes hallazgos no referidos en el informe."
 
     const val DIAS_REPOSO_DEFAULT =
         "Nota: En vista de la sintomatología del paciente se indican cumplir 3 días de reposo médico completo."
+
+    const val NOTA_INFORME_DEFAULT =
+        "En vista de que el paciente presenta mejoría de la sintomatología, se indica tratamiento ambulatorio " +
+            "y reposo médico por 72 horas."
 
     fun textFor(section: String, overrides: Map<String, String> = emptyMap()): String {
         overrides.entries.firstOrNull { it.key.equals(section, ignoreCase = true) }
@@ -67,6 +74,8 @@ object SectionDefaults {
             "Seguimiento médico según evolución clínica."
         section.equals(SectionCatalog.DIAS_REPOSO, ignoreCase = true) ->
             DIAS_REPOSO_DEFAULT
+        section.equals(SectionCatalog.NOTA, ignoreCase = true) ->
+            NOTA_INFORME_DEFAULT
         section.equals(SectionCatalog.INDICACIONES, ignoreCase = true) ->
             RecetaDefaults.MOLDE_INDICACIONES
         section.equals(SectionCatalog.ORDENES, ignoreCase = true) ->

@@ -22,6 +22,13 @@ data class ClinicalDocument(
     val clinicId: String? = null,
     val clinicName: String? = null,
     val doctorNombre: String? = null,
+    /** Si true, se dibuja el sello médico al pie del PDF. */
+    val incluirSello: Boolean = false,
+    /** Foto del sello (JPEG base64) usada al crear el documento; preserva el sello histórico. */
+    val selloBase64: String? = null,
+    /** Posición personalizada del sello (0..1 dentro de la última página); null = posición por defecto. */
+    val selloOffsetX: Float? = null,
+    val selloOffsetY: Float? = null,
 ) {
     val typeLabel: String get() = type.label
 }

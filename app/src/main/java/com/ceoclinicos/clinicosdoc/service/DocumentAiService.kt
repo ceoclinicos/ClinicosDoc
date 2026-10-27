@@ -441,6 +441,8 @@ object DocumentAiService {
         principioActivo: String,
         presentacion: String,
         concentracion: String = "",
+        dosis: String = "",
+        indicacion: String = "",
         patient: Patient? = null,
     ): String {
         AiConfig.load(context.applicationContext)
@@ -461,48 +463,79 @@ object DocumentAiService {
             indIdx = sections.lastIndex
         }
 
-        val conc = concentracion.trim()
+        val conc = concentracion.trim().ifBlank {
+            dosis.trim().substringBefore('·').trim()
+        }
+        val dosisTrim = dosis.trim()
+        val indTrim = indicacion.trim()
         val drugLine = buildString {
             append(principioActivo.trim())
             if (conc.isNotBlank()) append(" $conc")
             append(" ($presentacion)")
         }
 
-        val system = """
-            Eres un asistente médico. Completas UN fármaco para una receta ambulatoria en español.
-            Usa dosis/cantidad típicas según protocolos habituales si no se especifican.
-            Responde SOLO con dos bloques:
-            RECIPE:
-            (líneas del fármaco + Dispóngase)
-            INDICACIONES:
-            (nombre: + posología)
-        """.trimIndent()
-
-        val prompt = buildString {
-            appendLine("Agrega este fármaco a la receta (solo este, no reescribas los demás):")
-            appendLine("- Principio activo: ${principioActivo.trim()}")
-            appendLine("- Presentación: $presentacion")
-            if (conc.isNotBlank()) appendLine("- Concentración: $conc")
-            patient?.let {
-                appendLine("- Paciente: ${it.edad} años, ${it.sexo.ifBlank { "—" }}")
+        val recipeAdd: String
+        val indAdd: String
+        if (dosisTrim.isNotBlank() && indTrim.isNotBlank()) {
+            recipeAdd = buildString {
+                append(drugLine)
+                if (dosisTrim.contains("dispóngase", ignoreCase = true)) {
+                    append('\n').append(dosisTrim)
+                } else if (!dosisTrim.equals(conc, ignoreCase = true)) {
+                    append("\nDispóngase: ").append(dosisTrim)
+                }
             }
-            appendLine()
-            appendLine("Formato RECIPE (ejemplo):")
-            appendLine("$drugLine")
-            appendLine("Dispóngase: N unidades.")
-            appendLine()
-            appendLine("Formato INDICACIONES (ejemplo):")
-            appendLine("${principioActivo.trim()}:")
-            appendLine("Tomar … vía … cada … por … días.")
+            indAdd = "${principioActivo.trim()}:\n$indTrim"
+        } else {
+            val system = """
+                Eres un asistente médico. Completas UN fármaco para una receta ambulatoria en español.
+                Usa dosis/cantidad típicas según protocolos habituales si no se especifican.
+                Responde SOLO con dos bloques:
+                RECIPE:
+                (líneas del fármaco + Dispóngase)
+                INDICACIONES:
+                (nombre: + posología)
+            """.trimIndent()
+
+            val prompt = buildString {
+                appendLine("Agrega este fármaco a la receta (solo este, no reescribas los demás):")
+                appendLine("- Principio activo: ${principioActivo.trim()}")
+                appendLine("- Presentación: $presentacion")
+                if (conc.isNotBlank()) appendLine("- Concentración: $conc")
+                if (dosisTrim.isNotBlank()) appendLine("- Dosis / cantidad indicada por el médico: $dosisTrim")
+                if (indTrim.isNotBlank()) appendLine("- Indicación escrita por el médico: $indTrim")
+                patient?.let {
+                    appendLine("- Paciente: ${it.edad} años, ${it.sexo.ifBlank { "—" }}")
+                }
+                appendLine()
+                appendLine("Formato RECIPE (ejemplo):")
+                appendLine("$drugLine")
+                appendLine("Dispóngase: N unidades.")
+                appendLine()
+                appendLine("Formato INDICACIONES (ejemplo):")
+                appendLine("${principioActivo.trim()}:")
+                appendLine("Tomar … vía … cada … por … días.")
+            }
+
+            val raw = try {
+                AiService.sendPrompt(prompt = prompt, systemMessage = system, maxTokens = 512)
+            } catch (_: Exception) {
+                null
+            }
+            val parsed = parseFarmacoBlocks(raw, drugLine, principioActivo.trim(), presentacion)
+            recipeAdd = if (dosisTrim.isNotBlank()) {
+                if (dosisTrim.contains("dispóngase", ignoreCase = true)) "$drugLine\n$dosisTrim"
+                else "$drugLine\nDispóngase: $dosisTrim"
+            } else {
+                parsed.first
+            }
+            indAdd = if (indTrim.isNotBlank()) {
+                "${principioActivo.trim()}:\n$indTrim"
+            } else {
+                parsed.second
+            }
         }
 
-        val raw = try {
-            AiService.sendPrompt(prompt = prompt, systemMessage = system, maxTokens = 512)
-        } catch (_: Exception) {
-            null
-        }
-
-        val (recipeAdd, indAdd) = parseFarmacoBlocks(raw, drugLine, principioActivo.trim(), presentacion)
         sections[recipeIdx] = sections[recipeIdx].copy(
             body = listOf(sections[recipeIdx].body.trim(), recipeAdd.trim())
                 .filter { it.isNotBlank() }

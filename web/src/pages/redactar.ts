@@ -1,8 +1,9 @@
-import { listClinicHeaders, listClinicTemplates } from "../clinic/store";
+import { clinicMoldBlockReason, listClinicHeaders, listClinicTemplates } from "../clinic/store";
 import { ensureMembershipsLoaded } from "../clinic/membership-cache";
 import { registerRoute, navigate } from "../app/router";
 import { generateDocument, generateOrdenesFromCase, generateReceta, appendFarmacoToReceta } from "../services/ai/document-ai-service";
 import { bindExamSystemsEditor, orderEnabledByCatalog, loadExamCatalog } from "../services/exam-catalog";
+import { DefaultEnabledExamIds } from "../shared/physical-exam-defaults";
 import { bindSectionsEditor } from "../services/section-editor";
 import {
   defaultHeader,
@@ -17,6 +18,7 @@ import {
   upsertTemplate,
 } from "../services/clinical-store";
 import { loadDoctorProfile, saveDoctorProfile, type DoctorProfileLocal } from "../services/doctor-local";
+import { hasSello, loadSello } from "../services/sello-store";
 import {
   buildFullDocumentHtml,
   buildMembreteFromPatient,
@@ -33,7 +35,7 @@ import {
   vitalSignsFieldsHtml,
 } from "../services/vital-signs";
 import { loadJson, saveJson } from "../services/local-store";
-import { findPatientByCedula, matchesCedula, normalizeCedula } from "../services/cedula";
+import { displayCedula, findPatientByCedula, matchesCedula, normalizeCedula } from "../services/cedula";
 import { canSync, findPatientByCedulaAnywhere, pushPatient, syncQuiet } from "../services/cloud-sync";
 import { isSpeechSupported, startDictation } from "../services/speech";
 import { getProfessionalSession } from "../registro/session";
@@ -112,10 +114,16 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
   let ordenesNotes = "";
   let ordenesModo: OrdenesModo = "ordenes";
   let selectedSourceDocId: string | null = null;
+  let incluirSello = hasSello();
+  let selloOffsetX: number | undefined;
+  let selloOffsetY: number | undefined;
   let recetaFuente: RecetaFuente = "dictar";
   let diagnosticoText = "";
   let cedulaSearch = "";
   let patientSearchMessage = "";
+  /** OCR: adjuntar foto/PDF cuyo texto entra al dictado. */
+  let ocrProcessing = false;
+  let ocrProgress = 0;
   let editableMembrete: PatientMembrete | null = null;
   /** Contexto de clínica si eligió molde institucional */
   let clinicContext: { clinicId: string; clinicName: string } | null = null;
@@ -163,7 +171,10 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
 
   function upsertPatientInList(patient: Patient): Patient {
     const idx = patients.findIndex(
-      (p) => p.id === patient.id || normalizeCedula(p.cedula) === normalizeCedula(patient.cedula),
+      (p) =>
+        p.id === patient.id ||
+        (patient.cedula.trim() !== "" &&
+          normalizeCedula(p.cedula) === normalizeCedula(patient.cedula)),
     );
     let saved = patient;
     if (idx >= 0) {
@@ -176,6 +187,23 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     saveJson("patients", patients);
     if (canSync()) syncQuiet(() => pushPatient(saved));
     return saved;
+  }
+
+  /** Snapshot del sello para render/guardado: el del documento guardado o el actual del médico. */
+  function selloRenderOptions(): {
+    incluirSello: boolean;
+    selloBase64?: string;
+    selloOffsetX?: number;
+    selloOffsetY?: number;
+  } {
+    const existing = savedDocumentId ? getDocument(savedDocumentId) : undefined;
+    const base64 = existing?.selloBase64 ?? (incluirSello ? loadSello()?.base64 : undefined);
+    return {
+      incluirSello: incluirSello && Boolean(base64),
+      selloBase64: base64,
+      selloOffsetX: existing?.selloOffsetX ?? selloOffsetX,
+      selloOffsetY: existing?.selloOffsetY ?? selloOffsetY,
+    };
   }
 
   function patientCaseDocs(): ClinicalDocument[] {
@@ -208,6 +236,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
               content: generatedContent,
               header: selectedHeader,
               membrete: currentMembrete(),
+              ...selloRenderOptions(),
             }),
           );
           w.document.close();
@@ -223,6 +252,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         membrete: currentMembrete(),
         patientNombre: selectedPatient.nombre,
         patientCedula: selectedPatient.cedula,
+        ...selloRenderOptions(),
       }).catch((err) => {
         alert(err instanceof Error ? err.message : "No se pudo generar el PDF");
       });
@@ -236,6 +266,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         membrete: currentMembrete(),
         patientNombre: selectedPatient.nombre,
         patientCedula: selectedPatient.cedula,
+        ...selloRenderOptions(),
       });
     }
   }
@@ -344,7 +375,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     const patientOptions = filtered
       .map(
         (p) =>
-          `<option value="${p.id}" ${selectedPatient?.id === p.id ? "selected" : ""}>${escapeHtml(p.nombre)} (${escapeHtml(p.cedula)})</option>`,
+          `<option value="${p.id}" ${selectedPatient?.id === p.id ? "selected" : ""}>${escapeHtml(p.nombre)} (${escapeHtml(displayCedula(p.cedula))})</option>`,
       )
       .join("");
 
@@ -503,6 +534,12 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         const clinicName = btn.getAttribute("data-clinic-name") || "Centro";
         clinicContext = { clinicId, clinicName };
         try {
+          const blockReason = await clinicMoldBlockReason(clinicId);
+          if (blockReason) {
+            clinicContext = null;
+            alert(blockReason);
+            return;
+          }
           const [tpls, hdrs] = await Promise.all([
             listClinicTemplates(clinicId),
             listClinicHeaders(clinicId),
@@ -565,7 +602,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     let draftExamIds = orderEnabledByCatalog(
       workingTemplate.enabledPhysicalExamSystemIds?.length
         ? workingTemplate.enabledPhysicalExamSystemIds
-        : loadExamCatalog().map((s) => s.id),
+        : DefaultEnabledExamIds,
       loadExamCatalog(),
     );
     let draftSections = [...workingTemplate.sections];
@@ -749,7 +786,14 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       </div>
       <label class="search-label">${isReceta ? "Fármacos (dictar o escribir)" : "Dictado clínico"}
         <textarea id="dictation" rows="10" placeholder="${isReceta ? "Ej. amoxicilina clavulánico tabletas 7 días…" : "Hable o escriba el caso clínico…"}">${escapeHtml(dictation)}</textarea>
-      </label>`;
+      </label>
+      <button type="button" class="btn btn-ghost btn-block" id="btn-ocr" ${ocrProcessing ? "disabled" : ""}>
+        ${ocrProcessing ? "Leyendo documento…" : "📎 Adjuntar foto o PDF"}
+      </button>
+      <input type="file" id="ocr-file" accept="image/*,application/pdf" hidden />
+      <p class="muted" id="ocr-status" ${ocrProcessing ? "" : "hidden"}>${
+        ocrProcessing ? `Extrayendo texto… ${ocrProgress}%` : ""
+      }</p>`;
     }
 
     const modoBlock = isOrdenes
@@ -882,6 +926,40 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       );
     });
 
+    root.querySelector("#btn-ocr")?.addEventListener("click", () => {
+      if (ocrProcessing) return;
+      (root.querySelector("#ocr-file") as HTMLInputElement | null)?.click();
+    });
+    root.querySelector("#ocr-file")?.addEventListener("change", async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      (e.target as HTMLInputElement).value = "";
+      if (!file || ocrProcessing) return;
+      dictation = (root.querySelector("#dictation") as HTMLTextAreaElement)?.value ?? dictation;
+      ocrProcessing = true;
+      ocrProgress = 0;
+      renderDictado();
+      let ocrFail: string | null = null;
+      try {
+        // Carga perezosa: Tesseract/pdf.js solo se descargan al usar OCR.
+        const { extractTextFromFile } = await import("../services/doc-ocr");
+        const text = await extractTextFromFile(file, (p) => {
+          ocrProgress = p;
+          const st = root.querySelector("#ocr-status") as HTMLElement | null;
+          if (st) st.textContent = `Extrayendo texto… ${p}%`;
+        });
+        dictation = dictation.trim() ? dictation.trimEnd() + "\n\n" + text : text;
+      } catch (ocrErr) {
+        ocrFail =
+          ocrErr instanceof Error ? ocrErr.message : "No se pudo leer el documento";
+      } finally {
+        ocrProcessing = false;
+        renderDictado();
+        if (ocrFail) {
+          (root.querySelector("#error-msg") as HTMLElement).textContent = ocrFail;
+        }
+      }
+    });
+
     root.querySelector("#btn-back")?.addEventListener("click", () => {
       navigateBackInFlow();
     });
@@ -950,11 +1028,8 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         }
         step = "resultado";
         processing = false;
-        if (savedDocumentId && generatedContent) {
-          persistGeneratedDocument({ showAlert: true, navigateAfter: false });
-        } else {
-          persistDraft();
-        }
+        // Autoguardado: al procesar con IA el documento se guarda de una vez (paridad app)
+        persistGeneratedDocument({ showAlert: false, navigateAfter: false });
         render();
       } catch (err) {
         errEl.textContent = err instanceof Error ? err.message : "Error al procesar";
@@ -973,6 +1048,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     const id = savedDocumentId ?? crypto.randomUUID();
     const membreteData = currentMembrete();
     editableMembrete = membreteData;
+    const sello = selloRenderOptions();
     const doc = saveDocument({
       id,
       patientId: selectedPatient.id,
@@ -995,6 +1071,10 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       clinicId: clinicContext?.clinicId,
       clinicName: clinicContext?.clinicName,
       doctorNombre: doctor.nombre || session?.nombre,
+      incluirSello: sello.incluirSello,
+      selloBase64: sello.selloBase64,
+      selloOffsetX: sello.selloOffsetX,
+      selloOffsetY: sello.selloOffsetY,
     });
     savedDocumentId = id;
     deleteDraft(currentDraftId);
@@ -1046,7 +1126,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
     root.innerHTML = `
       <p class="step-badge">${resultadoStepLabel()} · Resultado</p>
       <p class="status-badge status-ok">${DocumentReportTitles[docType]} generado${clinicContext ? ` · ${escapeHtml(clinicContext.clinicName)}` : ""}</p>
-      <p class="muted">${escapeHtml(selectedPatient?.nombre ?? "")} · ${escapeHtml(selectedPatient?.cedula ?? "")}</p>
+      <p class="muted">${escapeHtml(selectedPatient?.nombre ?? "")} · ${escapeHtml(displayCedula(selectedPatient?.cedula ?? ""))}</p>
 
       <div class="result-actions">
         <button type="button" class="btn btn-primary" id="btn-save">${savedDocumentId ? "Actualizar" : "Guardar"}</button>
@@ -1057,6 +1137,12 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
         <span class="field-label">Encabezado</span>
         <select id="header-select">${headerOpts || `<option value="">Sin encabezados — cree uno en Plantillas</option>`}</select>
       </div>
+
+      ${
+        hasSello() || getDocument(savedDocumentId ?? "")?.selloBase64
+          ? `<label class="check-row"><input type="checkbox" id="chk-sello" ${incluirSello ? "checked" : ""} /> Incluir sello médico al final del documento</label>`
+          : ""
+      }
 
       ${membreteEditorHtml(membrete, docType)}
 
@@ -1107,6 +1193,7 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
           content: generatedContent,
           header: selectedHeader,
           membrete: editableMembrete,
+          ...selloRenderOptions(),
         });
       }
       persistDraft();
@@ -1118,6 +1205,12 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       const id = (e.target as HTMLSelectElement).value;
       selectedHeader = headers.find((h) => h.id === id) ?? defaultHeader();
       refreshPreview();
+    });
+
+    root.querySelector("#chk-sello")?.addEventListener("change", (e) => {
+      incluirSello = (e.target as HTMLInputElement).checked;
+      refreshPreview();
+      if (savedDocumentId) persistGeneratedDocument({ showAlert: false, navigateAfter: false });
     });
 
     bindMembreteEditor(
@@ -1227,6 +1320,14 @@ function mountRedactar(root: HTMLElement, pageEl: HTMLElement): void {
       if (preClinicId) {
         clinicContext = { clinicId: preClinicId, clinicName: preClinicName || "Centro" };
         try {
+          const blockReason = await clinicMoldBlockReason(preClinicId);
+          if (blockReason) {
+            clinicContext = null;
+            step = "paciente";
+            alert(blockReason);
+            render();
+            return;
+          }
           const [tpls, hdrs] = await Promise.all([
             listClinicTemplates(preClinicId),
             listClinicHeaders(preClinicId),

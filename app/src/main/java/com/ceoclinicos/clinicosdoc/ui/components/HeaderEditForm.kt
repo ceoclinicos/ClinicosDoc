@@ -1,5 +1,6 @@
 package com.ceoclinicos.clinicosdoc.ui.components
 
+import android.graphics.Bitmap
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -32,6 +33,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.canhub.cropper.CropImageContract
+import com.canhub.cropper.CropImageContractOptions
+import com.canhub.cropper.CropImageOptions
+import com.canhub.cropper.CropImageView
 import com.ceoclinicos.clinicosdoc.data.HeaderStorage
 import com.ceoclinicos.clinicosdoc.model.DocumentHeader
 import kotlinx.coroutines.Dispatchers
@@ -58,8 +63,9 @@ fun HeaderEditForm(
     var isDefault by remember(headerId) { mutableStateOf(false) }
     var savingLogo by remember { mutableStateOf(false) }
 
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    val cropLauncher = rememberLauncherForActivityResult(CropImageContract()) { result ->
+        if (!result.isSuccessful) return@rememberLauncherForActivityResult
+        val uri = result.uriContent ?: return@rememberLauncherForActivityResult
         savingLogo = true
         scope.launch {
             runCatching {
@@ -67,9 +73,9 @@ fun HeaderEditForm(
                     HeaderStorage.persistLogo(context, uri, headerId)
                 }
             }.fold(
-                onSuccess = { result ->
-                    logoPath = result.path
-                    logoBase64 = result.base64
+                onSuccess = { persisted ->
+                    logoPath = persisted.path
+                    logoBase64 = persisted.base64
                 },
                 onFailure = { e ->
                     Toast.makeText(
@@ -81,6 +87,28 @@ fun HeaderEditForm(
             )
             savingLogo = false
         }
+    }
+
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri ?: return@rememberLauncherForActivityResult
+        cropLauncher.launch(
+            CropImageContractOptions(
+                uri,
+                CropImageOptions(
+                    cropShape = CropImageView.CropShape.RECTANGLE,
+                    guidelines = CropImageView.Guidelines.ON,
+                    fixAspectRatio = true,
+                    aspectRatioX = 1,
+                    aspectRatioY = 1,
+                    outputRequestWidth = 1024,
+                    outputRequestHeight = 1024,
+                    outputRequestSizeOptions = CropImageView.RequestSizeOptions.RESIZE_INSIDE,
+                    outputCompressFormat = Bitmap.CompressFormat.JPEG,
+                    outputCompressQuality = 95,
+                    activityTitle = "Ajustar logo",
+                ),
+            ),
+        )
     }
 
     fun bindHeader(h: DocumentHeader) {
@@ -129,7 +157,7 @@ fun HeaderEditForm(
             )
         }
         Text(
-            "Se acepta completa; si es rectangular, el resto del cuadrado queda en blanco (máx. 1024 px)",
+            "Al subirla puedes hacer zoom y arrastrarla para encuadrarla (queda cuadrada, máx. 1024 px)",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),

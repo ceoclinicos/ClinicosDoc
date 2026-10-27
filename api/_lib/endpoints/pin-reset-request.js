@@ -1,10 +1,10 @@
 const crypto = require("crypto");
-const { getAdmin } = require("./_lib/firebase");
-const { cedulaLookupKeys } = require("./_lib/pin");
-const { applyCors } = require("./_lib/cors");
-const { sendPinResetEmail } = require("./_lib/resend");
-const { parseBody } = require("./_lib/body");
-const { apiError } = require("./_lib/errors");
+const { getAdmin } = require("../firebase");
+const { cedulaLookupKeys } = require("../pin");
+const { applyCors } = require("../cors");
+const { sendPinResetEmail } = require("../resend");
+const { parseBody } = require("../body");
+const { apiError } = require("../errors");
 
 const OK_MSG = {
   message: "Si hay un correo registrado, recibirá un enlace en unos minutos.",

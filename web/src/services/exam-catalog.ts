@@ -1,8 +1,12 @@
 /** Catálogo de examen físico con orden, crear y editar (paridad con la app). */
 import type { PhysicalExamSystem } from "../shared/models";
-import { PhysicalExamDefaults, displayPriority } from "../shared/physical-exam-defaults";
+import {
+  DefaultEnabledExamIds,
+  PhysicalExamDefaults,
+  displayPriority,
+} from "../shared/physical-exam-defaults";
 import { loadJson, saveJson } from "./local-store";
-import { canSync, pushPhysicalExam, syncQuiet } from "./cloud-sync";
+import { canSync, deletePhysicalExamCloud, pushPhysicalExam, syncQuiet } from "./cloud-sync";
 
 const KEY = "physical_exam";
 
@@ -16,8 +20,35 @@ export function clinicalOrder(systems: PhysicalExamSystem[]): PhysicalExamSystem
   });
 }
 
+/**
+ * Fusiona sistemas built-in faltantes en el catálogo guardado, insertándolos
+ * tras el último built-in previo (paridad PhysicalExamCatalogStorage.withBuiltIns).
+ * Así los catálogos viejos o traídos de la nube no pierden sistemas nuevos.
+ */
+export function withBuiltIns(systems: PhysicalExamSystem[]): PhysicalExamSystem[] {
+  const merged = [...systems];
+  PhysicalExamDefaults.forEach((def, di) => {
+    if (merged.some((s) => s.id === def.id)) return;
+    let insertAt = merged.length;
+    for (let j = di - 1; j >= 0; j--) {
+      const idx = merged.findIndex((s) => s.id === PhysicalExamDefaults[j].id);
+      if (idx >= 0) {
+        insertAt = idx + 1;
+        break;
+      }
+    }
+    merged.splice(insertAt, 0, { ...def });
+  });
+  return merged;
+}
+
 export function loadExamCatalog(): PhysicalExamSystem[] {
-  return clinicalOrder(loadJson(KEY, PhysicalExamDefaults));
+  const stored = loadJson<PhysicalExamSystem[]>(KEY, PhysicalExamDefaults);
+  const merged = withBuiltIns(stored);
+  if (merged.length !== stored.length) {
+    return persistCatalog(merged);
+  }
+  return clinicalOrder(stored);
 }
 
 function persistCatalog(systems: PhysicalExamSystem[]): PhysicalExamSystem[] {
@@ -31,6 +62,18 @@ function persistInArrayOrder(systems: PhysicalExamSystem[]): PhysicalExamSystem[
   const renumbered = systems.map((s, i) => ({ ...s, sortOrder: i }));
   saveJson(KEY, renumbered);
   return renumbered;
+}
+
+/** Restablece el catálogo a los sistemas incorporados (borra los personalizados). */
+export function resetExamCatalogToDefaults(): PhysicalExamSystem[] {
+  const builtInIds = new Set(PhysicalExamDefaults.map((d) => d.id));
+  const customs = loadExamCatalog().filter((s) => !builtInIds.has(s.id));
+  const saved = persistCatalog(PhysicalExamDefaults.map((d) => ({ ...d })));
+  if (canSync()) {
+    customs.forEach((s) => syncQuiet(() => deletePhysicalExamCloud(s.id)));
+    saved.forEach((s) => syncQuiet(() => pushPhysicalExam(s)));
+  }
+  return saved;
 }
 
 export function orderEnabledByCatalog(ids: string[], catalog: PhysicalExamSystem[]): string[] {
@@ -90,7 +133,7 @@ export function bindExamSystemsEditor(
   },
 ): void {
   let catalog = loadExamCatalog();
-  let enabled = new Set(options.enabledIds.length ? options.enabledIds : catalog.map((s) => s.id));
+  let enabled = new Set(options.enabledIds.length ? options.enabledIds : DefaultEnabledExamIds);
 
   const emit = () => {
     options.onChange(

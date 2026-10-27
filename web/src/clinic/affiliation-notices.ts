@@ -1,4 +1,6 @@
 /** Avisos cuando una clínica agrega o quita al médico del equipo. */
+import { loadLeftClinicIds } from "./left-clinics";
+
 const KEY_MEMBERSHIPS = "clinic_memberships_snapshot_v1";
 const KEY_BASELINE = "clinic_memberships_baseline_v1";
 const KEY_PENDING = "clinic_affiliation_notices_v1";
@@ -27,24 +29,26 @@ export function applyMembershipSnapshot(
   next: ClinicMembershipSnap[],
   opts?: { silent?: boolean },
 ): string[] {
+  const left = loadLeftClinicIds();
+  const filtered = next.filter((m) => !left.has(m.clinicId));
   const previous = loadMembershipSnapshot();
   const hadBaseline = localStorage.getItem(KEY_BASELINE) === "1";
-  writeJson(KEY_MEMBERSHIPS, next);
+  writeJson(KEY_MEMBERSHIPS, filtered);
   if (!hadBaseline) {
     localStorage.setItem(KEY_BASELINE, "1");
     return [];
   }
   if (opts?.silent) return [];
   const prevIds = new Set(previous.map((m) => m.clinicId));
-  const nextIds = new Set(next.map((m) => m.clinicId));
+  const nextIds = new Set(filtered.map((m) => m.clinicId));
   const notices: string[] = [];
-  for (const m of next) {
-    if (!prevIds.has(m.clinicId)) {
+  for (const m of filtered) {
+    if (!prevIds.has(m.clinicId) && !left.has(m.clinicId)) {
       notices.push(`La clínica «${m.clinicName}» te ha agregado a su equipo.`);
     }
   }
   for (const m of previous) {
-    if (!nextIds.has(m.clinicId)) {
+    if (!nextIds.has(m.clinicId) && !left.has(m.clinicId)) {
       notices.push(`La clínica «${m.clinicName}» te ha quitado de su equipo.`);
     }
   }

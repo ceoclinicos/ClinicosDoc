@@ -11,12 +11,12 @@ export function openPinUpgradeDialog(oldPin: string): Promise<boolean> {
     dialog.innerHTML = `
       <form method="dialog" class="sheet-body" id="pin-upgrade-form">
         <h2>Actualiza tu PIN</h2>
-        <p class="muted">Por seguridad, el PIN ahora debe tener 6 dígitos. Elige uno nuevo.</p>
-        <label>Nuevo PIN (6 dígitos)
-          <input name="pin" type="password" inputmode="numeric" pattern="\\d{6}" maxlength="6" required autocomplete="new-password" />
+        <p class="muted">Por seguridad, el PIN ahora debe tener 6 dígitos (o una letra + 6 dígitos). Elige uno nuevo.</p>
+        <label>Nuevo PIN (6 dígitos o letra + 6 dígitos)
+          <input name="pin" type="password" pattern="[0-9]{6}|[A-Za-z][0-9]{6}" maxlength="7" required autocomplete="new-password" style="text-transform:uppercase" />
         </label>
         <label>Confirmar PIN
-          <input name="pin2" type="password" inputmode="numeric" pattern="\\d{6}" maxlength="6" required autocomplete="new-password" />
+          <input name="pin2" type="password" pattern="[0-9]{6}|[A-Za-z][0-9]{6}" maxlength="7" required autocomplete="new-password" style="text-transform:uppercase" />
         </label>
         <p class="muted" id="pin-upgrade-err" style="color:#b91c1c" hidden></p>
         <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap">
@@ -48,11 +48,11 @@ export function openPinUpgradeDialog(oldPin: string): Promise<boolean> {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const fd = new FormData(form);
-      const pin = String(fd.get("pin") || "");
-      const pin2 = String(fd.get("pin2") || "");
+      const pin = String(fd.get("pin") || "").toUpperCase();
+      const pin2 = String(fd.get("pin2") || "").toUpperCase();
       errEl.hidden = true;
-      if (!/^\d{6}$/.test(pin)) {
-        errEl.textContent = "El PIN debe tener exactamente 6 dígitos";
+      if (!/^\d{6}$|^[A-Z]\d{6}$/.test(pin)) {
+        errEl.textContent = "El PIN debe ser 6 dígitos o una letra + 6 dígitos";
         errEl.hidden = false;
         return;
       }
@@ -61,7 +61,7 @@ export function openPinUpgradeDialog(oldPin: string): Promise<boolean> {
         errEl.hidden = false;
         return;
       }
-      if (pin === oldPin) {
+      if (pin === oldPin.toUpperCase()) {
         errEl.textContent = "Elige un PIN distinto al actual";
         errEl.hidden = false;
         return;

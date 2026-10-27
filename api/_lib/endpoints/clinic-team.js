@@ -1,13 +1,13 @@
-const { getAdmin } = require("./_lib/firebase");
-const { normalizeCedula } = require("./_lib/pin");
-const { applyCors } = require("./_lib/cors");
-const { parseBody } = require("./_lib/body");
-const { apiError } = require("./_lib/errors");
+const { getAdmin } = require("../firebase");
+const { normalizeCedula } = require("../pin");
+const { applyCors } = require("../cors");
+const { parseBody } = require("../body");
+const { apiError } = require("../errors");
 const {
   isInviteExpired,
   deleteDoctorInvitation,
   clinicInviteRef,
-} = require("./_lib/invite-expiry");
+} = require("../invite-expiry");
 
 async function requireClinicAuth(req) {
   const header = String(req.headers.authorization || "");

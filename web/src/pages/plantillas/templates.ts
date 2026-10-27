@@ -18,6 +18,7 @@ import {
   saveEnfermedadActualEjemplo,
 } from "../../shared/enfermedad-actual";
 import { bindExamSystemsEditor, orderEnabledByCatalog, loadExamCatalog } from "../../services/exam-catalog";
+import { DefaultEnabledExamIds } from "../../shared/physical-exam-defaults";
 import { bindSectionsEditor } from "../../services/section-editor";
 import { fileToLogoBase64, logoDataUrl } from "../../services/header-logo";
 import { bindNavButtons, page } from "../helpers";
@@ -265,7 +266,7 @@ registerRoute({
     let draftExamIds = orderEnabledByCatalog(
       template.enabledPhysicalExamSystemIds?.length
         ? template.enabledPhysicalExamSystemIds
-        : loadExamCatalog().map((s) => s.id),
+        : DefaultEnabledExamIds,
       loadExamCatalog(),
     );
     let draftSections = [...template.sections];

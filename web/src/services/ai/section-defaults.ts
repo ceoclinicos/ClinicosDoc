@@ -16,13 +16,19 @@ export const MOTIVO_CONSULTA_STYLE =
   'PROHIBIDO: frases largas, "consulta por…", "refiere…", evolución, antecedentes o diagnóstico.';
 
 /** Diagnóstico clínico con nomenclatura estándar (CIE-10), sin códigos. */
+export const NOTA_INFORME_DEFAULT =
+  "En vista de que el paciente presenta mejoría de la sintomatología, se indica tratamiento ambulatorio y reposo médico por 72 horas.";
+
+/** Diagnóstico clínico con nomenclatura estándar (CIE-10), sin códigos. */
 export const DIAGNOSTICO_STYLE =
-  "- Diagnóstico / Impresión diagnóstica: usa nomenclatura clínica estándar al estilo CIE-10 " +
-  "(términos nosológicos o sindromáticos reconocidos). " +
+  "- Diagnóstico / Impresión diagnóstica: SOLO enfermedades reales de la clasificación CIE-10 " +
+  "(entidades nosológicas o síndromes reconocidos como diagnóstico). " +
   "Redacta el diagnóstico según síntomas, signos y evolución del dictado " +
-  '(ej. "Gastritis aguda", "Gastroenteritis aguda infecciosa", "Faringoamigdalitis aguda"). ' +
+  '(ej. "Gastritis aguda", "Gastroenteritis aguda infecciosa", "Neumonía adquirida en la comunidad"). ' +
+  "PROHIBIDO listar signos o síntomas como diagnóstico " +
+  '("Fiebre", "Dolor abdominal", "Tos", "Vómito", "Cefalea", etc. NO son diagnósticos: son motivo de consulta o parte de la enfermedad actual). ' +
   "Lista numerada 1. 2. 3. si hay varios; el principal primero. " +
-  "NO incluyas códigos CIE-10 ni abreviaturas entre paréntesis; solo el nombre del diagnóstico. " +
+  "NO incluyas códigos CIE-10 ni abreviaturas entre paréntesis; solo el nombre de la enfermedad. " +
   'PROHIBIDO dejar solo "Evaluación clínica" o frases vacías si el dictado permite un diagnóstico razonable. ' +
   "No inventes hallazgos no referidos en el informe.";
 
@@ -74,6 +80,7 @@ export function defaultTextForSection(
   if (s === SectionCatalog.ORDENES.toLowerCase()) {
     return ORDENES_MOLDE_EJEMPLO;
   }
+  if (s === SectionCatalog.NOTA.toLowerCase()) return NOTA_INFORME_DEFAULT;
   return "Sin datos adicionales referidos.";
 }
 

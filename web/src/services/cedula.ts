@@ -64,6 +64,24 @@ export function cedulaFieldHtml(opts?: {
     </label>`;
 }
 
+/** Texto a mostrar cuando el paciente no tiene cédula (bebé/menor sin documento). */
+export function displayCedula(cedula: string): string {
+  return cedula.trim() || "S/C";
+}
+
+/** ID interno para paciente sin cédula — paridad `sc_<nombre>_<random>` de la app. */
+export function makeSinCedulaId(nombre: string): string {
+  const slug =
+    nombre
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]/g, "")
+      .slice(0, 24) || "paciente";
+  return `sc_${slug}_${crypto.randomUUID().slice(0, 6)}`;
+}
+
 export function normalizeCedula(input: string): string {
   const raw = input.trim().toUpperCase().replace(/[\s.-]/g, "");
   if (!raw) return "";

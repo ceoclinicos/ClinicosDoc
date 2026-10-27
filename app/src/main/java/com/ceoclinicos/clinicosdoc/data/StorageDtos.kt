@@ -53,6 +53,10 @@ internal data class ClinicalDocumentDto(
     val sourceDocumentId: String? = null,
     val clinicId: String? = null,
     val clinicName: String? = null,
+    val incluirSello: Boolean? = null,
+    val selloBase64: String? = null,
+    val selloOffsetX: Float? = null,
+    val selloOffsetY: Float? = null,
 )
 
 internal data class DocumentHeaderDto(
@@ -60,6 +64,8 @@ internal data class DocumentHeaderDto(
     val name: String,
     val logoPath: String?,
     val logoBase64: String? = null,
+    val selloPath: String? = null,
+    val selloBase64: String? = null,
     val doctorName: String?,
     val subtitle: String?,
     val description: String?,

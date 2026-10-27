@@ -52,6 +52,9 @@ import com.ceoclinicos.clinicosdoc.model.ClinicMembership
 import com.ceoclinicos.clinicosdoc.ui.screens.SettingsScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.PhysicalExamCatalogScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.PlantillasHubScreen
+import com.ceoclinicos.clinicosdoc.ui.screens.RecipeEditScreen
+import com.ceoclinicos.clinicosdoc.ui.screens.RecipeUseScreen
+import com.ceoclinicos.clinicosdoc.ui.screens.SelloScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.TemplateEditScreen
 import com.ceoclinicos.clinicosdoc.ui.screens.TemplatesScreen
 
@@ -64,6 +67,7 @@ fun ClinicosDocNavHost() {
     var isRegistered by remember { mutableStateOf(false) }
     var patientRefreshKey by remember { mutableIntStateOf(0) }
     var informeRefreshKey by remember { mutableIntStateOf(0) }
+    var recipesRefreshKey by remember { mutableIntStateOf(0) }
     var calendarRefreshKey by remember { mutableIntStateOf(0) }
     var showOriginSheet by remember { mutableStateOf(false) }
     var showDocTypeSheet by remember { mutableStateOf(false) }
@@ -131,11 +135,16 @@ fun ClinicosDocNavHost() {
                 onAddPatient = { navController.navigate(Routes.ADD_PATIENT) },
                 onEditPatient = { id -> navController.navigate(Routes.editPatient(id)) },
                 onOpenPlantillas = { navController.navigate(Routes.PLANTILLAS_HUB) },
-                onOpenDrafts = { navController.navigate(Routes.DRAFTS) },
+
+                onCreateRecipe = { navController.navigate(Routes.recipeEdit("_new_")) },
+                onEditRecipe = { id -> navController.navigate(Routes.recipeEdit(id)) },
+                onUseRecipe = { id -> navController.navigate(Routes.recipeUse(id)) },
                 patientRefreshKey = patientRefreshKey,
                 informeRefreshKey = informeRefreshKey,
+                recipesRefreshKey = recipesRefreshKey,
                 onPatientTabSelected = { patientRefreshKey++ },
                 onInformeTabSelected = { informeRefreshKey++ },
+                onRecipesTabSelected = { recipesRefreshKey++ },
                 onOpenInforme = { docId -> navController.navigate(Routes.informeDetail(docId)) },
             )
         }
@@ -152,6 +161,10 @@ fun ClinicosDocNavHost() {
                 onEditHeader = { id, isNew ->
                     navController.navigate(Routes.headerEdit(id, isNew))
                 },
+                onOpenDocument = { id ->
+                    informeRefreshKey++
+                    navController.navigate(Routes.informeDetail(id))
+                },
             )
         }
         composable(Routes.PLANTILLAS_HUB) {
@@ -160,8 +173,12 @@ fun ClinicosDocNavHost() {
                 onOpenRecetasTemplates = { navController.navigate(Routes.TEMPLATES_RECETAS) },
                 onOpenHeaders = { navController.navigate(Routes.HEADERS) },
                 onOpenPhysicalExamCatalog = { navController.navigate(Routes.PHYSICAL_EXAM_CATALOG) },
+                onOpenSello = { navController.navigate(Routes.SELLO) },
                 onBack = { navController.popBackStack() },
             )
+        }
+        composable(Routes.SELLO) {
+            SelloScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.PHYSICAL_EXAM_CATALOG) {
             PhysicalExamCatalogScreen(onBack = { navController.popBackStack() })
@@ -176,6 +193,36 @@ fun ClinicosDocNavHost() {
         }
         composable(Routes.JOIN_CLINIC) {
             JoinClinicScreen(onBack = { navController.popBackStack() })
+        }
+        composable(
+            route = Routes.RECIPE_EDIT,
+            arguments = listOf(navArgument("recipeId") { type = NavType.StringType }),
+        ) { entry ->
+            RecipeEditScreen(
+                recipeId = entry.arguments?.getString("recipeId"),
+                onBack = {
+                    recipesRefreshKey++
+                    navController.popBackStack()
+                },
+            )
+        }
+        composable(
+            route = Routes.RECIPE_USE,
+            arguments = listOf(navArgument("recipeId") { type = NavType.StringType }),
+        ) { entry ->
+            val rid = entry.arguments?.getString("recipeId") ?: return@composable
+            RecipeUseScreen(
+                recipeId = rid,
+                onBack = { navController.popBackStack() },
+                onAddPatient = { navController.navigate(Routes.ADD_PATIENT) },
+                onEmitted = { docId ->
+                    informeRefreshKey++
+                    recipesRefreshKey++
+                    navController.navigate(Routes.informeDetail(docId)) {
+                        popUpTo(Routes.MAIN)
+                    }
+                },
+            )
         }
         composable(Routes.TEMPLATES) {
             TemplatesScreen(
@@ -311,6 +358,10 @@ fun ClinicosDocNavHost() {
                 },
                 onEditTemplate = { id, isNew ->
                     navController.navigate(Routes.templateEdit(id, isNew))
+                },
+                onOpenDocument = { id ->
+                    informeRefreshKey++
+                    navController.navigate(Routes.informeDetail(id))
                 },
             )
         }

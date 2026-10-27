@@ -18,6 +18,10 @@ registerRoute({
           <strong>Encabezados</strong>
           <span class="muted">Hasta 4: logo, clínica o médico</span>
         </button>
+        <button type="button" class="tile tile-full" data-nav="/plantillas/sello">
+          <strong>Sello médico</strong>
+          <span class="muted">Una imagen para informes e historias</span>
+        </button>
         <button type="button" class="tile tile-full" data-nav="/plantillas/documentos">
           <strong>Informes y historias</strong>
           <span class="muted">Historia e informe</span>

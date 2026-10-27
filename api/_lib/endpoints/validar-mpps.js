@@ -1,6 +1,6 @@
-const { applyCors } = require("./_lib/cors");
-const { parseBody } = require("./_lib/body");
-const { validarMppsCedula } = require("./_lib/mpps");
+const { applyCors } = require("../cors");
+const { parseBody } = require("../body");
+const { validarMppsCedula } = require("../mpps");
 
 module.exports = async function handler(req, res) {
   applyCors(res);

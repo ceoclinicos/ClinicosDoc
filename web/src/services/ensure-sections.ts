@@ -34,6 +34,8 @@ const DEFAULT_BODY: Record<string, string> = {
   [SectionCatalog.DIAS_REPOSO]:
     "Nota: En vista de la sintomatología del paciente se indican cumplir 3 días de reposo médico completo.",
   [SectionCatalog.INDICACIONES]: RECETA_MOLDE_INDICACIONES,
+  [SectionCatalog.NOTA]:
+    "En vista de que el paciente presenta mejoría de la sintomatología, se indica tratamiento ambulatorio y reposo médico por 72 horas.",
   [RECIPE_SECTION]: RECETA_MOLDE_RECIPE,
   [SectionCatalog.ORDENES]: ORDENES_MOLDE_EJEMPLO,
 };

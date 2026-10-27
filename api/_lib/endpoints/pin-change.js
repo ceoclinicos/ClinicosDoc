@@ -1,9 +1,9 @@
-const { getAdmin } = require("./_lib/firebase");
-const { assertPin6, assertPinLogin, hashPin, hashPassword, normalizeCedula } = require("./_lib/pin");
-const { applyCors } = require("./_lib/cors");
-const { parseBody } = require("./_lib/body");
-const { apiError } = require("./_lib/errors");
-const { requireMedicoAuth } = require("./_lib/require-medico");
+const { getAdmin } = require("../firebase");
+const { assertPin6, assertPinLogin, hashPin, hashPassword, normalizeCedula } = require("../pin");
+const { applyCors } = require("../cors");
+const { parseBody } = require("../body");
+const { apiError } = require("../errors");
+const { requireMedicoAuth } = require("../require-medico");
 
 /**
  * Cambia el PIN estando autenticado (legado 4 dígitos → 6).

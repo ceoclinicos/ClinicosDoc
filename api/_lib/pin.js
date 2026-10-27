@@ -30,21 +30,24 @@ function normalizeCedula(input) {
 }
 
 function hashPin(cedula, pin) {
-  const data = `${normalizeCedula(cedula)}:${pin}`;
+  const data = `${normalizeCedula(cedula)}:${String(pin).toUpperCase()}`;
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
-/** PIN nuevo / registro / reset: exactamente 6 dígitos. */
+/**
+ * PIN nuevo / registro / reset:
+ * 6 dígitos (clásico) o una letra + 6 dígitos (formato nuevo).
+ */
 function assertPin6(pin) {
-  if (!/^\d{6}$/.test(String(pin))) {
-    throw new Error("El PIN debe tener exactamente 6 dígitos");
+  if (!/^\d{6}$|^[A-Za-z]\d{6}$/.test(String(pin))) {
+    throw new Error("El PIN debe ser 6 dígitos o una letra seguida de 6 dígitos");
   }
 }
 
-/** Login: acepta 4 (legado) o 6 dígitos. */
+/** Login: acepta 4 o 6 dígitos (legado) o letra + 6 dígitos. */
 function assertPinLogin(pin) {
-  if (!/^\d{4}$|^\d{6}$/.test(String(pin))) {
-    throw new Error("El PIN debe tener 4 o 6 dígitos");
+  if (!/^\d{4}$|^\d{6}$|^[A-Za-z]\d{6}$/.test(String(pin))) {
+    throw new Error("El PIN debe tener 4/6 dígitos o una letra + 6 dígitos");
   }
 }
 
@@ -59,12 +62,12 @@ function digitsOnly(s) {
 
 /** Hash de contraseña app Android (DoctorAuthService). */
 function hashPassword(password) {
-  return crypto.createHash("sha256").update(String(password), "utf8").digest("hex");
+  return crypto.createHash("sha256").update(String(password).toUpperCase(), "utf8").digest("hex");
 }
 
 function assertPassword(password) {
-  if (!/^\d{6}$/.test(String(password))) {
-    throw new Error("La contraseña (PIN) debe tener exactamente 6 dígitos");
+  if (!/^\d{6}$|^[A-Za-z]\d{6}$/.test(String(password))) {
+    throw new Error("La contraseña debe ser 6 dígitos o una letra + 6 dígitos");
   }
 }
 

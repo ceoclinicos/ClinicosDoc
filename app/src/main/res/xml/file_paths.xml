@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <files-path name="informes" path="informes_pdf/" />
+    <cache-path name="ocr_capture" path="ocr_capture/" />
 </paths>

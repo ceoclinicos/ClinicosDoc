@@ -95,7 +95,8 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
     val cedula = CedulaNormalizer.compose(cedulaLetter, cedulaDigits)
     var mpps by remember { mutableStateOf("") }
     var correo by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var passwordLetter by remember { mutableStateOf("") }
+    var passwordDigits by remember { mutableStateOf("") }
     var sexo by remember { mutableStateOf<String?>(null) }
     var especialidad by remember { mutableStateOf<String?>(null) }
     var esMedicoGeneral by remember { mutableStateOf(true) }
@@ -270,8 +271,10 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                     onCedulaLetterChange = { cedulaLetter = it },
                     cedulaDigits = cedulaDigits,
                     onCedulaDigitsChange = { cedulaDigits = it.filter { c -> c.isDigit() }.take(9) },
-                    password = password,
-                    onPasswordChange = { password = it.filter { c -> c.isDigit() }.take(6) },
+                    passwordLetter = passwordLetter,
+                    onPasswordLetterChange = { passwordLetter = it },
+                    passwordDigits = passwordDigits,
+                    onPasswordDigitsChange = { passwordDigits = it.filter { c -> c.isDigit() }.take(6) },
                     cedulaError = cedulaError,
                     passwordError = passwordError,
                     loading = loading,
@@ -282,8 +285,12 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                             else -> null
                         }
                         passwordError = when {
-                            password.isBlank() -> "Ingresa tu PIN (contraseña)"
-                            password.length != 4 && password.length != 6 -> "El PIN debe tener 4 o 6 dígitos"
+                            passwordDigits.isBlank() -> "Ingresa tu contraseña"
+                            passwordLetter.isNotBlank() && passwordDigits.length != 6 ->
+                                "Escribe los 6 dígitos de tu contraseña"
+                            passwordLetter.isBlank() &&
+                                passwordDigits.length != 4 && passwordDigits.length != 6 ->
+                                "El PIN debe tener 4 o 6 dígitos"
                             else -> null
                         }
                         if (cedulaError != null || passwordError != null) return@LoginForm
@@ -295,8 +302,8 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
 
                         loading = true
                         scope.launch {
-                            val pinUsed = password
-                            val result = DoctorAuthService.signIn(context, cedula, password)
+                            val pinUsed = passwordLetter + passwordDigits
+                            val result = DoctorAuthService.signIn(context, cedula, pinUsed)
                             loading = false
                             result.fold(
                                 onSuccess = {
@@ -362,8 +369,10 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                         especialidades = especialidades,
                         mpps = mpps,
                         onMppsChange = { mpps = it.filter { c -> c.isDigit() } },
-                        password = password,
-                        onPasswordChange = { password = it.filter { c -> c.isDigit() }.take(6) },
+                        passwordLetter = passwordLetter,
+                        onPasswordLetterChange = { passwordLetter = it },
+                        passwordDigits = passwordDigits,
+                        onPasswordDigitsChange = { passwordDigits = it.filter { c -> c.isDigit() }.take(6) },
                         nombreError = nombreError,
                         cedulaError = cedulaError,
                         correoError = correoError,
@@ -384,8 +393,8 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                             }
                             mppsError = if (esVenezolano && mpps.isBlank()) "Ingresa tu MPPS" else null
                             passwordError = when {
-                                password.isBlank() -> "Ingresa tu PIN (contraseña)"
-                                password.length != 6 -> "El PIN debe tener 6 dígitos"
+                                passwordLetter.isBlank() -> "Elige la letra de tu contraseña"
+                                passwordDigits.length != 6 -> "Escribe los 6 dígitos de tu contraseña"
                                 else -> null
                             }
                             if (!esMedicoGeneral && especialidad.isNullOrBlank()) {
@@ -451,7 +460,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                             }
 
                             val profile = DoctorProfile(
-                                nombre = nombre.trim(),
+                                nombre = capitalizeName(nombre),
                                 cedula = cedula.trim(),
                                 mpps = mpps.trim(),
                                 sexo = sexo!!,
@@ -464,7 +473,7 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                             loading = true
                             scope.launch {
                                 if (firebaseReady) {
-                                    val result = DoctorAuthService.register(context, password, profile)
+                                    val result = DoctorAuthService.register(context, passwordLetter + passwordDigits, profile)
                                     loading = false
                                     result.fold(
                                         onSuccess = { onRegistered() },
@@ -490,6 +499,101 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+/** Título caso: primera letra de cada palabra en mayúscula, resto en minúscula. */
+private fun capitalizeName(name: String): String =
+    name.trim().lowercase().replace(Regex("(^|\\s)\\p{L}")) { it.value.uppercase() }
+
+/**
+ * Selector de contraseña: letra (A–Z) + 6 dígitos → "A123456".
+ * allowLegacy incluye la opción "—" para PINs antiguos de solo dígitos (4 o 6).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PasswordPickerRow(
+    label: String,
+    letter: String,
+    onLetterChange: (String) -> Unit,
+    digits: String,
+    onDigitsChange: (String) -> Unit,
+    allowLegacy: Boolean,
+    isError: Boolean,
+    errorMessage: String?,
+) {
+    var letterExpanded by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (isError) MaterialTheme.colorScheme.error else TextSecondary,
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            ExposedDropdownMenuBox(
+                expanded = letterExpanded,
+                onExpandedChange = { letterExpanded = !letterExpanded },
+                modifier = Modifier.width(96.dp),
+            ) {
+                OutlinedTextField(
+                    value = letter.ifBlank { "—" },
+                    onValueChange = {},
+                    readOnly = true,
+                    singleLine = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = letterExpanded) },
+                    modifier = Modifier
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth(),
+                    isError = isError,
+                )
+                ExposedDropdownMenu(
+                    expanded = letterExpanded,
+                    onDismissRequest = { letterExpanded = false },
+                ) {
+                    if (allowLegacy) {
+                        DropdownMenuItem(
+                            text = { Text("—") },
+                            onClick = {
+                                onLetterChange("")
+                                letterExpanded = false
+                            },
+                        )
+                    }
+                    ('A'..'Z').forEach { opt ->
+                        DropdownMenuItem(
+                            text = { Text(opt.toString()) },
+                            onClick = {
+                                onLetterChange(opt.toString())
+                                letterExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = digits,
+                onValueChange = onDigitsChange,
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                placeholder = { Text("6 dígitos") },
+                leadingIcon = {
+                    Icon(Icons.Outlined.Lock, contentDescription = null)
+                },
+                keyboardOptions = keyboardDigits(),
+                visualTransformation = PasswordVisualTransformation(),
+                isError = isError,
+                supportingText = if (isError && errorMessage != null) {
+                    { Text(errorMessage) }
+                } else {
+                    null
+                },
+            )
         }
     }
 }
@@ -575,8 +679,10 @@ private fun LoginForm(
     onCedulaLetterChange: (String) -> Unit,
     cedulaDigits: String,
     onCedulaDigitsChange: (String) -> Unit,
-    password: String,
-    onPasswordChange: (String) -> Unit,
+    passwordLetter: String,
+    onPasswordLetterChange: (String) -> Unit,
+    passwordDigits: String,
+    onPasswordDigitsChange: (String) -> Unit,
     cedulaError: String?,
     passwordError: String?,
     loading: Boolean,
@@ -592,14 +698,13 @@ private fun LoginForm(
         errorMessage = cedulaError,
     )
     Spacer(modifier = Modifier.height(20.dp))
-    PremiumTextField(
-        "PIN (contraseña, 4 o 6 dígitos)",
-        password,
-        onPasswordChange,
-        hint = "4 o 6 dígitos",
-        prefixIcon = Icons.Outlined.Lock,
-        keyboardOptions = keyboardDigits(),
-        visualTransformation = PasswordVisualTransformation(),
+    PasswordPickerRow(
+        label = "Contraseña",
+        letter = passwordLetter,
+        onLetterChange = onPasswordLetterChange,
+        digits = passwordDigits,
+        onDigitsChange = onPasswordDigitsChange,
+        allowLegacy = true,
         isError = passwordError != null,
         errorMessage = passwordError,
     )
@@ -637,8 +742,10 @@ private fun RegistrationStep1(
     especialidades: List<String>,
     mpps: String,
     onMppsChange: (String) -> Unit,
-    password: String,
-    onPasswordChange: (String) -> Unit,
+    passwordLetter: String,
+    onPasswordLetterChange: (String) -> Unit,
+    passwordDigits: String,
+    onPasswordDigitsChange: (String) -> Unit,
     nombreError: String?,
     cedulaError: String?,
     correoError: String?,
@@ -803,16 +910,21 @@ private fun RegistrationStep1(
         )
     }
     Spacer(modifier = Modifier.height(20.dp))
-    PremiumTextField(
-        "PIN (contraseña, 6 dígitos)",
-        password,
-        onPasswordChange,
-        hint = "6 dígitos",
-        prefixIcon = Icons.Outlined.Lock,
-        keyboardOptions = keyboardDigits(),
-        visualTransformation = PasswordVisualTransformation(),
+    PasswordPickerRow(
+        label = "Contraseña",
+        letter = passwordLetter,
+        onLetterChange = onPasswordLetterChange,
+        digits = passwordDigits,
+        onDigitsChange = onPasswordDigitsChange,
+        allowLegacy = false,
         isError = passwordError != null,
         errorMessage = passwordError,
+    )
+    Text(
+        "La contraseña es una letra que elija + 6 dígitos (ej. A123456).",
+        style = MaterialTheme.typography.bodySmall,
+        color = TextSecondary,
+        modifier = Modifier.padding(top = 6.dp),
     )
     Spacer(modifier = Modifier.height(32.dp))
     PremiumPrimaryButton(

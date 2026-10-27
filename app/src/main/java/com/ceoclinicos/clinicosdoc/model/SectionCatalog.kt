@@ -19,6 +19,7 @@ object SectionCatalog {
     const val HABITOS_PSICOBIOLOGICOS = "Hábitos psicobiológicos"
     const val DIAS_REPOSO = "Días de reposo indicados"
     const val INDICACIONES = "Indicaciones"
+    const val NOTA = "Nota"
     const val ORDENES = OrdenesMedicasDefaults.SECTION_ORDENES
     const val RECIPE = RecetaDefaults.SECTION_RECIPE
 
@@ -41,6 +42,7 @@ object SectionCatalog {
         HABITOS_PSICOBIOLOGICOS,
         DIAS_REPOSO,
         INDICACIONES,
+        NOTA,
         ORDENES,
         RECIPE,
     )
@@ -69,6 +71,7 @@ object SectionCatalog {
             DIAGNOSTICO,
             CONCLUSIONES,
             PLAN,
+            NOTA,
         )
         DocumentType.REPOSO -> listOf(
             DATOS_PACIENTE,
@@ -142,6 +145,7 @@ object SectionCatalog {
             ENFERMEDAD_ACTUAL,
             EXAMEN_FISICO,
             DIAGNOSTICO,
+            NOTA,
         )
         // Reposo: mismo núcleo del informe + días de reposo
         DocumentType.REPOSO -> listOf(

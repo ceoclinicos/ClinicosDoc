@@ -1,20 +1,17 @@
-const { getAdmin } = require("./_lib/firebase");
-const { normalizeCedula } = require("./_lib/pin");
-const { applyCors } = require("./_lib/cors");
-const { parseBody } = require("./_lib/body");
-const { apiError } = require("./_lib/errors");
+const { getAdmin } = require("../firebase");
+const { normalizeCedula } = require("../pin");
+const { applyCors } = require("../cors");
+const { parseBody } = require("../body");
+const { apiError } = require("../errors");
 const {
   isInviteExpired,
   deleteDoctorInvitation,
   clinicInviteRef,
   doctorMailboxRef,
-} = require("./_lib/invite-expiry");
-const { requireMedicoAuth } = require("./_lib/require-medico");
-const {
-  canAddTeamMember,
-  countClinicTeamSize,
-  readClinicEntitlement,
-} = require("./_lib/clinic-entitlements");
+} = require("../invite-expiry");
+const { requireMedicoAuth } = require("../require-medico");
+const { canAddTeamMember, countClinicTeamSize, readClinicEntitlement } = require("../clinic-entitlements");
+const { clearClinicLeft } = require("../clinic-left");
 
 module.exports = async function handler(req, res) {
   applyCors(res);
@@ -107,6 +104,8 @@ module.exports = async function handler(req, res) {
         role: "medico",
         joinedAt,
       });
+
+    await clearClinicLeft(db, uid, clinicId);
 
     await deleteDoctorInvitation(db, clinicId, memberCedula, uid);
 

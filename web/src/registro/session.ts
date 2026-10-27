@@ -85,9 +85,14 @@ export function setProfessionalSession(session: ProfesionalSession): void {
   notifySessionChange();
 }
 
-export function clearProfessionalSession(): void {
+/**
+ * Limpia la sesión de profesional.
+ * signOut=false: transición entre cuentas (login de otro rol) — no matar la
+ * sesión Firebase que acaba de iniciarse.
+ */
+export function clearProfessionalSession(signOut = true): void {
   remove(PROF_KEY);
-  void signOutFirebase();
+  if (signOut) void signOutFirebase();
   notifySessionChange();
 }
 
@@ -100,9 +105,9 @@ export function setPatientSession(session: PacienteSession): void {
   notifySessionChange();
 }
 
-export function clearPatientSession(): void {
+export function clearPatientSession(signOut = true): void {
   remove(PAC_KEY);
-  void signOutFirebase();
+  if (signOut) void signOutFirebase();
   notifySessionChange();
 }
 

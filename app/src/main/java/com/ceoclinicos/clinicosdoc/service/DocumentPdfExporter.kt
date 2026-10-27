@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.os.Build
@@ -18,6 +19,7 @@ import android.print.PrintManager
 import android.print.PageRange
 import androidx.core.content.FileProvider
 import com.ceoclinicos.clinicosdoc.model.ClinicalDocument
+import com.ceoclinicos.clinicosdoc.model.DocumentHeader
 import com.ceoclinicos.clinicosdoc.model.DocumentType
 import com.ceoclinicos.clinicosdoc.model.PatientMembrete
 import com.ceoclinicos.clinicosdoc.model.RecetaDefaults
@@ -45,15 +47,45 @@ object DocumentPdfExporter {
     private const val LINE_HEIGHT = 18f
     private const val LOGO_SIZE = 70f
     private const val LOGO_GAP = 14f
+    /** Sello cuadrado al pie del documento: 1/5 del ancho de la hoja. */
+    private const val SELLO_SIZE = PAGE_WIDTH / 5f
 
-    fun generate(context: Context, document: ClinicalDocument): File {
+    /**
+     * Página (1-based) y rectángulo donde quedó el sello en la última generación.
+     * El preview los usa para ubicar el sello arrastrable exactamente donde saldrá.
+     */
+    var lastSelloPageIndex: Int = -1
+        private set
+    var lastSelloRect: RectF? = null
+        private set
+
+    /** Fracción del sello respecto al ancho/alto de la página (para overlays en pantalla). */
+    val selloFractionW: Float get() = (lastSelloRect?.width() ?: SELLO_SIZE) / PAGE_WIDTH
+    val selloFractionH: Float get() = (lastSelloRect?.height() ?: SELLO_SIZE) / PAGE_HEIGHT
+
+    /** Posición del último sello dibujado, normalizada 0..1 sobre el espacio disponible. */
+    fun lastSelloNorm(): Pair<Float, Float>? = lastSelloRect?.let { r ->
+        (r.left / (PAGE_WIDTH - r.width())) to (r.top / (PAGE_HEIGHT - r.height()))
+    }
+
+    fun generate(
+        context: Context,
+        document: ClinicalDocument,
+        drawSello: Boolean = true,
+    ): File {
+        lastSelloPageIndex = -1
+        lastSelloRect = null
         if (document.type == DocumentType.RECETA) {
             return generateRecetaLandscape(context, document)
         }
-        return generatePortrait(context, document)
+        return generatePortrait(context, document, drawSello)
     }
 
-    private fun generatePortrait(context: Context, document: ClinicalDocument): File {
+    private fun generatePortrait(
+        context: Context,
+        document: ClinicalDocument,
+        drawSello: Boolean = true,
+    ): File {
         val dir = File(context.filesDir, "informes_pdf").apply { mkdirs() }
         val file = File(dir, "informe_${document.id.take(8)}.pdf")
 
@@ -389,10 +421,56 @@ object DocumentPdfExporter {
             }
         }
 
+        // Sello médico en la última página (opcional por documento).
+        if (document.incluirSello) {
+            decodeSelloBitmap(document.selloBase64)?.let { bitmap ->
+                // Tamaño del sello: cabe en un cuadrado SELLO_SIZE conservando la proporción.
+                val aspect = bitmap.width.toFloat() / bitmap.height.toFloat()
+                var selloW = SELLO_SIZE
+                var selloH = selloW / aspect
+                if (selloH > SELLO_SIZE) {
+                    selloH = SELLO_SIZE
+                    selloW = selloH * aspect
+                }
+                val ox = document.selloOffsetX
+                val oy = document.selloOffsetY
+                if (ox != null && oy != null) {
+                    // Posición elegida por el usuario (absoluta, siempre dentro de la página).
+                    val left = ox.coerceIn(0f, 1f) * (PAGE_WIDTH - selloW)
+                    val top = oy.coerceIn(0f, 1f) * (PAGE_HEIGHT - selloH)
+                    lastSelloPageIndex = pageNumber - 1
+                    lastSelloRect = RectF(left, top, left + selloW, top + selloH)
+                    if (drawSello) {
+                        canvas.drawBitmap(bitmap, null, lastSelloRect!!, null)
+                    }
+                } else {
+                    // Por defecto: centrado debajo del último texto.
+                    newPageIfNeeded(selloH + 24f)
+                    val left = (PAGE_WIDTH - selloW) / 2f
+                    val top = y + 12f
+                    lastSelloPageIndex = pageNumber - 1
+                    lastSelloRect = RectF(left, top, left + selloW, top + selloH)
+                    if (drawSello) {
+                        canvas.drawBitmap(bitmap, null, lastSelloRect!!, null)
+                    }
+                    y += selloH + 16f
+                }
+            }
+        }
+
         pdf.finishPage(page)
         FileOutputStream(file).use { pdf.writeTo(it) }
         pdf.close()
         return file
+    }
+
+    /** Decodifica el sello guardado como base64 en el documento. */
+    private fun decodeSelloBitmap(b64: String?): Bitmap? {
+        if (b64.isNullOrBlank()) return null
+        return runCatching {
+            val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        }.getOrNull()
     }
 
     /**
@@ -409,7 +487,7 @@ object DocumentPdfExporter {
         val canvas = page.canvas
 
         val bodyPaint = Paint().apply {
-            textSize = 9f
+            textSize = 11f
             color = android.graphics.Color.BLACK
             isAntiAlias = true
         }
@@ -417,25 +495,25 @@ object DocumentPdfExporter {
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val titlePaint = Paint().apply {
-            textSize = 11f
+            textSize = 13f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             color = android.graphics.Color.BLACK
             isAntiAlias = true
         }
         val headerPaint = Paint().apply {
-            textSize = 10f
+            textSize = 12f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             color = android.graphics.Color.BLACK
             isAntiAlias = true
         }
         val subPaint = Paint().apply {
-            textSize = 8f
+            textSize = 10f
             color = android.graphics.Color.DKGRAY
             isAntiAlias = true
         }
         val midX = LANDSCAPE_WIDTH / 2f
         val halfGap = 10f
-        val lineH = 14f
+        val lineH = 16f
         val footerReserve = 52f
 
         // Línea divisoria vertical al centro
@@ -639,7 +717,7 @@ object DocumentPdfExporter {
             // Título de la mitad
             val titleW = titlePaint.measureText(halfTitle)
             canvas.drawText(halfTitle, center - titleW / 2f, y, titlePaint)
-            y += lineH + 4f
+            y += lineH * 2
 
             // Datos del paciente; baja de línea si no cabe en el margen
             val nombreValue = membrete.displayNombre()
