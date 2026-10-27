@@ -310,6 +310,11 @@ a {
 }
 
 .hero-card + .hero-card {
+  margin-top: 2.75rem;
+}
+
+/* Primera tarjeta de la landing: más aire respecto al texto superior */
+.lead + .hero-card {
   margin-top: 1.75rem;
 }
 
