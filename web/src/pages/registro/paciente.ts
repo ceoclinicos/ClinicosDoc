@@ -11,6 +11,7 @@ import {
   parseBirthFromForm,
 } from "../../services/birth-date";
 import { cedulaFieldHtml, readCedulaFromForm } from "../../services/cedula";
+import { passwordFieldHtml, readPasswordFromForm } from "../../ui/password-picker";
 import {
   TIPOS_SANGRE,
   emergenciaPublicUrl,
@@ -308,7 +309,7 @@ function bindPacientePage(el: HTMLElement): void {
           ${tabs("entrar")}
           <form class="form" id="pac-login">
             ${cedulaFieldHtml({ autocomplete: "username" })}
-            <label>PIN (contraseña, 4 o 6 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}|[0-9]{6}" maxlength="6" minlength="4" required /></label>
+            ${passwordFieldHtml({ allowLegacy: true })}
             <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN (contraseña)</a></p>
             <button type="submit" class="btn btn-primary">Entrar</button>
           </form>
@@ -329,7 +330,8 @@ function bindPacientePage(el: HTMLElement): void {
             <p class="muted">La edad se calcula con la fecha de nacimiento.</p>
             <label>Teléfono<input name="telefono" type="tel" required placeholder="0412…" /></label>
             <label>Correo<input name="correo" type="email" required /></label>
-            <label>PIN (contraseña, 6 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" required /></label>
+            ${passwordFieldHtml()}
+            <p class="muted">La contraseña es una letra que elija + 6 dígitos (ej. A123456).</p>
             <button type="submit" class="btn btn-primary">Registrarme</button>
           </form>
         `;
@@ -347,7 +349,7 @@ function bindPacientePage(el: HTMLElement): void {
         e.preventDefault();
         const fd = new FormData(e.target as HTMLFormElement);
         try {
-          const p = await loginPaciente(readCedulaFromForm(fd), String(fd.get("pin")));
+          const p = await loginPaciente(readCedulaFromForm(fd), readPasswordFromForm(fd));
           setPatientSession({ cedula: p.cedula, nombre: p.nombre });
           navigate("/paciente");
         } catch (err) {
@@ -368,7 +370,7 @@ function bindPacientePage(el: HTMLElement): void {
             sexo: String(fd.get("sexo")),
             telefono: String(fd.get("telefono")),
             correo: String(fd.get("correo")),
-            pin: String(fd.get("pin")),
+            pin: readPasswordFromForm(fd),
           });
           setPatientSession({ cedula: p.cedula, nombre: p.nombre });
           navigate("/paciente");
@@ -409,7 +411,7 @@ registerRoute({
         ${tabs("entrar")}
         <form class="form" id="pac-login">
           ${cedulaFieldHtml({ autocomplete: "username" })}
-          <label>PIN (contraseña, 4 o 6 dígitos)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4}|[0-9]{6}" maxlength="6" minlength="4" required /></label>
+          ${passwordFieldHtml({ allowLegacy: true })}
           <p class="muted"><a href="#/olvide-pin">Olvidé mi PIN (contraseña)</a></p>
           <button type="submit" class="btn btn-primary">Entrar</button>
         </form>

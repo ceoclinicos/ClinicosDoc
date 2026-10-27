@@ -130,21 +130,20 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
             title = { Text("Actualiza tu PIN") },
             text = {
                 Column {
-                    Text("Por seguridad, el PIN ahora debe tener 6 dígitos.")
+                    Text("Por seguridad, el PIN ahora debe tener 6 dígitos (o una letra + 6 dígitos).")
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = newPin,
-                        onValueChange = { newPin = it.filter { c -> c.isDigit() }.take(6) },
-                        label = { Text("Nuevo PIN (6 dígitos)") },
+                        onValueChange = { newPin = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(7) },
+                        label = { Text("Nuevo PIN (6 dígitos o letra + 6)") },
                         visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = keyboardDigits(),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = newPin2,
-                        onValueChange = { newPin2 = it.filter { c -> c.isDigit() }.take(6) },
+                        onValueChange = { newPin2 = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(7) },
                         label = { Text("Confirmar PIN") },
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = keyboardDigits(),
@@ -161,9 +160,10 @@ fun DoctorLoginScreen(onRegistered: () -> Unit) {
                 TextButton(
                     onClick = {
                         pinUpgradeError = when {
-                            newPin.length != 6 -> "El PIN debe tener 6 dígitos"
+                            !newPin.matches(Regex("^\\d{6}$|^[A-Z]\\d{6}$")) ->
+                                "Debe ser 6 dígitos o una letra + 6 dígitos"
                             newPin != newPin2 -> "Los PIN no coinciden"
-                            newPin == pinUpgradeOld -> "Elige un PIN distinto"
+                            newPin == pinUpgradeOld.uppercase() -> "Elige un PIN distinto"
                             else -> null
                         }
                         if (pinUpgradeError != null) return@TextButton
