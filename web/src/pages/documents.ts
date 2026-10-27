@@ -27,6 +27,9 @@ import {
   vitalSignsFieldsHtml,
 } from "../services/vital-signs";
 import { displayCedula } from "../services/cedula";
+import { pushClinicDocumentViaApi } from "../services/clinic-document-push";
+import { ensureMembershipsLoaded } from "../clinic/membership-cache";
+import { getProfessionalSession } from "../registro/session";
 import { loadJson } from "../services/local-store";
 import { bindMembreteEditor, membreteEditorHtml, readMembreteFromEditor } from "../ui/membrete-editor";
 import { bindNavButtons, emptyState, page } from "./helpers";
@@ -157,6 +160,16 @@ registerRoute({
         <button type="button" class="btn btn-ghost" data-nav="/informes">Volver</button>
         <button type="button" class="btn btn-ghost" id="btn-delete">Eliminar</button>
       </div>
+
+      <dialog class="sheet-dialog" id="add-clinic-sheet">
+        <form method="dialog" class="sheet-body">
+          <h2>Añadir a una clínica</h2>
+          <p class="muted">El documento quedará registrado en el panel del centro (solo lectura para la clínica).</p>
+          <div id="add-clinic-options" class="stack"></div>
+          <p class="muted" id="add-clinic-status" style="margin-top:0.5rem"></p>
+          <button type="submit" class="btn btn-ghost" value="cancel">Cancelar</button>
+        </form>
+      </dialog>
       `,
       `<div class="tools-wrap">
         <button type="button" class="btn btn-ghost btn-sm" id="btn-tools">Herramientas ▾</button>
@@ -166,6 +179,7 @@ registerRoute({
           <button type="button" data-tool="print">Imprimir</button>
           <button type="button" data-tool="share">Compartir</button>
           ${doc.type === "historiaClinica" ? `<button type="button" data-tool="crear-informe">Crear informe</button>` : ""}
+          <button type="button" data-tool="add-clinic">${doc.clinicId ? "Añadido a clínica ✓" : "Añadir a una clínica"}</button>
         </div>
       </div>`,
     );
@@ -349,6 +363,10 @@ registerRoute({
         navigate(`/informes/${informe.id}`);
         return;
       }
+      if (tool === "add-clinic") {
+        void openAddClinicSheet();
+        return;
+      }
       if (tool === "share") {
         const content = refreshPreview();
         const title = DocumentReportTitles[doc!.type];
@@ -362,6 +380,68 @@ registerRoute({
         }
       }
     };
+
+    const addClinicSheet = el.querySelector("#add-clinic-sheet") as HTMLDialogElement;
+    const addClinicOptions = el.querySelector("#add-clinic-options") as HTMLElement;
+    const addClinicStatus = el.querySelector("#add-clinic-status") as HTMLElement;
+
+    async function openAddClinicSheet(): Promise<void> {
+      const prof = getProfessionalSession();
+      if (!prof) {
+        alert("Inicie sesión como médico para registrar el documento en un centro.");
+        return;
+      }
+      addClinicSheet.showModal();
+      addClinicOptions.innerHTML = "";
+      addClinicStatus.textContent = "Buscando centros afiliados…";
+      let memberships: Array<{ clinicId: string; clinicName: string }> = [];
+      try {
+        memberships = await ensureMembershipsLoaded(prof.cedula || "", prof.cloudUserId, { force: true });
+      } catch {
+        /* silencioso */
+      }
+      if (!memberships.length) {
+        addClinicStatus.textContent =
+          "No estás afiliado a ninguna clínica. El centro debe invitarte primero.";
+        return;
+      }
+      addClinicStatus.textContent = "";
+      addClinicOptions.innerHTML = memberships
+        .map(
+          (m) => `
+          <button type="button" class="tile tile-full" data-clinic-id="${escapeHtml(m.clinicId)}" data-clinic-name="${escapeHtml(m.clinicName)}">
+            <strong>${escapeHtml(m.clinicName)}</strong>
+            <span class="muted">Registrar este ${DocumentTypeLabels[doc!.type] ?? "documento"}</span>
+          </button>`,
+        )
+        .join("");
+      addClinicOptions.querySelectorAll("[data-clinic-id]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const clinicId = btn.getAttribute("data-clinic-id") || "";
+          const clinicName = btn.getAttribute("data-clinic-name") || "";
+          addClinicStatus.textContent = "Registrando en el centro…";
+          try {
+            const content = refreshPreview();
+            editableMembrete = readMembreteFromEditor(el, editableMembrete);
+            const payload = {
+              ...doc!,
+              content,
+              headerId: selectedHeader?.id,
+              headerSnapshot: selectedHeader ? { ...selectedHeader } : doc!.headerSnapshot,
+              membrete: editableMembrete,
+            };
+            doc = saveDocument(payload);
+            await pushClinicDocumentViaApi(clinicId, doc, prof.nombre, prof.cedula);
+            doc = saveDocument({ ...doc!, clinicId, clinicName });
+            addClinicSheet.close();
+            alert(`Documento registrado en ${clinicName}. La clínica puede verlo en su panel (solo lectura).`);
+          } catch (err) {
+            addClinicStatus.textContent =
+              err instanceof Error ? err.message : "No se pudo registrar en el centro";
+          }
+        });
+      });
+    }
 
     el.querySelector("#btn-tools")?.addEventListener("click", (e) => {
       e.stopPropagation();

@@ -19,6 +19,17 @@ const DOC_TYPES: DocumentType[] = [
   "receta",
 ];
 
+/** Máximo de moldes por tipo de documento. */
+const MOLD_LIMITS: Partial<Record<DocumentType, number>> = {
+  historiaClinica: 5,
+  informe: 10,
+};
+
+function moldLimitLabel(type: DocumentType): string {
+  const max = MOLD_LIMITS[type];
+  return max ? ` (máx. ${max})` : "";
+}
+
 registerRoute({
   path: "/clinica/plantillas",
   title: "Plantillas",
@@ -37,6 +48,7 @@ registerRoute({
           <span class="muted">Logo y membrete del centro</span>
         </button>
       </div>
+      <p class="muted" id="limits-summary"></p>
       <button type="button" class="btn btn-secondary" id="btn-add">+ Nuevo molde</button>
       <div id="status" class="muted" style="margin-top:0.75rem">Cargando…</div>
       <ul class="list" id="tpl-list"></ul>
@@ -99,6 +111,13 @@ registerRoute({
           return;
         }
         status.textContent = `${templates.length} molde(s)`;
+        const limitsEl = el.querySelector("#limits-summary");
+        if (limitsEl) {
+          limitsEl.textContent = DOC_TYPES.map((t) => {
+            const count = templates.filter((x) => x.documentType === t).length;
+            return `${DocumentTypeLabels[t]}: ${count}${moldLimitLabel(t)}`;
+          }).join(" · ");
+        }
         list.innerHTML = templates
           .map(
             (t) => `
@@ -182,6 +201,14 @@ registerRoute({
         enabledPhysicalExamSystemIds: [...DefaultEnabledExamIds],
         sectionDefaultTexts: Object.keys(draftSectionTexts).length ? draftSectionTexts : undefined,
       };
+      const maxForType = MOLD_LIMITS[type];
+      const existingOfType = templates.filter(
+        (x) => x.documentType === type && x.id !== payload.id,
+      ).length;
+      if (maxForType && existingOfType >= maxForType) {
+        alert(`Límite alcanzado: máximo ${maxForType} moldes de ${DocumentTypeLabels[type]}. Elimine uno para crear otro.`);
+        return;
+      }
       try {
         if (payload.isDefault) {
           for (const t of templates.filter((x) => x.documentType === type && x.id !== payload.id)) {
