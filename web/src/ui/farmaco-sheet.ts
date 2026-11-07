@@ -22,6 +22,8 @@ export function openFarmacoSheet(
     let concentracion = initial?.concentracion || "";
     let disponase = initial?.disponase || "";
     let indicaciones = initial?.indicaciones || "";
+    let dosisPonderal = initial?.dosisPonderalMgKg || "";
+    let tomasAlDia = initial?.tomasAlDia || 0;
 
     const dlg = document.createElement("dialog");
     dlg.className = "sheet-dialog farmaco-sheet";
@@ -117,6 +119,20 @@ export function openFarmacoSheet(
           <label>Cantidad a dispensar <span class="muted">(opcional)</span>
             <input id="fs-disp" value="${escapeHtml(disponase)}" placeholder="Ej. 14 tabletas, 1 frasco" />
           </label>
+          <p class="muted" style="margin:0.5rem 0 0.25rem">Solo pacientes pediátricos (opcional)</p>
+          <label>Dosis ponderal (mg/kg/día)
+            <input id="fs-ponderal" type="number" min="0" step="any" value="${escapeHtml(dosisPonderal)}" placeholder="Ej. 50" />
+          </label>
+          <label>¿En cuántas tomas se divide al día?
+            <select id="fs-tomas">
+              ${[0, 2, 3, 4, 5, 6]
+                .map(
+                  (n) =>
+                    `<option value="${n}" ${n === tomasAlDia ? "selected" : ""}>${n === 0 ? "—" : n}</option>`,
+                )
+                .join("")}
+            </select>
+          </label>
           <div class="dialog-actions">
             <button type="button" class="btn btn-ghost" id="fs-back">Atrás</button>
             <button type="button" class="btn btn-primary" id="fs-next">Siguiente</button>
@@ -126,8 +142,13 @@ export function openFarmacoSheet(
         body = `
           <p class="muted">${escapeHtml(summary)}</p>
           <label>Indicaciones
-            <textarea id="fs-ind" rows="4" placeholder="Tomar 1 tableta vía oral cada 8 horas…">${escapeHtml(indicaciones)}</textarea>
+            <textarea id="fs-ind" rows="4" placeholder="Dar {dosis} cada 8 horas por 5 días…">${escapeHtml(indicaciones)}</textarea>
           </label>
+          ${
+            dosisPonderal
+              ? `<p class="muted" style="margin:0.25rem 0 0">Use {dosis} donde va la cantidad calculada; si no lo pone, se agrega una línea con la dosis.</p>`
+              : ""
+          }
           <div class="dialog-actions">
             <button type="button" class="btn btn-ghost" id="fs-back">Atrás</button>
             <button type="button" class="btn btn-primary" id="fs-save">Agregar</button>
@@ -237,6 +258,8 @@ export function openFarmacoSheet(
         dlg.querySelector("#fs-next")?.addEventListener("click", () => {
           concentracion = (dlg.querySelector("#fs-conc") as HTMLInputElement).value.trim();
           disponase = (dlg.querySelector("#fs-disp") as HTMLInputElement).value.trim();
+          dosisPonderal = (dlg.querySelector("#fs-ponderal") as HTMLInputElement).value.trim();
+          tomasAlDia = Number((dlg.querySelector("#fs-tomas") as HTMLSelectElement).value) || 0;
           step = "indicaciones";
           render();
         });
@@ -251,6 +274,8 @@ export function openFarmacoSheet(
             concentracion: concentracion.trim(),
             disponase: disponase.trim(),
             indicaciones,
+            dosisPonderalMgKg: dosisPonderal,
+            tomasAlDia: dosisPonderal ? tomasAlDia : 0,
           });
         });
       }

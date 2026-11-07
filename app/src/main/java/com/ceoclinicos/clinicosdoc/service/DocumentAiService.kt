@@ -712,10 +712,16 @@ object DocumentAiService {
         }
         if (!applies) return
         val sample = ejemplo.trim().ifBlank { EnfermedadActualStorage.DEFAULT_EJEMPLO }
-        appendLine("ENFERMEDAD ACTUAL — ejemplo de estilo (referencia; adapta al dictado, sexo, edad y hechos reales):")
-        appendLine("\"\"\"")
-        appendLine(sample)
-        appendLine("\"\"\"")
+        val ejemplos = (listOf(sample) + EnfermedadActualStorage.EJEMPLOS_REFERENCIA)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        appendLine("ENFERMEDAD ACTUAL — ejemplos de estilo (referencia; adapta al dictado, sexo, edad y hechos reales):")
+        ejemplos.forEach { e ->
+            appendLine("\"\"\"")
+            appendLine(e)
+            appendLine("\"\"\"")
+        }
         appendLine("Reglas de estilo:")
         appendLine(EnfermedadActualStorage.STYLE_RULES)
         appendLine()

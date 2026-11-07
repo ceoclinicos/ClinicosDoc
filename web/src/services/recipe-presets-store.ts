@@ -40,6 +40,8 @@ export function upsertRecipePreset(input: {
       concentracion: f.concentracion.trim(),
       disponase: f.disponase.trim(),
       indicaciones: f.indicaciones.trim(),
+      dosisPonderalMgKg: (f.dosisPonderalMgKg || "").trim(),
+      tomasAlDia: Math.min(6, Math.max(0, f.tomasAlDia || 0)),
     })),
     createdAt: existing?.createdAt || now,
     updatedAt: now,

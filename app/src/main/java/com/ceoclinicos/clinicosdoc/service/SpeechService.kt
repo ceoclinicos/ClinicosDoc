@@ -30,8 +30,14 @@ class SpeechService(context: Context) {
     private var sessionBase = ""
     private var currentPartial = ""
     private var onResultCallback: ((String, Boolean) -> Unit)? = null
+    private var onErrorCallback: ((String) -> Unit)? = null
     private var restartQueued = false
     private var beepMuted = false
+    private var consecutiveFailures = 0
+
+    private companion object {
+        const val MAX_CONSECUTIVE_FAILURES = 4
+    }
 
     var lastError: String? = null
         private set
@@ -59,16 +65,19 @@ class SpeechService(context: Context) {
     fun startListening(
         existingText: String = "",
         onResult: (String, Boolean) -> Unit,
+        onError: ((String) -> Unit)? = null,
     ): Boolean {
         lastError = null
         if (!available && !initialize()) return false
 
         active = true
         restartQueued = false
+        consecutiveFailures = 0
         committedText = existingText.trimEnd()
         sessionBase = committedText
         currentPartial = ""
         onResultCallback = onResult
+        onErrorCallback = onError
         if (committedText.isNotEmpty()) {
             onResult(committedText, false)
         }
@@ -83,6 +92,7 @@ class SpeechService(context: Context) {
         mainHandler.removeCallbacksAndMessages(null)
         currentPartial = ""
         onResultCallback = null
+        onErrorCallback = null
         try {
             speechRecognizer?.cancel()
         } catch (_: Exception) {
@@ -129,7 +139,7 @@ class SpeechService(context: Context) {
             } catch (_: Exception) {
             }
             speechRecognizer = null
-            if (active) queueRestart(250L)
+            if (active) failOrRestart(250L, lastError!!)
             true
         }
     }
@@ -172,6 +182,7 @@ class SpeechService(context: Context) {
 
     private val recognitionListener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {
+            consecutiveFailures = 0
             muteRecognitionBeep()
         }
 
@@ -189,26 +200,24 @@ class SpeechService(context: Context) {
                 -> queueRestart(60L)
 
                 SpeechRecognizer.ERROR_CLIENT,
-                -> queueRestart(120L)
+                -> failOrRestart(120L, "El servicio de voz no está disponible en este dispositivo")
 
                 SpeechRecognizer.ERROR_RECOGNIZER_BUSY,
                 -> queueRestart(400L)
 
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
-                    lastError = "Permiso de micrófono requerido"
-                    unmuteRecognitionBeep()
-                    active = false
+                    fail("Permiso de micrófono requerido")
                 }
 
                 else -> {
-                    lastError = when (error) {
+                    val message = when (error) {
                         SpeechRecognizer.ERROR_AUDIO -> "Error de audio"
-                        SpeechRecognizer.ERROR_NETWORK -> "Error de red — revisa conexión"
+                        SpeechRecognizer.ERROR_NETWORK -> "Sin conexión para el reconocimiento de voz"
                         SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Tiempo de red agotado"
                         SpeechRecognizer.ERROR_SERVER -> "Error del servidor de voz"
-                        else -> null
+                        else -> "No se pudo reconocer la voz"
                     }
-                    queueRestart(150L)
+                    failOrRestart(150L, message)
                 }
             }
         }
@@ -219,6 +228,7 @@ class SpeechService(context: Context) {
                 ?.firstOrNull()
                 .orEmpty()
             if (text.isNotBlank()) {
+                consecutiveFailures = 0
                 committedText = joinText(sessionBase, text)
                 currentPartial = ""
                 onResultCallback?.invoke(committedText, true)
@@ -235,6 +245,23 @@ class SpeechService(context: Context) {
             currentPartial = text
             emitDisplay(isFinal = false)
         }
+    }
+
+    private fun failOrRestart(delayMs: Long, message: String) {
+        consecutiveFailures++
+        lastError = message
+        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            fail(message)
+        } else {
+            queueRestart(delayMs)
+        }
+    }
+
+    private fun fail(message: String) {
+        lastError = message
+        val callback = onErrorCallback
+        stopListening()
+        callback?.invoke(message)
     }
 
     private fun joinText(base: String, addition: String): String {

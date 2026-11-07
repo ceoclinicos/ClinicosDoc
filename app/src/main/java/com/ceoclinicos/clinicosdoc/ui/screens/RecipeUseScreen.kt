@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.ListItem
@@ -21,10 +22,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -58,6 +61,8 @@ fun RecipeUseScreen(
     val context = LocalContext.current
     var preset by remember { mutableStateOf<RecipePreset?>(null) }
     var selected by remember { mutableStateOf<Patient?>(null) }
+    var pesoKg by remember { mutableStateOf("") }
+    val dosisMlInputs = remember { mutableStateMapOf<Int, String>() }
     var query by remember { mutableStateOf("") }
     var patients by remember { mutableStateOf(PatientStorage.loadAll(context)) }
 
@@ -155,6 +160,57 @@ fun RecipeUseScreen(
                 TextButton(onClick = onAddPatient) {
                     Text("+ Agregar paciente")
                 }
+
+                val peso = pesoKg.trim().replace(",", ".").toDoubleOrNull()
+                val pedsIdx = p.farmacos.mapIndexedNotNull { i, f ->
+                    if (f.tieneDosisPonderal()) i else null
+                }
+                val peds = selected?.let { it.edad in 1..17 } == true && pedsIdx.isNotEmpty()
+                if (peds) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = pesoKg,
+                        onValueChange = { pesoKg = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Peso del paciente (kg)") },
+                        placeholder = { Text("Ej. 18") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
+                    Text(
+                        "Se usará para la dosis ponderal pediátrica.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                    if (peso != null && peso > 0) {
+                        pedsIdx.forEach { i ->
+                            val f = p.farmacos[i]
+                            val calculado = f.mlPorToma(peso)
+                            val actual = dosisMlInputs[i]
+                            if (actual == null && calculado != null) {
+                                dosisMlInputs[i] = if (calculado % 1.0 == 0.0) {
+                                    calculado.toInt().toString()
+                                } else {
+                                    String.format(java.util.Locale.US, "%.1f", calculado)
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = dosisMlInputs[i].orEmpty(),
+                                onValueChange = { dosisMlInputs[i] = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = {
+                                    Text("${f.principioActivo} — ml por toma")
+                                },
+                                placeholder = {
+                                    calculado?.let { Text("Calculado: $it ml") }
+                                },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            )
+                        }
+                    }
+                }
             }
             PremiumPrimaryButton(
                 label = "Emitir receta",
@@ -164,13 +220,17 @@ fun RecipeUseScreen(
                     val header = HeaderStorage.defaultHeader(context)
                     val tpl = TemplateStorage.ensureTemplateForType(context, DocumentType.RECETA)
                     val doctor = DoctorStorage.loadProfile(context)
+                    val peso = pesoKg.trim().replace(",", ".").toDoubleOrNull()
+                    val overrides = dosisMlInputs.mapNotNull { (i, v) ->
+                        v.trim().replace(",", ".").toDoubleOrNull()?.let { i to it }
+                    }.toMap()
                     val doc = ClinicalDocument(
                         id = UUID.randomUUID().toString(),
                         patientId = patient.id,
                         patientNombre = patient.nombre,
                         patientCedula = patient.cedula,
                         type = DocumentType.RECETA,
-                        content = RecipePresetContent.buildContent(p.farmacos),
+                        content = RecipePresetContent.buildContent(p.farmacos, peso, overrides),
                         rawDictation = "Recipe predeterminada: ${p.name}",
                         createdAt = Instant.now(),
                         templateId = tpl.id,

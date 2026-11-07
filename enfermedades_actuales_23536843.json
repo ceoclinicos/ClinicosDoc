@@ -1,0 +1,268 @@
+[
+  {
+    "docId": "046c2185-c9e6-48d0-9c7c-6d6a50fa86a8",
+    "type": "informe",
+    "patientNombre": "Aurora Bultron",
+    "createdAt": "2026-09-04T15:35:25.346229Z",
+    "enfermedadActual": "Se trata de paciente femenino de 55 años de edad, con diagnóstico de hipertensión arterial, quien refiere inicio de enfermedad actual el día de ayer 03/09/26 por presentar dolor en región lumbar derecha, acompañado de  disminución sensitiva en la cara anterolateral de muslo derecho, acude a centro de salud donde es evaluado y se indica de alta con tratamiento ambulatorio, el día de hoy 04/09/26 por persistencia de sintomatología acude a este centro donde es evaluado por equipo médicode guardia."
+  },
+  {
+    "docId": "1090a990-78df-4902-8dc5-68b964546756",
+    "type": "informe",
+    "patientNombre": "Carlos Sánchez",
+    "createdAt": "2026-07-22T11:02:39.157247Z",
+    "enfermedadActual": "Se trata de paciente masculino de 37 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy por presentar traumatismo en mano derecha, evidenciándose aumento de volumen y limitación funcional a la flexo-extensión activa y pasiva de las falanges; por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "1226a77b-523c-4fcb-8d5a-0037237ee683",
+    "type": "informe",
+    "patientNombre": "Willian Bermudez",
+    "createdAt": "2026-09-26T15:20:23.678920Z",
+    "enfermedadActual": "Paciente masculino de 47 años, natural de Piedritas de Oritupano, procedente de la localidad, quien refiere inicio de enfermedad actual el 22/09/26 cuando, posterior a inhalación de vapores químicos en área laboral, presentó disnea súbita de 1 minuto de duración asociada a tos irritativa de 20 minutos que cedió con el reposo, el 23/09/26 fue evaluado por personal ocupacional en área laboral recibiendo nebuloterapia. Por presentar odinofagia acentuada desde el evento inicial y tos ocasional, acude el día de hoy 26/09/26 a este centro para evaluación."
+  },
+  {
+    "docId": "2df1546a-d780-40fd-8276-c681adcd56ef",
+    "type": "informe",
+    "patientNombre": "Mirna Cairo",
+    "createdAt": "2026-10-08T15:38:42.153920Z",
+    "enfermedadActual": "Se trata de paciente femenino de 62 años de edad, natural y procedente de la localidad, con diagnóstico de hipertensión arterial, quien refiere inicio de enfermedad actual el día 03/10/26 por presentar dolor torácico de carácter punzante, localizado en hemitórax izquierdo a nivel de los espacios intercostales 3.º, 4.º y 5.º, exacerbado a la palpación y durante movimientos, atenuado en reposo, con irradiación a dorso y miembro superior izquierdo; por tal motivo acude a este centro el dia de hoy 08/10/26 donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "2ef19f01-ce18-4bb4-8cf2-b243b3a958ca",
+    "type": "historiaClinica",
+    "patientNombre": "Elida Josefina Daza Flores",
+    "createdAt": "2026-09-09T04:15:40.924847Z",
+    "enfermedadActual": "Se trata de paciente femenino de 65 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy por presentar mareo posterior a la realización de actividades domésticas, acompañado de vómitos en 4 episodios de contenido abundante, de inicio agudo; por tal motivo acude a este centro donde es evaluada por el equipo médico de guardia."
+  },
+  {
+    "docId": "4131157f-b745-4896-ba6d-80cb6099ef7d",
+    "type": "informe",
+    "patientNombre": "Etelvina Alfonzo",
+    "createdAt": "2026-11-01T14:19:25.764320Z",
+    "enfermedadActual": "Se trata de paciente femenina de 85 años de edad, natural de Margarita, procedente de la localidad, con diagnóstico de diabetes mellitus tipo 2, hipertensión arterial estadio 2 e infarto agudo de miocardio previo, quien refiere inicio de enfermedad actual en la noche del día de hoy, caracterizada por presentar vómitos de contenido alimentario en número de cinco y evacuaciones líquidas incontables, sin moco ni sangre; por tal motivo acude a este centro donde es evaluada por el equipo médico de guardia."
+  },
+  {
+    "docId": "4d93aa69-5b8b-4f95-be0b-174835489600",
+    "type": "informe",
+    "patientNombre": "Julio Rodríguez",
+    "createdAt": "2026-09-26T20:03:06.799679Z",
+    "enfermedadActual": "Se trata de paciente masculino de 30 años de edad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día 23/09/26 cuando comienza a presentar dolor en cuello, agudo, carácter punzante acompañado de cefalea frontotemporal y elevación de la temperatura por tal motivo acude a este centro donde es evaluado y se indica tratamiento y posteriormente egresa, el día de hoy 26/09/26 por persistencia de sintomatología en región cervical acude a este centro donde es evalúado por equipo medico de guardia."
+  },
+  {
+    "docId": "4e3ed9c7-5074-4b20-b6d9-727d8167f8ae",
+    "type": "informe",
+    "patientNombre": "Carlos Sánchez",
+    "createdAt": "2026-07-17T23:00:31.653867Z",
+    "enfermedadActual": "Se trata de paciente masculino de 37 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy por presentar traumatismo contuso en mano derecha, evidenciándose posteriormente aumento de volumen y limitación funcional; por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "5e55b08e-1343-4048-aecb-4111e7a98b74",
+    "type": "informe",
+    "patientNombre": "Moisés Lopez",
+    "createdAt": "2026-09-22T17:43:40.347163Z",
+    "enfermedadActual": "Se trata de paciente masculino de 66 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy 22/09/2026 posterior a caída de aproximadamente 40 centímetros de altura, presentando traumatismo en cabeza en región parieto occipital acompañado de fosfenos; por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "61fcdbd3-a964-4914-be6e-32bd4e4be3c9",
+    "type": "informe",
+    "patientNombre": "Dylan Jesus Lopez Fernandez",
+    "createdAt": "2026-09-10T16:47:25.238786Z",
+    "enfermedadActual": "Se trata de paciente masculino de 3 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy por presentar traumatismo contuso en región cefálica, posterior a caída desde sus propios pies e impactar contra el borde del cuerpo de cama, evidenciándose solución de continuidad en piel de aproximadamente 2 cm de longitud con salida de escasa secreción hemática, por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "62bad5e0-a451-405c-95f6-42734b87dd42",
+    "type": "informe",
+    "patientNombre": "Luis Jose Ruiz",
+    "createdAt": "2026-09-26T19:36:42.196741Z",
+    "enfermedadActual": "Se trata de paciente masculino de 41 años de edad, sin antecedentes patológicos conocidos, quien refiere inicio de enfermedad actual hace 3 días aproximadamente cuando presenta dolor de cabeza en región frontal, inicio agudo, carácter punzante acompañado de mareo por tal motivo acude el día de hoy 26/09/26 para su valoración por equipo medico de guardia."
+  },
+  {
+    "docId": "672003a7-b74f-49db-9fd5-3a7436a87085",
+    "type": "informe",
+    "patientNombre": "Natalia Maria Filomena Evans",
+    "createdAt": "2026-10-26T13:31:07.547011Z",
+    "enfermedadActual": "Se trata de paciente femenina escolar de 7 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy 26/10/2026 quien madre refiere caída desde su propio plano de sustentación, presentando herida longitudinal de aproximadamente 2 centímetros, con escasa salida de secreción hemática, concomitante presenta somnolencia. Por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "698b4aaf-a02e-4cde-b433-eb2517266827",
+    "type": "historiaClinica",
+    "patientNombre": "Manuel Carvajal",
+    "createdAt": "2026-09-28T14:59:00.156729Z",
+    "enfermedadActual": "Se trata de paciente masculino de 63 años, natural de cantaura, procedente de la localidad, con diagnóstico de Diabetes Mellitus Tipo II, paciente refiere inicio de enfermedad actual el día sábado 26/09/2026, en su área laboral  presentando herida cortante en pulpejo de primer dedo de pie izquierdo, con moderada salida de secreción hematica, recibe atención de personal de salud en área laboral, el día de hoy 28/09/2026 es traído a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "74681e1f-7902-4a0c-84ae-622955e9e47b",
+    "type": "historiaClinica",
+    "patientNombre": "Anderson Miguel Utrera Aponte",
+    "createdAt": "2026-11-01T18:26:20.261719Z",
+    "enfermedadActual": "Se trata de paciente masculino de 36 años de edad, natural y procedente de Caracas, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy 01/11/2026 por presentar caída desde aproximadamente 4 metros de altura, presentando limitacion funcional a flexion y extensión activa y pasiva de codo derecho acompañado de herida longitudinal de 3 cm con escasa secreción hemática no activa, concomitantemente presenta equimosis en brazo izquierdo y dorso izquierdo del abdomen, además de herida longitudinal Por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "76625a2e-7d12-44dd-85f8-567c948cf6c1",
+    "type": "informe",
+    "patientNombre": "Maritza Ramirez",
+    "createdAt": "2026-07-23T10:11:00.506521Z",
+    "enfermedadActual": "Se trata de paciente femenino de 80 años de edad, natural y procedente de la localidad, con diagnóstico de hipertensión arterial controlada, quien refiere inicio de enfermedad actual el día 21/07/2026 por presentar disnea a pequeños esfuerzos acompañada de dolor retroesternal, irradiado a miembro superior izquierdo; por persistencia de la sintomatología acude a este centro donde es evaluada por el equipo médico de guardia."
+  },
+  {
+    "docId": "7b0d9bff-7d61-4cfc-b6df-c7953cafbd5b",
+    "type": "informe",
+    "patientNombre": "Carlos Sánchez",
+    "createdAt": "2026-08-28T13:11:16.570417Z",
+    "enfermedadActual": "Se trata de paciente masculino de 37 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy por presentar dolor abdominal localizado en fosa ilíaca derecha, de tipo cólico y comienzo agudo, que se inicia en horas de la madrugada; por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "8499637e-644f-461c-8eef-75840536224e",
+    "type": "informe",
+    "patientNombre": "Sergio Andrés Solorzano Requena",
+    "createdAt": "2026-08-28T03:43:45.877809Z",
+    "enfermedadActual": "Se trata de paciente masculino de 15 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy 27/08/2026 por presentar prurito posterior a ingesta de alimentos en horario nocturno, motivo por el cual sus representantes deciden acudir a este centro para evaluación médica."
+  },
+  {
+    "docId": "84bc5a4a-6402-4f83-998a-8193f9960e78",
+    "type": "historiaClinica",
+    "patientNombre": "Moisés Lopez",
+    "createdAt": "2026-09-22T18:06:37.850957Z",
+    "enfermedadActual": "Se trata de paciente masculino de 66 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy 22/09/2026 posterior a caída de aproximadamente 40 centímetros de altura, presentando traumatismo en cabeza en región parieto occipital acompañado de fosfenos; por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "8852cb21-ee7e-4f41-8345-6b3af97f2e48",
+    "type": "informe",
+    "patientNombre": "Anderson Miguel Utrera Aponte",
+    "createdAt": "2026-11-01T18:51:28.453280Z",
+    "enfermedadActual": "Se trata de paciente masculino de 36 años de edad, natural y procedente de Caracas, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy 01/11/2026 por presentar caída desde aproximadamente 4 metros de altura, presentando limitacion funcional a flexion y extensión activa y pasiva de codo derecho acompañado de herida longitudinal de 3 cm con escasa secreción hemática no activa, concomitantemente presenta equimosis en brazo izquierdo y dorso izquierdo del abdomen, además de herida longitudinal Por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "8d378704-04b3-4217-8af0-d75b793349ce",
+    "type": "informe",
+    "patientNombre": "Aaron González",
+    "createdAt": "2026-09-09T05:20:36.262808Z",
+    "enfermedadActual": "Se trata de lactante masculino de 7 meses de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien representantes refieren caída desde 50 cm de altura hace aproximadamente 30 minutos, por tal motivo es traido a este centro para valoración médica."
+  },
+  {
+    "docId": "8eb857af-9665-4e84-8683-6db87cf7c3f7",
+    "type": "historiaClinica",
+    "patientNombre": "Manuel Alexander Chirinos Loroño",
+    "createdAt": "2026-09-08T21:22:50.067939Z",
+    "enfermedadActual": "Se trata de paciente masculino de 21 años de edad, natural de Maturin, procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día sabado por presentar traumatismo cortante en dedo medio de mano izquierda, de aproximadamente 5 mm, en instalaciones de trabajo, el día 06/09/26 se anexa aumento de volumen y limitacion funcional a la flexo extensión activa por lo cual acude a personal de salud en área laboral quien realiza cura de la herida refiriendo salida de secreción purulenta escasa; por persistencia de sintomatología acude el día de hoy 08/09/26 a este centro donde es evaluado por  equipo médico de guardia."
+  },
+  {
+    "docId": "9686af6e-7dee-4b05-8f63-6b0fdf85d281",
+    "type": "informe",
+    "patientNombre": "Gabriela Alexandra Figuera Diaz",
+    "createdAt": "2026-07-25T18:10:11.312678Z",
+    "enfermedadActual": "Se trata de paciente femenino de 23 años de edad, natural y procedente de la localidad, con diagnóstico de hipertensión arterial no tratada, quien inicia enfermedad actual el día de hoy en horas de la madrugada por presentar náuseas y vómitos en 15 oportunidades, los primeros 6 de contenido alimenticio y el resto de contenido bilioso. Se añade al cuadro epigastralgia y cólicos abdominales que no limitan sus actividades diarias; por tal motivo acude a este centro donde es evaluada por el equipo médico de guardia."
+  },
+  {
+    "docId": "984fa6c4-563d-4005-a8e9-8298e8a5ccf6",
+    "type": "historiaClinica",
+    "patientNombre": "Etelvina Alfonzo",
+    "createdAt": "2026-11-01T14:13:57.550282Z",
+    "enfermedadActual": "Se trata de paciente femenina de 85 años de edad, natural de Margarita, procedente de la localidad, con diagnóstico de diabetes mellitus tipo 2, hipertensión arterial estadio 2 e infarto agudo de miocardio previo, quien refiere inicio de enfermedad actual en la noche del día de hoy, caracterizada por presentar vómitos de contenido alimentario en número de cinco y evacuaciones líquidas incontables, sin moco ni sangre; por tal motivo acude a este centro donde es evaluada por el equipo médico de guardia."
+  },
+  {
+    "docId": "9949266f-d488-486e-8849-4b5789e37508",
+    "type": "historiaClinica",
+    "patientNombre": "Natalia Maria Filomena Evans",
+    "createdAt": "2026-10-26T13:06:06.897923Z",
+    "enfermedadActual": "Se trata de paciente femenina escolar de 7 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy 26/10/2026 quien madre refiere caída desde su propio plano de sustentación, presentando herida longitudinal de aproximadamente 2 centímetros, con escasa salida de secreción hemática, concomitante presenta somnolencia. Por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "9ae8e138-d594-4b70-8dc5-7dea87ad2098",
+    "type": "informe",
+    "patientNombre": "Manuel Carvajal",
+    "createdAt": "2026-09-28T15:05:16.620454Z",
+    "enfermedadActual": "Se trata de paciente masculino de 63 años, natural de cantaura, procedente de la localidad, con diagnóstico de Diabetes Mellitus Tipo II, paciente refiere inicio de enfermedad actual el día sábado 26/09/2026, en su área laboral  presentando herida cortante en pulpejo de primer dedo de pie izquierdo, con moderada salida de secreción hematica, recibe atención de personal de salud en área laboral, el día de hoy 28/09/2026 es traído a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "9edec4a7-a674-4726-93fd-216ad66eee0b",
+    "type": "informe",
+    "patientNombre": "Haide Esther Beroes",
+    "createdAt": "2026-09-10T15:16:14.569451Z",
+    "enfermedadActual": "Se trata de paciente femenino de 80 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de ayer 09/09/2026  posterior a caída desde sus propios presentando limitación funcional para la flexión y extensión activa y pasiva de dedo pulgar de la mano derecha, acompañado de aumento de volumen y dolor en mano y muñeca derecha; por tal motivo acude a centro de salud de su localidad, quien valora, posteriormente egresa y acude a este centro el dia 10/09/2026 donde es evaluada por equipo medico de guardía."
+  },
+  {
+    "docId": "aa433cff-5b9d-4f46-8491-c206f07d9d35",
+    "type": "historiaClinica",
+    "patientNombre": "Dylan Jesus Lopez Fernandez",
+    "createdAt": "2026-09-10T21:08:21.281508Z",
+    "enfermedadActual": "Se trata de paciente masculino de 3 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy por presentar traumatismo contuso en región cefálica, posterior a caída desde sus propios pies e impactar contra el borde del cuerpo de cama, evidenciándose solución de continuidad en piel de aproximadamente 2 cm de longitud con salida de escasa secreción hemática, por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "bd876eec-5e70-4582-b938-bbc64c2d54db",
+    "type": "historiaClinica",
+    "patientNombre": "Aaron González",
+    "createdAt": "2026-09-09T10:24:13.597708Z",
+    "enfermedadActual": "Se trata de lactante masculino de 7 meses de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien representantes refieren caída desde 50 cm de altura hace aproximadamente 30 minutos, por tal motivo es traido a este centro para valoración médica."
+  },
+  {
+    "docId": "bda25c87-5932-4dd7-887d-b0f9676b6fe6",
+    "type": "historiaClinica",
+    "patientNombre": "Luis Jose Ruiz",
+    "createdAt": "2026-09-26T19:23:12.381154Z",
+    "enfermedadActual": "Se trata de paciente masculino de 41 años de edad, sin antecedentes patológicos conocidos, quien refiere inicio de enfermedad actual hace 3 días aproximadamente cuando presenta dolor de cabeza en región frontal, inicio agudo, carácter punzante acompañado de mareo por tal motivo acude el día de hoy 26/09/26 para su valoración por equipo medico de guardia."
+  },
+  {
+    "docId": "d42c5813-9a16-415a-a74c-0b4c79cca480",
+    "type": "informe",
+    "patientNombre": "Ruben Hidalgo",
+    "createdAt": "2026-07-30T02:56:14.044919Z",
+    "enfermedadActual": "Se trata de paciente masculino de 36 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día 27/07/2026 por presentar dolor abdominal localizado en epigastrio, fosa ilíaca, hipocondrio y flanco  izquierdo el cual persiste para el día 28/07/2026 por tal motivo acude a centro privado donde es evaluado por equipo médico y hospitalizado, posteriormente por solicitud de familiares egresa a nuestro centro de salud, el dia de hoy 29/07/2026 donde es evaluado por equipo medico de guardia y se decide su hospitalización."
+  },
+  {
+    "docId": "da21b39a-f421-40d6-bf04-95d4157909d0",
+    "type": "historiaClinica",
+    "patientNombre": "Haide Esther Beroes",
+    "createdAt": "2026-09-10T16:24:04.845284Z",
+    "enfermedadActual": "Se trata de paciente femenino de 80 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de ayer 09/09/2026  posterior a caída desde sus propios pies presentando limitación funcional para la flexión y extensión activa y pasiva de muñeca y dedo pulgar de mano derecha, acompañado de aumento de volumen; por tal motivo acude a centro de salud de su localidad, quien valora, posteriormente egresa y acude a este centro el dia 10/09/2026 donde es evaluada por equipo medico de guardía."
+  },
+  {
+    "docId": "dc4a8adc-bb56-4297-b341-7bd122913cd6",
+    "type": "informe",
+    "patientNombre": "Blanca Esther Puerta De Santaella",
+    "createdAt": "2026-08-29T23:17:05.606675Z",
+    "enfermedadActual": "Se trata de paciente femenino de 70 años de edad, natural y procedente de la localidad, con diagnóstico de hipertensión arterial controlado, quien refiere inicio de enfermedad actual el día de hoy 29/08/2026 en horas de la mañana por presentar traumatismo torácico en región dorsal derecha del tórax por caída desde su propio plano de sustentación; por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "e53c66a5-c0f2-468b-9b6e-dbd0f6f29005",
+    "type": "informe",
+    "patientNombre": "Elida Josefina Daza Flores",
+    "createdAt": "2026-09-09T04:23:57.395910Z",
+    "enfermedadActual": "Se trata de paciente femenino de 65 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy por presentar mareo posterior a la realización de actividades domésticas, acompañado de vómitos en 4 episodios de contenido abundante, de inicio agudo; por tal motivo acude a este centro donde es evaluada por el equipo médico de guardia."
+  },
+  {
+    "docId": "e8d0ea38-42cc-43ce-a804-6227c4ae95fa",
+    "type": "informe",
+    "patientNombre": "Manuel Alexander Chirinos Loroño",
+    "createdAt": "2026-09-08T20:54:50.468562Z",
+    "enfermedadActual": "Se trata de paciente masculino de 21 años de edad, natural de Maturin, procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día sabado 05/09/26 por presentar traumatismo cortante en dedo medio de mano izquierda, de aproximadamente 5 mm, en instalaciones de trabajo, el día 06/09/26 se anexa aumento de volumen y limitacion funcional a la flexo extensión activa por lo cual acude a personal de salud en área laboral quien realiza cura de la herida refiriendo salida de secreción purulenta escasa; por persistencia de sintomatología acude el día de hoy 08/09/26 a este centro donde es evaluado por  equipo médico de guardia."
+  },
+  {
+    "docId": "ebfc1f61-f141-47a1-ad9a-ae8ec629cd97",
+    "type": "historiaClinica",
+    "patientNombre": "Willian Bermudez",
+    "createdAt": "2026-09-26T14:30:36.851242Z",
+    "enfermedadActual": "Paciente masculino de 47 años, natural de Piedritas de Oritupano, procedente de la localidad, quien refiere inicio de enfermedad actual el 22/09/26 cuando, posterior a inhalación de vapores químicos en área laboral, presentó disnea súbita de 1 minuto de duración asociada a tos irritativa de 20 minutos que cedió con el reposo, el 23/09/26 fue evaluado por personal ocupacional en área laboral recibiendo nebuloterapia. Por presentar odinofagia acentuada desde el evento inicial y tos ocasional, acude el día de hoy 26/09/26 a este centro para evaluación."
+  },
+  {
+    "docId": "ec3e5685-9c46-4b0b-bd25-095af195921d",
+    "type": "historiaClinica",
+    "patientNombre": "Julio Rodríguez",
+    "createdAt": "2026-09-26T20:00:37.165441Z",
+    "enfermedadActual": "Se trata de paciente masculino de 30 años de edad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día 23/09/26 cuando comienza a presentar dolor en cuello, agudo, carácter punzante acompañado de cefalea frontotemporal y elevación de la temperatura por tal motivo acude a este centro donde es evaluado y se indica tratamiento y posteriormente egresa, el día de hoy 26/09/26 por persistencia de sintomatología en región cervical acude a este centro donde es evalúado por equipo medico de guardia."
+  },
+  {
+    "docId": "f49eeab0-dc81-4c5f-bb78-9e6119e0de10",
+    "type": "informe",
+    "patientNombre": "Ramón Natera",
+    "createdAt": "2026-08-24T12:01:48.585097Z",
+    "enfermedadActual": "Se trata de paciente masculino de 38 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de ayer 23/08/2026  por presentar traumatismo en mano izquierda por tal motivo es traído a este centro el día de hoy 24/08/2026 donde es evaluado por el equipo médico de guardia."
+  },
+  {
+    "docId": "fa093d44-1550-49a3-9d92-3fa518b1ba38",
+    "type": "informe",
+    "patientNombre": "Jose Albaran",
+    "createdAt": "2026-07-21T17:15:27.628883Z",
+    "enfermedadActual": "Se trata de paciente masculino de 30 años de edad, natural y procedente de la localidad, sin diagnóstico patológico conocido, quien refiere inicio de enfermedad actual el día de hoy por presentar dolor en miembro inferior derecho a nivel de rodilla posterior a traumatismo contuso; por tal motivo acude a este centro donde es evaluado por el equipo médico de guardia."
+  }
+]

@@ -16,7 +16,9 @@ import {
 import type { Patient } from "../shared/models";
 import {
   buildRecipePresetContent,
+  mlPorToma,
   previewRecipeText,
+  tieneDosisPonderal,
   type RecipePreset,
   type RecipePresetFarmaco,
 } from "../shared/recipe-presets";
@@ -246,6 +248,13 @@ registerRoute({
         </label>
         <ul class="list" id="patient-pick-list"></ul>
         <button type="button" class="btn btn-secondary" data-nav="/pacientes/nuevo">+ Agregar paciente</button>
+        <div id="peso-step" hidden style="margin-top:0.75rem">
+          <label>Peso del paciente (kg)
+            <input id="peso-kg" type="number" min="0" step="any" placeholder="Ej. 18" />
+          </label>
+          <p class="muted" style="margin:0.25rem 0 0">Se usará para la dosis ponderal pediátrica.</p>
+          <div id="dosis-list"></div>
+        </div>
       </div>
       <button type="button" class="btn btn-primary btn-block" id="btn-emit" disabled>Emitir receta</button>
       `,
@@ -255,6 +264,30 @@ registerRoute({
     const listEl = el.querySelector("#patient-pick-list") as HTMLElement;
     const qEl = el.querySelector("#patient-q") as HTMLInputElement;
     const btnEmit = el.querySelector("#btn-emit") as HTMLButtonElement;
+    const pesoStep = el.querySelector("#peso-step") as HTMLElement;
+    const pesoEl = el.querySelector("#peso-kg") as HTMLInputElement;
+
+    const presetFarmacos = preset.farmacos;
+    const presetConPonderal = presetFarmacos.some(tieneDosisPonderal);
+    const dosisList = el.querySelector("#dosis-list") as HTMLElement;
+
+    function renderDosisInputs(): void {
+      const peso = Number(pesoEl.value);
+      if (!peso || peso <= 0) {
+        dosisList.innerHTML = "";
+        return;
+      }
+      dosisList.innerHTML = presetFarmacos
+        .map((f, i) => {
+          if (!tieneDosisPonderal(f)) return "";
+          const calc = mlPorToma(f, peso);
+          const val = calc != null ? (calc % 1 === 0 ? String(Math.trunc(calc)) : calc.toFixed(1)) : "";
+          return `<label style="display:block;margin-top:0.5rem">${escapeHtml(f.principioActivo)} — ml por toma
+            <input class="dosis-ml" data-idx="${i}" type="number" min="0" step="any" value="${val}" placeholder="${calc != null ? `Calculado: ${val} ml` : ""}" />
+          </label>`;
+        })
+        .join("");
+    }
 
     function setPatient(p: Patient | null): void {
       selected = p;
@@ -265,7 +298,11 @@ registerRoute({
         chosenEl.textContent = "Ninguno seleccionado.";
         btnEmit.disabled = true;
       }
+      pesoStep.hidden = !(p && presetConPonderal && p.edad > 0 && p.edad < 18);
+      renderDosisInputs();
     }
+
+    pesoEl.addEventListener("input", renderDosisInputs);
 
     function renderPickList(): void {
       const q = qEl.value.trim().toLowerCase();
@@ -314,7 +351,13 @@ registerRoute({
       if (!selected) return;
       const header = defaultHeader();
       const tpl = templateForType("receta");
-      const content = buildRecipePresetContent(preset.farmacos);
+      const peso = pesoStep.hidden ? null : Number(pesoEl.value) || null;
+      const overrides: Record<number, number> = {};
+      dosisList.querySelectorAll<HTMLInputElement>(".dosis-ml").forEach((inp) => {
+        const v = Number(inp.value);
+        if (v > 0) overrides[Number(inp.dataset.idx)] = v;
+      });
+      const content = buildRecipePresetContent(preset.farmacos, peso, overrides);
       const doc = saveDocument({
         id: crypto.randomUUID(),
         patientId: selected.id,

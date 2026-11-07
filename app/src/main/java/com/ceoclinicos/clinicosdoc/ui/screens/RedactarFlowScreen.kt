@@ -326,9 +326,17 @@ fun RedactarFlowScreen(
 
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            listening = speechService.startListening(existingText = dictation) { text, _ ->
-                dictation = text
-            }
+            listening = speechService.startListening(
+                existingText = dictation,
+                onResult = { text, _ ->
+                    dictation = text
+                    dictationField = TextFieldValue(text, TextRange(text.length))
+                },
+                onError = { message ->
+                    listening = false
+                    error = message
+                },
+            )
         } else {
             Toast.makeText(context, "Activa el permiso de micrófono en ajustes del teléfono", Toast.LENGTH_SHORT).show()
         }
@@ -1349,10 +1357,17 @@ fun RedactarFlowScreen(
                                         speechService.stopListening()
                                         listening = false
                                     } else if (PermissionHelper.hasMicrophone(context)) {
-                                        listening = speechService.startListening(existingText = dictation) { text, _ ->
-                                            dictation = text
-                                            dictationField = TextFieldValue(text, TextRange(text.length))
-                                        }
+                                        listening = speechService.startListening(
+                                            existingText = dictation,
+                                            onResult = { text, _ ->
+                                                dictation = text
+                                                dictationField = TextFieldValue(text, TextRange(text.length))
+                                            },
+                                            onError = { message ->
+                                                listening = false
+                                                error = message
+                                            },
+                                        )
                                         if (!listening) {
                                             speechService.lastError?.let { error = it }
                                         }

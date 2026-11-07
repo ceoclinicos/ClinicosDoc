@@ -55,6 +55,8 @@ object RecipePresetStorage {
                     concentracion = f.concentracion.trim(),
                     disponase = f.disponase.trim(),
                     indicaciones = f.indicaciones.trim(),
+                    dosisPonderalMgKg = f.dosisPonderalMgKg.trim(),
+                    tomasAlDia = f.tomasAlDia.coerceIn(0, 6),
                 )
             },
             createdAt = existing?.createdAt ?: now,
@@ -89,6 +91,8 @@ object RecipePresetStorage {
         val concentracion: String = "",
         val disponase: String = "",
         val indicaciones: String = "",
+        val dosisPonderalMgKg: String = "",
+        val tomasAlDia: Int = 0,
     )
 
     private fun RecipePreset.toDto() = RecipePresetDto(
@@ -101,6 +105,8 @@ object RecipePresetStorage {
                 concentracion = it.concentracion,
                 disponase = it.disponase,
                 indicaciones = it.indicaciones,
+                dosisPonderalMgKg = it.dosisPonderalMgKg,
+                tomasAlDia = it.tomasAlDia,
             )
         },
         createdAt = createdAt,
@@ -117,6 +123,8 @@ object RecipePresetStorage {
                 concentracion = it.concentracion,
                 disponase = it.disponase,
                 indicaciones = it.indicaciones,
+                dosisPonderalMgKg = it.dosisPonderalMgKg,
+                tomasAlDia = it.tomasAlDia,
             )
         },
         createdAt = createdAt,

@@ -16,6 +16,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -30,7 +31,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.ceoclinicos.clinicosdoc.model.FarmacoCatalog
 import com.ceoclinicos.clinicosdoc.model.RecetaDefaults
@@ -71,6 +74,8 @@ fun AddFarmacoSheet(
     var concentracion by remember { mutableStateOf(initial?.concentracion.orEmpty()) }
     var disponase by remember { mutableStateOf(initial?.disponase.orEmpty()) }
     var indicaciones by remember { mutableStateOf(initial?.indicaciones.orEmpty()) }
+    var dosisPonderal by remember { mutableStateOf(initial?.dosisPonderalMgKg.orEmpty()) }
+    var tomasAlDia by remember { mutableStateOf(initial?.tomasAlDia ?: 0) }
     var presentacionMenu by remember { mutableStateOf(false) }
 
     val results = remember(search) { FarmacoCatalog.search(search, limit = 200) }
@@ -264,6 +269,39 @@ fun AddFarmacoSheet(
                         placeholder = { Text("Ej. 14 tabletas, 1 frasco") },
                         singleLine = true,
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "Solo pacientes pediátricos (opcional)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextSecondary,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = dosisPonderal,
+                        onValueChange = { dosisPonderal = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Dosis ponderal (mg/kg/día)") },
+                        placeholder = { Text("Ej. 50") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "¿En cuántas tomas se divide al día?",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(0, 2, 3, 4, 5, 6).forEach { n ->
+                            val label = if (n == 0) "—" else n.toString()
+                            FilterChip(
+                                selected = tomasAlDia == n,
+                                onClick = { tomasAlDia = n },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -294,9 +332,16 @@ fun AddFarmacoSheet(
                         onValueChange = { indicaciones = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Indicaciones") },
-                        placeholder = { Text("Tomar 1 tableta vía oral cada 8 horas…") },
+                        placeholder = { Text("Dar {dosis} cada 8 horas por 5 días…") },
                         minLines = 3,
                     )
+                    if (dosisPonderal.isNotBlank()) {
+                        Text(
+                            "Use {dosis} donde va la cantidad calculada; si no lo pone, se agrega una línea con la dosis.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                        )
+                    }
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -314,6 +359,8 @@ fun AddFarmacoSheet(
                                         concentracion = concentracion.trim(),
                                         disponase = disponase.trim(),
                                         indicaciones = indicaciones.trim(),
+                                        dosisPonderalMgKg = dosisPonderal.trim(),
+                                        tomasAlDia = if (dosisPonderal.isBlank()) 0 else tomasAlDia,
                                     ),
                                 )
                             },
