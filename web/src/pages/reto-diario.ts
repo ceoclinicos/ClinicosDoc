@@ -231,9 +231,8 @@ function render(): HTMLElement {
     game.append(progress);
     const heading = text("h2", question.question);
     heading.tabIndex = -1;
-    const form = document.createElement("form");
     const group = document.createElement("fieldset");
-    const legend = text("legend", "Elige una respuesta");
+    const legend = text("legend", "Toca una respuesta");
     group.append(legend);
     question.options.forEach((option, i) => {
       const label = document.createElement("label");
@@ -242,24 +241,16 @@ function render(): HTMLElement {
       radio.type = "radio";
       radio.name = "answer";
       radio.value = String(i);
-      radio.required = true;
+      radio.addEventListener("change", () => {
+        if (!attempt) return;
+        attempt.answers.push(i);
+        saveAttempt();
+        void feedbackView(index, i);
+      });
       label.append(radio, text("span", option));
       group.append(label);
     });
-    const next = text("button", index === 2 ? "Ver mi resultado" : "Siguiente pregunta", "btn btn-primary");
-    next.type = "submit";
-    form.append(group, next);
-    form.onsubmit = event => {
-      event.preventDefault();
-      if (!attempt) return;
-      const selected = form.querySelector<HTMLInputElement>("input:checked");
-      if (!selected) return;
-      const choice = Number(selected.value);
-      attempt.answers.push(choice);
-      saveAttempt();
-      void feedbackView(index, choice);
-    };
-    game.append(heading, form);
+    game.append(heading, group);
     heading.focus();
   }
 
