@@ -155,7 +155,11 @@ function render(): HTMLElement {
 
     const shareBlock = document.createElement("section");
     shareBlock.className = "daily-share";
-    shareBlock.append(text("p", "COMPARTIR RETO", "daily-share-label"));
+    const logo = document.createElement("img");
+    logo.src = "/img/clinicos-logo.jpg";
+    logo.alt = "Clínicos";
+    logo.className = "daily-share-logo";
+    shareBlock.append(logo, text("p", "COMPARTIR RETO", "daily-share-label"));
     const whatsapp = text("a", "Enviar por WhatsApp", "btn btn-primary");
     whatsapp.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
     whatsapp.target = "_blank";
@@ -280,22 +284,21 @@ function render(): HTMLElement {
   }
 
   function intro() {
-    game.replaceChildren(text("p", `BANCO ${challenge.bankNumber} DE 15 · ${challenge.date}`, "daily-eyebrow"), text("h2", challenge.title));
-    game.append(text("p", "Hoy compartimos las mismas 3 preguntas. El banco cambia a medianoche de Venezuela y el ciclo se repite cada 15 días."));
+    game.replaceChildren(text("p", `RETO DE HOY · ${challenge.date}`, "daily-eyebrow"), text("h2", challenge.title));
     const form = document.createElement("form");
-    const label = text("label", "Tu nombre o apodo (opcional)");
-    label.htmlFor = "daily-name";
+    form.className = "daily-intro-form";
     const input = document.createElement("input");
     input.id = "daily-name";
     input.name = "name";
     input.maxLength = 30;
-    input.placeholder = "Déjalo vacío para jugar como Anónimo";
+    input.placeholder = "Tu nombre o apodo (opcional)";
     input.setAttribute("autocomplete", "nickname");
-    input.className = "daily-name";
-    const consent = text("p", "Al completar el reto se publicarán tu nombre o apodo, aciertos y hora en esta lista pública. No escribas datos personales.", "daily-community-note");
-    const start = text("button", "Comenzar reto", "btn btn-primary");
+    input.setAttribute("aria-label", "Tu nombre o apodo (opcional)");
+    input.className = "daily-name daily-name-big";
+    const consent = text("p", "Tu apodo y aciertos aparecen en la lista pública de abajo.", "daily-community-note");
+    const start = text("button", "Comenzar reto", "btn btn-primary btn-block daily-start");
     start.type = "submit";
-    form.append(label, input, consent, start);
+    form.append(input, start, consent);
     form.onsubmit = async event => {
       event.preventDefault();
       start.disabled = true;
@@ -317,6 +320,7 @@ function render(): HTMLElement {
       }
     };
     game.append(form);
+    window.setTimeout(() => input.focus(), 60);
   }
 
   async function load() {
