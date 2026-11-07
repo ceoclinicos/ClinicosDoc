@@ -218,17 +218,13 @@ function render(): HTMLElement {
 
     const shareBlock = document.createElement("section");
     shareBlock.className = "daily-share";
-    shareBlock.append(text("p", "COMPARTIR RETO", "daily-share-label"));
-    const story = text("button", "Compartir en historia / estado", "btn btn-secondary");
+    shareBlock.append(text("p", "Te toca compartir el reto:", "daily-share-label"));
+    const story = text("button", "Compartir en chat / historia", "btn btn-primary");
     story.type = "button";
     story.addEventListener("click", () => void shareStory());
-    const whatsapp = text("a", "Enviar por WhatsApp", "btn btn-primary");
-    whatsapp.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    whatsapp.target = "_blank";
-    whatsapp.rel = "noopener noreferrer";
     const shareActions = document.createElement("div");
     shareActions.className = "daily-actions";
-    shareActions.append(whatsapp, story);
+    shareActions.append(story);
     shareBlock.append(shareActions);
 
     const appBlock = document.createElement("section");
