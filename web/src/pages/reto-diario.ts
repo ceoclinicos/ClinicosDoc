@@ -152,7 +152,7 @@ function render(): HTMLElement {
 
     const link = new URL(window.location.href);
     link.hash = `/reto-diario?dia=${result.date}`;
-    const message = `Acerté ${result.score}/3 en el reto médico de Clínicos. ¿Me superas? Juega gratis: ${link.href}`;
+    const message = `Acerté ${result.score}/3 en el reto médico de Clínicos. ¿Me superas?\n\n${link.href}`;
 
     async function shareStory() {
       notice.textContent = "";
@@ -182,22 +182,22 @@ function render(): HTMLElement {
         } catch { /* sigue sin logo */ }
         ctx.textAlign = "center";
         ctx.fillStyle = "#ffffff";
-        ctx.font = "700 64px sans-serif";
+        ctx.font = "700 52px sans-serif";
         ctx.fillText("CLÍNICOS", 540, 700);
-        ctx.font = "800 110px sans-serif";
-        ctx.fillText("RETO DIARIO", 540, 840);
+        ctx.font = "800 92px sans-serif";
+        ctx.fillText("RETO DIARIO", 540, 810);
         ctx.fillStyle = "#ccfbf1";
-        ctx.font = "800 320px sans-serif";
-        ctx.fillText(`${result.score}/3`, 540, 1160);
+        ctx.font = "800 270px sans-serif";
+        ctx.fillText(`${result.score}/3`, 540, 1110);
         ctx.fillStyle = "#ffffff";
-        ctx.font = "700 84px sans-serif";
-        ctx.fillText("¿Me superas?", 540, 1340);
+        ctx.font = "700 70px sans-serif";
+        ctx.fillText("¿Me superas?", 540, 1270);
         ctx.fillStyle = "#d9eeeb";
-        ctx.font = "500 48px sans-serif";
-        ctx.fillText("Juega gratis en:", 540, 1560);
+        ctx.font = "500 40px sans-serif";
+        ctx.fillText("Juega gratis", 540, 1470);
         ctx.fillStyle = "#ccfbf1";
-        ctx.font = "700 56px sans-serif";
-        ctx.fillText(link.host + link.pathname, 540, 1650);
+        ctx.font = "700 48px sans-serif";
+        ctx.fillText(link.host + link.pathname, 540, 1540);
         const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/png"));
         if (!blob) throw new Error("Sin imagen");
         const file = new File([blob], "reto-clinicos.png", { type: "image/png" });
