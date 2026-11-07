@@ -4,12 +4,33 @@
   overflow: hidden;
 }
 .daily-hero {
+  position: relative;
   padding: clamp(16px, 4vw, 32px);
   color: #fff;
   background: linear-gradient(125deg, #0b1f33, #115e59);
   border-radius: 20px;
 }
-.daily-hero h1 { font-size: clamp(26px, 5vw, 40px); line-height: 1.12; margin: 10px 0; }
+.daily-hero-mark {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  text-align: center;
+}
+.daily-hero-mark img {
+  display: block;
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+.daily-hero-mark span {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.daily-hero h1 { font-size: clamp(26px, 5vw, 40px); line-height: 1.12; margin: 10px 0; padding-right: 60px; }
 .daily-hero p { max-width: 560px; color: #d9eeeb; }
 .daily-eyebrow { font-size: 12px; font-weight: 750; letter-spacing: .07em; }
 .daily-tags, .daily-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }

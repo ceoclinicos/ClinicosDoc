@@ -67,6 +67,7 @@ function render(): HTMLElement {
   root.className = "daily-challenge page";
   root.innerHTML = `
     <header class="daily-hero">
+      <div class="daily-hero-mark"><img src="/img/clinicos-logo.jpg" alt=""><span>CLÍNICOS</span></div>
       <span class="daily-eyebrow">CLÍNICOS · RETO DIARIO</span>
       <h1>Tres preguntas.<br>¿Aceptas el reto?</h1>
       <p>Un pequeño repaso, una nueva oportunidad cada día. Juega gratis, sin instalar ni registrarte.</p>
