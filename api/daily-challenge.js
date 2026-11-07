@@ -17,7 +17,7 @@ function createHandler(getDb = () => getAdmin().firestore(), clock = () => new D
       const db = getDb();
       const participants = db.collection("clinicos_daily_results").doc(today.date).collection("participants");
       if (req.method === "GET") {
-        const rows = await participants.orderBy("finishedAt", "desc").limit(30).get();
+        const rows = await participants.orderBy("finishedAt", "desc").limit(10).get();
         return res.status(200).json({
           date: today.date,
           bankNumber: today.bankNumber,
@@ -53,7 +53,35 @@ function createHandler(getDb = () => getAdmin().firestore(), clock = () => new D
         if (!allowed) return res.status(429).json({ error: "Demasiados intentos desde esta conexión. Vuelve mañana." });
         return res.status(200).json({ token });
       }
-      if (body.action !== "submit" || typeof body.token !== "string" || !/^[a-f0-9]{64}$/.test(body.token)) {
+      if (typeof body.token !== "string" || !/^[a-f0-9]{64}$/.test(body.token)) {
+        return res.status(400).json({ error: "Solicitud inválida" });
+      }
+      const sessionRefEarly = db.collection("clinicos_daily_sessions").doc(hash(body.token));
+      if (body.action === "answer") {
+        if (!Number.isInteger(body.index) || body.index < 0 || body.index > 2
+          || !Number.isInteger(body.answer) || body.answer < 0 || body.answer > 3) {
+          return res.status(400).json({ error: "Solicitud inválida" });
+        }
+        const graded = await db.runTransaction(async tx => {
+          const snap = await tx.get(sessionRefEarly);
+          if (!snap.exists) return { status: 401, error: "Inicia el reto antes de responder." };
+          const session = snap.data();
+          const bank = banks.find(item => item.id === session.bankId);
+          if (!bank) return { status: 410, error: "Este reto ya no está disponible." };
+          if (session.finished) return { status: 410, error: "El reto ya terminó." };
+          if (session.expiresAt.toDate().getTime() <= clock().getTime()) {
+            return { status: 410, error: "El intento venció. Vuelve al inicio para comenzar de nuevo." };
+          }
+          const answers = Array.isArray(session.answers) ? session.answers.slice() : [];
+          answers[body.index] = body.answer;
+          tx.update(sessionRefEarly, { answers });
+          const q = bank.questions[body.index];
+          return { status: 200, correct: q[2] === body.answer, correctAnswer: q[2], explanation: q[3] };
+        });
+        const { status, ...payload } = graded;
+        return res.status(status).json(payload);
+      }
+      if (body.action !== "submit") {
         return res.status(400).json({ error: "Solicitud inválida" });
       }
       if (!Array.isArray(body.answers) || body.answers.length !== 3 || body.answers.some(a => !Number.isInteger(a) || a < 0 || a > 3)) {

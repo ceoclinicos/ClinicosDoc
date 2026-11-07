@@ -47,6 +47,10 @@
 .daily-review { padding: 16px 0; border-top: 1px solid var(--border); }
 .daily-review h4 { margin: 0 0 12px; font-size: 16px; }
 .daily-correct { font-weight: 700; color: #0f766e; }
+.daily-wrong { font-weight: 700; color: #b91c1c; }
+.daily-explain { color: var(--text-secondary); }
+.daily-share { margin-top: 22px; }
+.daily-share-label { font-weight: 800; text-transform: uppercase; letter-spacing: .06em; margin: 0 0 10px; }
 .daily-footer { text-align: center; padding: 24px 12px; }
 .daily-footer p:last-child { font-size: 12px; color: var(--text-secondary); margin-top: 20px; }
 @media (max-width: 480px) {

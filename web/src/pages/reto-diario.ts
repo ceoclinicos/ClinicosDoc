@@ -5,6 +5,7 @@ type Question = { question: string; options: string[] };
 type Participant = { name: string; score: number; finishedAt: string };
 type Challenge = { date: string; bankNumber: number; title: string; questions: Question[]; participants: Participant[] };
 type Result = { score: number; name: string; date: string; review: { correctAnswer: number; explanation: string }[] };
+type AnswerFeedback = { correct: boolean; correctAnswer: number; explanation: string };
 type Attempt = { date: string; token: string; answers: number[] };
 const API = `${(import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(/\/$/, "")}/api/daily-challenge`;
 const STORE = "clinicos-daily-attempt-v1";
@@ -76,7 +77,7 @@ function render(): HTMLElement {
       <p class="daily-notice" role="status"></p>
       <section class="daily-community" aria-label="Participaciones del día">
         <div class="daily-community-heading"><h2>Ya aceptaron el reto</h2><button type="button" class="btn btn-secondary daily-refresh">Actualizar</button></div>
-        <p class="daily-community-note">Últimas 30 participaciones de hoy. Sin respuestas ni desempates por tiempo.</p>
+        <p class="daily-community-note">Últimas 10 participaciones de hoy. Sin respuestas ni desempates por tiempo.</p>
         <ul class="daily-people" aria-live="polite"></ul>
       </section>
       <footer class="daily-footer"><p>¿Quieres seguir practicando?</p><a class="btn btn-primary" href="${PLAY}" target="_blank" rel="noopener noreferrer">Descargar Clínicos en Google Play</a><p>Contenido educativo. No sustituye una valoración médica.</p></footer>
@@ -130,18 +131,37 @@ function render(): HTMLElement {
     const score = text("div", `${result.score}/3`, "daily-big-score");
     const heading = text("h2", result.score === 3 ? "¡Reto completado, pleno de aciertos!" : "¡Reto completado! Cada pregunta cuenta.");
     game.append(score, heading, text("p", `${result.name}, este fue tu repaso de hoy. Vuelve mañana para descubrir otro banco.`));
-    const share = text("button", "Compartir reto con un amigo", "btn btn-primary");
-    share.type = "button";
+
+    game.append(text("h3", "Tus resultados"));
+    const answers = attempt?.answers || [];
+    challenge.questions.forEach((q, i) => {
+      const review = document.createElement("article");
+      review.className = "daily-review";
+      const correct = result.review[i];
+      const mine = answers[i];
+      const hit = mine === correct.correctAnswer;
+      review.append(
+        text("h4", `${hit ? "✓" : "✗"} ${i + 1}. ${q.question}`),
+        text("p", `Tu respuesta: ${mine != null ? q.options[mine] : "—"}`, hit ? "daily-correct" : "daily-wrong"),
+        text("p", `Respuesta correcta: ${q.options[correct.correctAnswer]}`, "daily-correct"),
+        text("p", correct.explanation),
+      );
+      game.append(review);
+    });
+
     const link = new URL(window.location.href);
     link.hash = `/reto-diario?dia=${result.date}`;
     const message = `Acerté ${result.score}/3 en el reto médico de Clínicos. ¿Me superas? Juega gratis: ${link.href}`;
-    const whatsapp = text("a", "Enviar por WhatsApp", "btn btn-secondary");
+
+    const shareBlock = document.createElement("section");
+    shareBlock.className = "daily-share";
+    shareBlock.append(text("p", "COMPARTIR RETO", "daily-share-label"));
+    const whatsapp = text("a", "Enviar por WhatsApp", "btn btn-primary");
     whatsapp.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
     whatsapp.target = "_blank";
     whatsapp.rel = "noopener noreferrer";
-    const actions = document.createElement("div");
-    actions.className = "daily-actions";
-    actions.append(share, whatsapp);
+    const share = text("button", "Compartir enlace", "btn btn-secondary");
+    share.type = "button";
     share.addEventListener("click", async () => {
       try {
         if (navigator.share) await navigator.share({ title: "Reto diario de Clínicos", text: message });
@@ -154,14 +174,21 @@ function render(): HTMLElement {
         notice.textContent = message;
       }
     });
-    game.append(actions, text("h3", "Tu repaso, explicado"));
-    challenge.questions.forEach((q, i) => {
-      const review = document.createElement("article");
-      review.className = "daily-review";
-      const correct = result.review[i];
-      review.append(text("h4", `${i + 1}. ${q.question}`), text("p", `Respuesta correcta: ${q.options[correct.correctAnswer]}`, "daily-correct"), text("p", correct.explanation));
-      game.append(review);
-    });
+    const shareActions = document.createElement("div");
+    shareActions.className = "daily-actions";
+    shareActions.append(whatsapp, share);
+    shareBlock.append(shareActions);
+
+    const appBlock = document.createElement("section");
+    appBlock.className = "daily-share";
+    appBlock.append(text("p", "LA APP", "daily-share-label"));
+    const appLink = text("a", "Descargar Clínicos en Google Play", "btn btn-secondary");
+    appLink.href = PLAY;
+    appLink.target = "_blank";
+    appLink.rel = "noopener noreferrer";
+    appBlock.append(appLink);
+
+    game.append(shareBlock, appBlock);
   }
 
   async function submit() {
@@ -227,12 +254,38 @@ function render(): HTMLElement {
       if (!attempt) return;
       const selected = form.querySelector<HTMLInputElement>("input:checked");
       if (!selected) return;
-      attempt.answers.push(Number(selected.value));
+      const choice = Number(selected.value);
+      attempt.answers.push(choice);
       saveAttempt();
-      questionView();
+      void feedbackView(index, choice);
     };
     game.append(heading, form);
     heading.focus();
+  }
+
+  async function feedbackView(questionIndex: number, choice: number) {
+    if (!attempt) return;
+    game.replaceChildren(text("p", "Revisando tu respuesta…"));
+    notice.textContent = "";
+    try {
+      const feedback = await request<AnswerFeedback>({ action: "answer", token: attempt.token, index: questionIndex, answer: choice });
+      const question = challenge.questions[questionIndex];
+      game.replaceChildren(text("p", `PREGUNTA ${questionIndex + 1} DE 3 · ${challenge.title}`, "daily-eyebrow"));
+      const verdict = text("h2", feedback.correct ? "¡Correcta!" : "No fue esta vez…", feedback.correct ? "daily-correct" : "daily-wrong");
+      const detail = text("p", `Respuesta correcta: ${question.options[feedback.correctAnswer]}`, "daily-correct");
+      game.append(verdict, detail, text("p", feedback.explanation, "daily-explain"));
+      const next = text("button", questionIndex === 2 ? "Ver mi resultado" : "Siguiente pregunta", "btn btn-primary");
+      next.type = "button";
+      next.onclick = () => questionView();
+      game.append(next);
+    } catch (error) {
+      notice.textContent = error instanceof Error ? error.message : "No se pudo cargar la explicación.";
+      game.replaceChildren(text("h2", "Respuesta guardada."));
+      const next = text("button", questionIndex === 2 ? "Ver mi resultado" : "Siguiente pregunta", "btn btn-primary");
+      next.type = "button";
+      next.onclick = () => questionView();
+      game.append(next);
+    }
   }
 
   function intro() {

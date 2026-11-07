@@ -848,6 +848,22 @@ dialog {
   position: relative;
 }
 
+/* Variante blanca: destaca una app distinta publicada por el proyecto */
+.hero-card--light {
+  background: #ffffff;
+  color: var(--navy);
+  border: 1px solid var(--border);
+}
+
+.hero-card--light .hero-sub {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.hero-card--light::before {
+  background: linear-gradient(90deg, var(--teal), var(--teal-light));
+}
+
 /* Marca en el home */
 .home-brand {
   display: inline-flex;

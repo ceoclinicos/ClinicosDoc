@@ -321,9 +321,9 @@ function publicHome(): HTMLElement {
       <span class="hero-title">Modo empresa / centro de salud</span>
       <span class="hero-sub">Plantillas del centro · Pacientes · Equipo médico</span>
     </button>
-    <button type="button" class="hero-card" data-nav="/reto-diario">
+    <button type="button" class="hero-card hero-card--light" data-nav="/reto-diario">
       <span class="hero-title">Reto diario de Clínicos</span>
-      <span class="hero-sub">3 preguntas fáciles · Sin registro · Reta a un amigo</span>
+      <span class="hero-sub">3 preguntas de Clínicos, nuestra otra app publicada</span>
     </button>
     <div class="landing-features">
       <span>Historias clínicas</span>
