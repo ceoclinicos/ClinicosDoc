@@ -70,7 +70,7 @@ function render(): HTMLElement {
       <div class="daily-hero-mark"><img src="/img/clinicos-logo.jpg" alt=""><span>CLÍNICOS</span></div>
       <span class="daily-eyebrow">CLÍNICOS · RETO DIARIO</span>
       <h1>Tres preguntas.<br>¿Aceptas el reto?</h1>
-      <p>Un pequeño repaso, una nueva oportunidad cada día. Juega gratis, sin instalar ni registrarte.</p>
+      <p>Juega gratis, sin instalar ni registrarte.</p>
       <div class="daily-tags"><span>3 preguntas</span><span>Nivel inicial</span><span>Sin registro</span></div>
     </header>
     <div class="daily-body">
@@ -154,44 +154,98 @@ function render(): HTMLElement {
     link.hash = `/reto-diario?dia=${result.date}`;
     const message = `Acerté ${result.score}/3 en el reto médico de Clínicos. ¿Me superas? Juega gratis: ${link.href}`;
 
-    const shareBlock = document.createElement("section");
-    shareBlock.className = "daily-share";
-    const logo = document.createElement("img");
-    logo.src = "/img/clinicos-logo.jpg";
-    logo.alt = "Clínicos";
-    logo.className = "daily-share-logo";
-    shareBlock.append(logo, text("p", "COMPARTIR RETO", "daily-share-label"));
-    const whatsapp = text("a", "Enviar por WhatsApp", "btn btn-primary");
-    whatsapp.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    whatsapp.target = "_blank";
-    whatsapp.rel = "noopener noreferrer";
-    const share = text("button", "Compartir enlace", "btn btn-secondary");
-    share.type = "button";
-    share.addEventListener("click", async () => {
+    async function shareStory() {
+      notice.textContent = "";
       try {
-        if (navigator.share) await navigator.share({ title: "Reto diario de Clínicos", text: message });
-        else {
-          await navigator.clipboard.writeText(message);
-          notice.textContent = "Enlace y resultado copiados. ¡Compártelos con tus amigos!";
+        const canvas = document.createElement("canvas");
+        canvas.width = 1080;
+        canvas.height = 1920;
+        const ctx = canvas.getContext("2d")!;
+        const bg = ctx.createLinearGradient(0, 0, 0, 1920);
+        bg.addColorStop(0, "#0b1f33");
+        bg.addColorStop(1, "#115e59");
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, 1080, 1920);
+        try {
+          const img = new Image();
+          img.src = "/img/clinicos-logo.jpg";
+          await img.decode();
+          const size = 300;
+          const x = (1080 - size) / 2;
+          const y = 260;
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(x, y, size, size, 60);
+          ctx.clip();
+          ctx.drawImage(img, x, y, size, size);
+          ctx.restore();
+        } catch { /* sigue sin logo */ }
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "700 64px sans-serif";
+        ctx.fillText("CLÍNICOS", 540, 700);
+        ctx.font = "800 110px sans-serif";
+        ctx.fillText("RETO DIARIO", 540, 840);
+        ctx.fillStyle = "#ccfbf1";
+        ctx.font = "800 320px sans-serif";
+        ctx.fillText(`${result.score}/3`, 540, 1160);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "700 84px sans-serif";
+        ctx.fillText("¿Me superas?", 540, 1340);
+        ctx.fillStyle = "#d9eeeb";
+        ctx.font = "500 48px sans-serif";
+        ctx.fillText("Juega gratis en:", 540, 1560);
+        ctx.fillStyle = "#ccfbf1";
+        ctx.font = "700 56px sans-serif";
+        ctx.fillText(link.host + link.pathname, 540, 1650);
+        const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/png"));
+        if (!blob) throw new Error("Sin imagen");
+        const file = new File([blob], "reto-clinicos.png", { type: "image/png" });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], text: message });
+        } else {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = "reto-clinicos.png";
+          a.click();
+          notice.textContent = "Imagen de historia descargada. Súbela a tu estado o historia con el enlace.";
         }
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
         notice.textContent = message;
       }
-    });
+    }
+
+    const shareBlock = document.createElement("section");
+    shareBlock.className = "daily-share";
+    shareBlock.append(text("p", "COMPARTIR RETO", "daily-share-label"));
+    const story = text("button", "Compartir en historia / estado", "btn btn-secondary");
+    story.type = "button";
+    story.addEventListener("click", () => void shareStory());
+    const whatsapp = text("a", "Enviar por WhatsApp", "btn btn-primary");
+    whatsapp.href = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    whatsapp.target = "_blank";
+    whatsapp.rel = "noopener noreferrer";
     const shareActions = document.createElement("div");
     shareActions.className = "daily-actions";
-    shareActions.append(whatsapp, share);
+    shareActions.append(whatsapp, story);
     shareBlock.append(shareActions);
 
     const appBlock = document.createElement("section");
     appBlock.className = "daily-share";
     appBlock.append(text("p", "LA APP", "daily-share-label"));
+    const appRow = document.createElement("div");
+    appRow.className = "daily-app-row";
+    const logo = document.createElement("img");
+    logo.src = "/img/clinicos-logo.jpg";
+    logo.alt = "Clínicos";
+    logo.className = "daily-app-logo";
     const appLink = text("a", "Descargar Clínicos en Google Play", "btn btn-secondary");
     appLink.href = PLAY;
     appLink.target = "_blank";
     appLink.rel = "noopener noreferrer";
-    appBlock.append(appLink);
+    appRow.append(logo, appLink);
+    appBlock.append(appRow);
 
     game.append(shareBlock, appBlock);
   }
