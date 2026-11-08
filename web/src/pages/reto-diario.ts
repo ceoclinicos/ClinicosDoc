@@ -81,7 +81,7 @@ function render(): HTMLElement {
         <p class="daily-community-note">Últimas 10 participaciones de hoy. Sin respuestas ni desempates por tiempo.</p>
         <ul class="daily-people" aria-live="polite"></ul>
       </section>
-      <footer class="daily-footer"><p>¿Quieres seguir practicando?</p><a class="btn btn-primary" href="${PLAY}" target="_blank" rel="noopener noreferrer">Descargar Clínicos en Google Play</a><p>Contenido educativo. No sustituye una valoración médica.</p></footer>
+      <footer class="daily-footer"><p>Contenido educativo. No sustituye una valoración médica.</p></footer>
     </div>`;
   const game = root.querySelector<HTMLDivElement>(".daily-game")!;
   const notice = root.querySelector<HTMLParagraphElement>(".daily-notice")!;
@@ -132,23 +132,6 @@ function render(): HTMLElement {
     const score = text("div", `${result.score}/3`, "daily-big-score");
     const heading = text("h2", result.score === 3 ? "¡Reto completado, pleno de aciertos!" : "¡Reto completado! Cada pregunta cuenta.");
     game.append(score, heading, text("p", `${result.name}, este fue tu repaso de hoy. Vuelve mañana para descubrir otro banco.`));
-
-    game.append(text("h3", "Tus resultados"));
-    const answers = attempt?.answers || [];
-    challenge.questions.forEach((q, i) => {
-      const review = document.createElement("article");
-      review.className = "daily-review";
-      const correct = result.review[i];
-      const mine = answers[i];
-      const hit = mine === correct.correctAnswer;
-      review.append(
-        text("h4", `${hit ? "✓" : "✗"} ${i + 1}. ${q.question}`),
-        text("p", `Tu respuesta: ${mine != null ? q.options[mine] : "—"}`, hit ? "daily-correct" : "daily-wrong"),
-        text("p", `Respuesta correcta: ${q.options[correct.correctAnswer]}`, "daily-correct"),
-        text("p", correct.explanation),
-      );
-      game.append(review);
-    });
 
     const link = new URL(window.location.href);
     link.hash = `/reto-diario?dia=${result.date}`;
@@ -229,7 +212,7 @@ function render(): HTMLElement {
 
     const appBlock = document.createElement("section");
     appBlock.className = "daily-share";
-    appBlock.append(text("p", "LA APP", "daily-share-label"));
+    appBlock.append(text("p", "LA APP", "daily-share-label"), text("p", "¿Quieres seguir practicando?", "daily-app-question"));
     const appRow = document.createElement("div");
     appRow.className = "daily-app-row";
     const logo = document.createElement("img");
