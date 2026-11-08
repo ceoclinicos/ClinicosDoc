@@ -129,6 +129,7 @@ function render(): HTMLElement {
 
   function resultView(result: Result) {
     const hero = root.querySelector<HTMLElement>(".daily-hero")!;
+    hero.classList.add("daily-hero--result");
     hero.querySelector("h1")!.textContent = "500 temas/guías en nuestra app, con más de 25.000 preguntas.";
     hero.querySelector("p")?.remove();
     hero.querySelector(".daily-tags")?.remove();

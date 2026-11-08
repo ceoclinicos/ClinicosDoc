@@ -98,7 +98,6 @@ def main() -> None:
         print("Comprobando si hay commits locales sin subir…")
         run(["git", "push", "-u", "origin", branch], cwd=cwd, check=False)
         print("\nListo. Web: https://clinicosdoc.com")
-        pausa()
         return
 
     if len(sys.argv) > 1:
@@ -117,17 +116,28 @@ def main() -> None:
     print("  https://clinicosdoc.com")
     print("  https://github.com/ceoclinicos/ClinicosDoc/actions")
     print("=" * 50)
-    pausa()
 
 
-def pausa() -> None:
-    if sys.stdin.isatty():
-        input("\nEnter para cerrar…")
+def ejecutar() -> None:
+    while True:
+        try:
+            main()
+        except SystemExit:
+            if not sys.stdin.isatty():
+                raise
+        if not sys.stdin.isatty():
+            return
+        try:
+            respuesta = input("\nEnter para volver a enviar, o escribe 'salir' para cerrar: ")
+        except EOFError:
+            return
+        if respuesta.strip().lower() in {"salir", "s", "exit"}:
+            return
 
 
 if __name__ == "__main__":
     try:
-        main()
+        ejecutar()
     except KeyboardInterrupt:
         print("\nCancelado.")
         sys.exit(130)

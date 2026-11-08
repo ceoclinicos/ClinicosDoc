@@ -31,6 +31,9 @@
   letter-spacing: .08em;
 }
 .daily-hero h1 { font-size: clamp(26px, 5vw, 40px); line-height: 1.12; margin: 10px 0; padding-right: 60px; }
+.daily-hero--result { padding: 16px; min-height: 92px; }
+.daily-hero--result .daily-eyebrow { display: block; padding-right: 64px; }
+.daily-hero--result h1 { font-size: 18px; line-height: 1.35; margin: 6px 0 0; padding-right: 64px; }
 .daily-hero p { max-width: 560px; color: #d9eeeb; }
 .daily-eyebrow { font-size: 12px; font-weight: 750; letter-spacing: .07em; }
 .daily-tags, .daily-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
