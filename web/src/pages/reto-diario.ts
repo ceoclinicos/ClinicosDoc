@@ -128,6 +128,10 @@ function render(): HTMLElement {
   refresh.addEventListener("click", () => void updatePeople());
 
   function resultView(result: Result) {
+    const hero = root.querySelector<HTMLElement>(".daily-hero")!;
+    hero.querySelector("h1")!.textContent = "500 temas/guías en nuestra app, con más de 25.000 preguntas.";
+    hero.querySelector("p")?.remove();
+    hero.querySelector(".daily-tags")?.remove();
     game.replaceChildren();
     const score = text("div", `${result.score}/3`, "daily-big-score");
     const heading = text("h2", result.score === 3 ? "¡Reto completado, pleno de aciertos!" : "¡Reto completado! Cada pregunta cuenta.");
