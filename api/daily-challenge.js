@@ -25,7 +25,7 @@ function createHandler(getDb = () => getAdmin().firestore(), clock = () => new D
           questions: today.bank.questions.map(q => ({ question: q[0], options: q[1] })),
           participants: rows.docs.map(doc => {
             const row = doc.data();
-            return { name: row.name, score: row.score, finishedAt: row.finishedAt.toDate().toISOString() };
+            return { name: row.name, score: row.score, totalQuestions: row.totalQuestions || 3, finishedAt: row.finishedAt.toDate().toISOString() };
           }),
         });
       }
@@ -58,7 +58,7 @@ function createHandler(getDb = () => getAdmin().firestore(), clock = () => new D
       }
       const sessionRefEarly = db.collection("clinicos_daily_sessions").doc(hash(body.token));
       if (body.action === "answer") {
-        if (!Number.isInteger(body.index) || body.index < 0 || body.index > 2
+        if (!Number.isInteger(body.index) || body.index < 0 || body.index >= today.bank.questions.length
           || !Number.isInteger(body.answer) || body.answer < 0 || body.answer > 3) {
           return res.status(400).json({ error: "Solicitud inválida" });
         }
@@ -68,6 +68,7 @@ function createHandler(getDb = () => getAdmin().firestore(), clock = () => new D
           const session = snap.data();
           const bank = banks.find(item => item.id === session.bankId);
           if (!bank) return { status: 410, error: "Este reto ya no está disponible." };
+          if (body.index >= bank.questions.length) return { status: 400, error: "Pregunta inválida." };
           if (session.finished) return { status: 410, error: "El reto ya terminó." };
           if (session.expiresAt.toDate().getTime() <= clock().getTime()) {
             return { status: 410, error: "El intento venció. Vuelve al inicio para comenzar de nuevo." };
@@ -84,8 +85,8 @@ function createHandler(getDb = () => getAdmin().firestore(), clock = () => new D
       if (body.action !== "submit") {
         return res.status(400).json({ error: "Solicitud inválida" });
       }
-      if (!Array.isArray(body.answers) || body.answers.length !== 3 || body.answers.some(a => !Number.isInteger(a) || a < 0 || a > 3)) {
-        return res.status(400).json({ error: "Responde las tres preguntas." });
+      if (!Array.isArray(body.answers) || body.answers.length !== today.bank.questions.length || Array.from(body.answers).some(a => !Number.isInteger(a) || a < 0 || a > 3)) {
+        return res.status(400).json({ error: "Responde las cuatro preguntas." });
       }
       const sessionRef = db.collection("clinicos_daily_sessions").doc(hash(body.token));
       const result = await db.runTransaction(async tx => {
@@ -98,7 +99,7 @@ function createHandler(getDb = () => getAdmin().firestore(), clock = () => new D
         if (session.expiresAt.toDate().getTime() <= clock().getTime()) return { status: 410, error: "El intento venció. Vuelve al inicio para comenzar de nuevo." };
         const graded = gradeAnswers(bank, body.answers);
         const ref = db.collection("clinicos_daily_results").doc(session.date).collection("participants").doc(sessionRef.id);
-        tx.set(ref, { name: session.name, score: graded.score, finishedAt: clock() });
+        tx.set(ref, { name: session.name, score: graded.score, totalQuestions: bank.questions.length, finishedAt: clock() });
         tx.update(sessionRef, { finished: true, answers: body.answers });
         return { status: 200, ...graded, name: session.name, date: session.date };
       });

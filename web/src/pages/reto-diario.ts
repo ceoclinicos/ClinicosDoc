@@ -2,13 +2,13 @@ import { registerRoute } from "../app/router";
 import "../styles/reto-diario.css";
 
 type Question = { question: string; options: string[] };
-type Participant = { name: string; score: number; finishedAt: string };
+type Participant = { name: string; score: number; totalQuestions?: number; finishedAt: string };
 type Challenge = { date: string; bankNumber: number; title: string; questions: Question[]; participants: Participant[] };
 type Result = { score: number; name: string; date: string; review: { correctAnswer: number; explanation: string }[] };
 type AnswerFeedback = { correct: boolean; correctAnswer: number; explanation: string };
 type Attempt = { date: string; token: string; answers: number[] };
 const API = `${(import.meta.env.VITE_API_BASE || "https://clinicos-doc.vercel.app").replace(/\/$/, "")}/api/daily-challenge`;
-const STORE = "clinicos-daily-attempt-v1";
+const STORE = "clinicos-daily-attempt-v2";
 const PLAY = "https://play.google.com/store/apps/details?id=com.ceoclinicos";
 
 class RequestError extends Error {
@@ -53,11 +53,11 @@ function relativeDate(value: string): string {
   return `Hace ${Math.floor(minutes / 60)} h`;
 }
 
-function loadAttempt(date: string): Attempt | undefined {
+function loadAttempt(date: string, questionCount: number): Attempt | undefined {
   try {
     const value = JSON.parse(localStorage.getItem(STORE) || "null") as Attempt | null;
     if (value?.date === date && /^[a-f0-9]{64}$/.test(value.token) && Array.isArray(value.answers)
-      && value.answers.length <= 3 && value.answers.every(a => Number.isInteger(a) && a >= 0 && a <= 3)) return value;
+      && value.answers.length <= questionCount && value.answers.every(a => Number.isInteger(a) && a >= 0 && a <= 3)) return value;
   } catch { return undefined; }
   return undefined;
 }
@@ -69,9 +69,9 @@ function render(): HTMLElement {
     <header class="daily-hero">
       <div class="daily-hero-mark"><img src="/img/clinicos-logo.jpg" alt=""><span>CLÍNICOS</span></div>
       <span class="daily-eyebrow">CLÍNICOS · RETO DIARIO</span>
-      <h1>Tres preguntas.<br>¿Aceptas el reto?</h1>
+      <h1>Cuatro preguntas.<br>¿Aceptas el reto?</h1>
       <p>Juega gratis, sin instalar ni registrarte.</p>
-      <div class="daily-tags"><span>3 preguntas</span><span>Nivel inicial</span><span>Sin registro</span></div>
+      <div class="daily-tags"><span>4 preguntas</span><span>Nivel inicial</span><span>Sin registro</span></div>
     </header>
     <div class="daily-body">
       <div class="daily-game" aria-live="polite"></div>
@@ -107,7 +107,7 @@ function render(): HTMLElement {
       avatar.setAttribute("aria-hidden", "true");
       const name = document.createElement("div");
       name.append(text("strong", row.name || "Anónimo"), text("small", relativeDate(row.finishedAt)));
-      li.append(avatar, name, text("span", `${row.score}/3`, "daily-person-score"));
+      li.append(avatar, name, text("span", `${row.score}/${row.totalQuestions ?? challenge.questions.length}`, "daily-person-score"));
       people.append(li);
     }
   }
@@ -134,13 +134,13 @@ function render(): HTMLElement {
     hero.querySelector("p")?.remove();
     hero.querySelector(".daily-tags")?.remove();
     game.replaceChildren();
-    const score = text("div", `${result.score}/3`, "daily-big-score");
-    const heading = text("h2", result.score === 3 ? "¡Reto completado, pleno de aciertos!" : "¡Reto completado! Cada pregunta cuenta.");
+    const score = text("div", `${result.score}/${result.review.length}`, "daily-big-score");
+    const heading = text("h2", result.score === result.review.length ? "¡Reto completado, pleno de aciertos!" : "¡Reto completado! Cada pregunta cuenta.");
     game.append(score, heading, text("p", `${result.name}, este fue tu repaso de hoy. Vuelve mañana para descubrir otro banco.`));
 
     const link = new URL(window.location.href);
     link.hash = `/reto-diario?dia=${result.date}`;
-    const message = `Acerté ${result.score}/3 en el reto médico de Clínicos. ¿Me superas?\n\n${link.href}`;
+    const message = `Acerté ${result.score}/${result.review.length} en el reto médico de Clínicos. ¿Me superas?\n\n${link.href}`;
 
     async function shareStory() {
       notice.textContent = "";
@@ -176,7 +176,7 @@ function render(): HTMLElement {
         ctx.fillText("RETO DIARIO", 540, 810);
         ctx.fillStyle = "#ccfbf1";
         ctx.font = "800 270px sans-serif";
-        ctx.fillText(`${result.score}/3`, 540, 1110);
+        ctx.fillText(`${result.score}/${result.review.length}`, 540, 1110);
         ctx.fillStyle = "#ffffff";
         ctx.font = "700 70px sans-serif";
         ctx.fillText("¿Me superas?", 540, 1270);
@@ -264,11 +264,11 @@ function render(): HTMLElement {
   function questionView() {
     if (!attempt) return;
     const index = attempt.answers.length;
-    if (index === 3) { void submit(); return; }
+    if (index >= challenge.questions.length) { void submit(); return; }
     const question = challenge.questions[index];
-    game.replaceChildren(text("p", `PREGUNTA ${index + 1} DE 3 · ${challenge.title}`, "daily-eyebrow"));
+    game.replaceChildren(text("p", `PREGUNTA ${index + 1} DE ${challenge.questions.length} · ${challenge.title}`, "daily-eyebrow"));
     const progress = document.createElement("progress");
-    progress.max = 3;
+    progress.max = challenge.questions.length;
     progress.value = index;
     progress.setAttribute("aria-label", "Preguntas respondidas");
     game.append(progress);
@@ -304,18 +304,18 @@ function render(): HTMLElement {
     try {
       const feedback = await request<AnswerFeedback>({ action: "answer", token: attempt.token, index: questionIndex, answer: choice });
       const question = challenge.questions[questionIndex];
-      game.replaceChildren(text("p", `PREGUNTA ${questionIndex + 1} DE 3 · ${challenge.title}`, "daily-eyebrow"));
+      game.replaceChildren(text("p", `PREGUNTA ${questionIndex + 1} DE ${challenge.questions.length} · ${challenge.title}`, "daily-eyebrow"));
       const verdict = text("h2", feedback.correct ? "¡Correcta!" : "No fue esta vez…", feedback.correct ? "daily-correct" : "daily-wrong");
       const detail = text("p", `Respuesta correcta: ${question.options[feedback.correctAnswer]}`, "daily-correct");
       game.append(verdict, detail, text("p", feedback.explanation, "daily-explain"));
-      const next = text("button", questionIndex === 2 ? "Ver mi resultado" : "Siguiente pregunta", "btn btn-primary");
+      const next = text("button", questionIndex === challenge.questions.length - 1 ? "Ver mi resultado" : "Siguiente pregunta", "btn btn-primary");
       next.type = "button";
       next.onclick = () => questionView();
       game.append(next);
     } catch (error) {
       notice.textContent = error instanceof Error ? error.message : "No se pudo cargar la explicación.";
       game.replaceChildren(text("h2", "Respuesta guardada."));
-      const next = text("button", questionIndex === 2 ? "Ver mi resultado" : "Siguiente pregunta", "btn btn-primary");
+      const next = text("button", questionIndex === challenge.questions.length - 1 ? "Ver mi resultado" : "Siguiente pregunta", "btn btn-primary");
       next.type = "button";
       next.onclick = () => questionView();
       game.append(next);
@@ -370,7 +370,7 @@ function render(): HTMLElement {
       showPeople(challenge.participants);
       const sharedDay = new URLSearchParams(window.location.hash.split("?")[1]).get("dia");
       if (sharedDay && sharedDay !== challenge.date) notice.textContent = "El reto que compartieron ya terminó. ¡Puedes jugar el de hoy!";
-      attempt = loadAttempt(challenge.date);
+      attempt = loadAttempt(challenge.date, challenge.questions.length);
       if (attempt) questionView(); else intro();
       refresh.disabled = false;
     } catch {
